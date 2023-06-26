@@ -117,7 +117,6 @@ struct PhysicalOffset;
 struct PhysicalRect;
 
 enum class PaintBenchmarkMode;
-enum class PaintArtifactCompositorUpdateReason;
 
 typedef uint64_t DOMTimeStamp;
 using LayerTreeFlags = unsigned;
@@ -227,6 +226,7 @@ class CORE_EXPORT LocalFrameView final
   // Sets the internal IntersectionObservationState to the max of the
   // current value and the provided one.
   void SetIntersectionObservationState(IntersectionObservationState);
+  void UpdateIntersectionObservationStateOnScroll(gfx::Vector2dF scroll_delta);
   IntersectionObservationState GetIntersectionObservationStateForTesting()
       const {
     return intersection_observation_state_;
@@ -238,8 +238,11 @@ class CORE_EXPORT LocalFrameView final
 
   void ForceUpdateViewportIntersections();
 
-  void SetPaintArtifactCompositorNeedsUpdate(
-      PaintArtifactCompositorUpdateReason);
+  gfx::Vector2dF MinScrollDeltaToUpdateIntersectionForTesting() const {
+    return min_scroll_delta_to_update_intersection_;
+  }
+
+  void SetPaintArtifactCompositorNeedsUpdate();
 
   // Methods for getting/setting the size Blink should use to layout the
   // contents.
@@ -396,6 +399,7 @@ class CORE_EXPORT LocalFrameView final
   void RunPostLifecycleSteps();
   bool InPostLifecycleSteps() const;
 
+  void ScheduleVisualUpdateForVisualOverflowIfNeeded();
   void ScheduleVisualUpdateForPaintInvalidationIfNeeded();
 
   // Perform a hit test on the frame with throttling allowed. Normally, a hit
@@ -415,7 +419,6 @@ class CORE_EXPORT LocalFrameView final
   void DisableAutoSizeMode();
 
   void ForceLayoutForPagination(const gfx::SizeF& page_size,
-                                const gfx::SizeF& original_page_size,
                                 float maximum_shrink_factor);
 
   // Updates the fragment anchor element based on URL's fragment identifier.
@@ -1113,7 +1116,10 @@ class CORE_EXPORT LocalFrameView final
   // phases past layout to ensure that phases after layout don't dirty layout.
   bool allows_layout_invalidation_after_layout_clean_ = true;
 #endif
+
   IntersectionObservationState intersection_observation_state_;
+  gfx::Vector2dF min_scroll_delta_to_update_intersection_;
+  gfx::Vector2dF accumulated_scroll_delta_since_last_intersection_update_;
 
   bool needs_focus_on_fragment_;
 

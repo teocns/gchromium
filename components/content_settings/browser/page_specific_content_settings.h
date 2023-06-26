@@ -31,6 +31,7 @@
 #include "content/public/browser/allow_service_worker_result.h"
 #include "content/public/browser/page_user_data.h"
 #include "content/public/browser/render_frame_host.h"
+#include "net/base/schemeful_site.h"
 #include "url/gurl.h"
 
 namespace blink {
@@ -181,23 +182,6 @@ class PageSpecificContentSettings
 
     // Notifies the delegate a particular content settings type was blocked.
     virtual void OnContentBlocked(ContentSettingsType type) = 0;
-
-    // Notifies the delegate that access to storage of type |storage_type| was
-    // granted in |page|.
-    virtual void OnStorageAccessAllowed(
-        mojom::ContentSettingsManager::StorageType storage_type,
-        const url::Origin& origin,
-        content::Page& page) = 0;
-
-    // Notifies the delegate that access was granted to |accessed_cookies| in
-    // |page|.
-    virtual void OnCookieAccessAllowed(const net::CookieList& accessed_cookies,
-                                       content::Page& page) = 0;
-
-    // Notifies the delegate that access was granted to service workers for
-    // |origin|.
-    virtual void OnServiceWorkerAccessAllowed(const url::Origin& origin,
-                                              content::Page& page) = 0;
   };
 
   // Classes that want to be notified about site data events must implement
@@ -214,6 +198,9 @@ class PageSpecificContentSettings
 
     // Called whenever site data is accessed.
     virtual void OnSiteDataAccessed(const AccessDetails& access_details) = 0;
+
+    // Called whenever this page is loaded via a redirect with stateful bounces.
+    virtual void OnStatefulBounceDetected() = 0;
 
     content::WebContents* web_contents() { return web_contents_; }
 
@@ -306,6 +293,10 @@ class PageSpecificContentSettings
   // Called when audio has been blocked on the page.
   void OnAudioBlocked();
 
+  // Records one additional stateful bounce during the navigation that led to
+  // this page.
+  void IncrementStatefulBounceCount();
+
   // Returns whether a particular kind of content has been blocked for this
   // page.
   bool IsContentBlocked(ContentSettingsType content_type) const;
@@ -313,6 +304,12 @@ class PageSpecificContentSettings
   // Returns whether a particular kind of content has been allowed. Currently
   // only tracks cookies.
   bool IsContentAllowed(ContentSettingsType content_type) const;
+
+  // Returns a map from sites that requested |content_setting| to whether the
+  // permission was granted. This method is only supported for permissions that
+  // are scoped to sites and apply to embedded content, e.g. StorageAccess.
+  std::map<net::SchemefulSite, /*is_allowed*/ bool> GetTwoSiteRequests(
+      ContentSettingsType content_type);
 
   const GURL& media_stream_access_origin() const {
     return media_stream_access_origin_;
@@ -370,6 +367,8 @@ class PageSpecificContentSettings
     return blocked_local_shared_objects_;
   }
 
+  int stateful_bounce_count() const { return stateful_bounce_count_; }
+
   BrowsingDataModel* allowed_browsing_data_model() const {
     return allowed_browsing_data_model_.get();
   }
@@ -380,6 +379,12 @@ class PageSpecificContentSettings
 
   void OnContentBlocked(ContentSettingsType type);
   void OnContentAllowed(ContentSettingsType type);
+
+  // Call when a two-site permission was prompted or modified in order to
+  // display a ContentSettingsImageModel icon.
+  void OnTwoSitePermissionChanged(ContentSettingsType type,
+                                  net::SchemefulSite requesting_site,
+                                  ContentSetting content_setting);
 
   // |originating_page| is non-null when it differs from page(), which happens
   // when an embedding page's PSCS is notified of an access that happens in an
@@ -480,8 +485,9 @@ class PageSpecificContentSettings
   // otherwise.
   template <typename DelegateMethod, typename... Args>
   void NotifyDelegate(DelegateMethod method, Args... args) {
-    if (IsEmbeddedPage())
+    if (IsEmbeddedPage()) {
       return;
+    }
     if (IsPagePrerendering()) {
       DCHECK(updates_queued_during_prerender_);
       updates_queued_during_prerender_->delegate_updates.emplace_back(
@@ -534,12 +540,21 @@ class PageSpecificContentSettings
   // Stores which content setting types actually have blocked content.
   std::map<ContentSettingsType, ContentSettingsStatus> content_settings_status_;
 
+  // Stores embedded sites that requested a permission. Only applies to
+  // permissions that are scoped to two sites, e.g. StorageAccess.
+  std::map<ContentSettingsType, std::map<net::SchemefulSite, bool>>
+      content_settings_two_site_requests_;
+
   // Profile-bound, this will outlive this class (which is WebContents bound).
   raw_ptr<HostContentSettingsMap> map_;
 
   // Stores the blocked/allowed cookies.
   browsing_data::LocalSharedObjectsContainer allowed_local_shared_objects_;
   browsing_data::LocalSharedObjectsContainer blocked_local_shared_objects_;
+
+  // Stores the count of stateful bounces during the navigation that led to this
+  // page.
+  int stateful_bounce_count_ = 0u;
 
   std::unique_ptr<BrowsingDataModel> allowed_browsing_data_model_;
   std::unique_ptr<BrowsingDataModel> blocked_browsing_data_model_;

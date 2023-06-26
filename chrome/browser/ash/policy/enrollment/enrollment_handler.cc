@@ -17,12 +17,14 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "chrome/browser/ash/login/demo_mode/demo_mode_dimensions.h"
+#include "chrome/browser/ash/login/demo_mode/demo_setup_controller.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_store_ash.h"
-#include "chrome/browser/ash/policy/core/dm_token_storage.h"
 #include "chrome/browser/ash/policy/dev_mode/dev_mode_policy_util.h"
 #include "chrome/browser/ash/policy/enrollment/auto_enrollment_type_checker.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
+#include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_status.h"
 #include "chrome/browser/ash/policy/enrollment/tpm_enrollment_key_signing_service.h"
 #include "chrome/browser/ash/policy/server_backed_state/server_backed_state_keys_broker.h"
@@ -31,7 +33,6 @@
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/attestation/attestation_features.h"
 #include "chromeos/ash/components/attestation/attestation_flow.h"
-#include "chromeos/ash/components/dbus/authpolicy/authpolicy_client.h"
 #include "chromeos/ash/components/dbus/constants/attestation_constants.h"
 #include "chromeos/ash/components/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
@@ -73,8 +74,8 @@ em::DeviceRegisterRequest::Flavor EnrollmentModeToRegistrationFlavor(
     EnrollmentConfig::Mode mode) {
   switch (mode) {
     case EnrollmentConfig::MODE_NONE:
-    case EnrollmentConfig::OBSOLETE_MODE_ENROLLED_ROLLBACK:
-    case EnrollmentConfig::MODE_OFFLINE_DEMO_DEPRECATED:
+    case EnrollmentConfig::DEPRECATED_MODE_ENROLLED_ROLLBACK:
+    case EnrollmentConfig::DEPRECATED_MODE_OFFLINE_DEMO:
       break;
     case EnrollmentConfig::MODE_MANUAL:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_MANUAL;
@@ -225,6 +226,11 @@ EnrollmentHandler::EnrollmentHandler(
 
   register_params_->requisition = requisition;
 
+  if (requisition == EnrollmentRequisitionManager::kDemoRequisition) {
+    register_params_->demo_mode_dimensions =
+        ash::demo_mode::GetDemoModeDimensions();
+  }
+
   store_->AddObserver(this);
   client_->AddObserver(this);
   client_->AddPolicyTypeToFetch(dm_protocol::kChromeDevicePolicyType,
@@ -324,19 +330,10 @@ void EnrollmentHandler::OnRegistrationStateChanged(CloudPolicyClient* client) {
 
   device_mode_ = client_->device_mode();
 
-  // If the management mode setting from DM Server is Active Directory, we
-  // override this setting to cloud management (b/259180126).
-  if (device_mode_ == DEVICE_MODE_ENTERPRISE_AD) {
-    device_mode_ = DEVICE_MODE_ENTERPRISE;
-  }
-
   switch (device_mode_) {
     case DEVICE_MODE_ENTERPRISE:
     case DEVICE_MODE_DEMO:
       // Do nothing.
-      break;
-    case DEVICE_MODE_ENTERPRISE_AD:
-      ash::UpstartClient::Get()->StartAuthPolicyService();
       break;
     default:
       LOG(ERROR) << "Supplied device mode is not supported:" << device_mode_;
@@ -649,27 +646,12 @@ void EnrollmentHandler::StartLockDevice() {
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void EnrollmentHandler::HandleDMTokenStoreResult(bool success) {
-  CHECK_EQ(STEP_STORE_TOKEN, enrollment_step_);
-  if (!success) {
-    ReportResult(
-        EnrollmentStatus::ForStatus(EnrollmentStatus::DM_TOKEN_STORE_FAILED));
-    return;
-  }
-
-  StartStoreRobotAuth();
-}
-
 void EnrollmentHandler::HandleLockDeviceResult(
     ash::InstallAttributes::LockResult lock_result) {
   DCHECK_EQ(STEP_LOCK_DEVICE, enrollment_step_);
   switch (lock_result) {
     case ash::InstallAttributes::LOCK_SUCCESS:
-      if (device_mode_ == DEVICE_MODE_ENTERPRISE_AD) {
-        StartStoreDMToken();
-      } else {
-        StartStoreRobotAuth();
-      }
+      StartStoreRobotAuth();
       break;
     case ash::InstallAttributes::LOCK_NOT_READY:
       // We wait up to |kLockRetryTimeoutMs| milliseconds and if it hasn't
@@ -701,17 +683,6 @@ void EnrollmentHandler::HandleLockDeviceResult(
   }
 }
 
-void EnrollmentHandler::StartStoreDMToken() {
-  DCHECK(device_mode_ == DEVICE_MODE_ENTERPRISE_AD);
-  SetStep(STEP_STORE_TOKEN);
-  dm_token_storage_ =
-      std::make_unique<DMTokenStorage>(g_browser_process->local_state());
-  dm_token_storage_->StoreDMToken(
-      client_->dm_token(),
-      base::BindOnce(&EnrollmentHandler::HandleDMTokenStoreResult,
-                     weak_ptr_factory_.GetWeakPtr()));
-}
-
 void EnrollmentHandler::StartStoreRobotAuth() {
   SetStep(STEP_STORE_ROBOT_AUTH);
 
@@ -726,33 +697,7 @@ void EnrollmentHandler::StartStoreRobotAuth() {
 void EnrollmentHandler::OnDeviceAccountTokenStored() {
   DCHECK_EQ(STEP_STORE_ROBOT_AUTH, enrollment_step_);
   SetStep(STEP_STORE_POLICY);
-  if (device_mode_ == DEVICE_MODE_ENTERPRISE_AD) {
-    CHECK(install_attributes_->IsActiveDirectoryManaged());
-    // Update device settings so that in case of Active Directory unsigned
-    // policy is accepted.
-    ash::DeviceSettingsService::Get()->SetDeviceMode(
-        install_attributes_->GetMode());
-    ash::AuthPolicyClient::Get()->RefreshDevicePolicy(
-        base::BindOnce(&EnrollmentHandler::HandleActiveDirectoryPolicyRefreshed,
-                       weak_ptr_factory_.GetWeakPtr()));
-  } else {
-    store_->InstallInitialPolicy(*policy_);
-  }
-}
-
-void EnrollmentHandler::HandleActiveDirectoryPolicyRefreshed(
-    authpolicy::ErrorType error) {
-  DCHECK_EQ(STEP_STORE_POLICY, enrollment_step_);
-
-  if (error != authpolicy::ERROR_NONE) {
-    LOG(ERROR) << "Failed to load Active Directory policy.";
-    ReportResult(EnrollmentStatus::ForStatus(
-        EnrollmentStatus::ACTIVE_DIRECTORY_POLICY_FETCH_FAILED));
-    return;
-  }
-
-  // After that, the enrollment flow continues in one of the OnStore* observers.
-  store_->Load();
+  store_->InstallInitialPolicy(*policy_);
 }
 
 void EnrollmentHandler::Stop() {

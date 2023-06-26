@@ -50,6 +50,8 @@ class BrowsingTopicsServiceImpl
       bool observe,
       std::vector<blink::mojom::EpochTopicPtr>& topics) override;
 
+  int NumVersionsInEpochs(const url::Origin& main_frame_origin) const override;
+
   void GetBrowsingTopicsStateForWebUi(
       bool calculate_now,
       mojom::PageHandler::GetBrowsingTopicsStateCallback callback) override;
@@ -76,6 +78,7 @@ class BrowsingTopicsServiceImpl
       content::BrowsingTopicsSiteDataManager* site_data_manager,
       Annotator* annotator,
       const base::circular_deque<EpochTopics>& epochs,
+      bool is_manually_triggered,
       BrowsingTopicsCalculator::CalculateCompletedCallback callback);
 
   // Allow tests to access `browsing_topics_state_`.
@@ -122,8 +125,10 @@ class BrowsingTopicsServiceImpl
   void ScheduleBrowsingTopicsCalculation(base::TimeDelta delay);
 
   // Initialize `topics_calculator_` to start calculating this epoch's top
-  // topics and context observed topics.
-  void CalculateBrowsingTopics();
+  // topics and context observed topics. Set `is_manually_triggered`  to true if
+  // this calculation was triggered via the topics-internals page rather than
+  // the regular schedule.
+  void CalculateBrowsingTopics(bool is_manually_triggered);
 
   // Set `browsing_topics_state_loaded_` to true. Start scheduling the topics
   // calculation.

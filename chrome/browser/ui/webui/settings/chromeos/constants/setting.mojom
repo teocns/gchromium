@@ -144,6 +144,9 @@ enum Setting {
   kAdaptiveCharging = 440,
   kKeyboardBlockMetaFkeyRewrites = 441,
   kKeyboardRemapKeys = 442,
+  kChargingSounds = 443,
+  kLowBatterySound = 444,
+  kBatterySaver = 445,
 
   // Personalization section.
   kOpenWallpaper = 500,
@@ -215,6 +218,8 @@ enum Setting {
   kCameraOnOff = 1116,
   kMicrophoneOnOff = 1117,
   kGeolocationOnOff = 1118,
+  kLockScreenNotification = 1119,
+  kSpeakOnMuteDetectionOnOff = 1120,
 
   // Languages and Input section.
   kAddLanguage = 1200,
@@ -277,6 +282,9 @@ enum Setting {
   kSelectToSpeakWordHighlight = 1531,
   kSelectToSpeakBackgroundShading = 1532,
   kSelectToSpeakNavigationControls = 1533,
+  kColorCorrectionEnabled = 1534,
+  kColorCorrectionFilterType = 1535,
+  kColorCorrectionFilterAmount = 1536,
 
   // Reset section.
   kPowerwash = 1600,

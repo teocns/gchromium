@@ -16,11 +16,6 @@
 
 namespace arc::input_overlay {
 
-// TODO(cuicuiruan): Currently, it shows the dom_code.
-// Will replace it with showing the result of dom_key / keyboard key depending
-// on different keyboard layout.
-std::string GetDisplayText(const ui::DomCode code);
-
 // ActionLabel shows text mapping hint for each action.
 class ActionLabel : public views::LabelButton {
  public:
@@ -29,12 +24,10 @@ class ActionLabel : public views::LabelButton {
       views::View* parent,
       ActionType action_type,
       const InputElement& input_element,
-      int radius,
       TapLabelPosition label_position = TapLabelPosition::kTopLeft);
 
-  ActionLabel(int radius, MouseAction mouse_action);
-  ActionLabel(int radius, const std::string& text);
-  ActionLabel(int radius, const std::string& text, int index);
+  explicit ActionLabel(MouseAction mouse_action);
+  explicit ActionLabel(const std::u16string& text, size_t index = 0);
 
   ActionLabel(const ActionLabel&) = delete;
   ActionLabel& operator=(const ActionLabel&) = delete;
@@ -42,7 +35,7 @@ class ActionLabel : public views::LabelButton {
 
   void Init();
 
-  void SetTextActionLabel(const std::string& text);
+  void SetTextActionLabel(const std::u16string& text);
   void SetImageActionLabel(MouseAction mouse_action);
   void SetDisplayMode(DisplayMode mode);
   void ClearFocus();

@@ -17,6 +17,7 @@ import android.view.View;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -31,7 +32,6 @@ import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowToast;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinatorTablet;
@@ -46,7 +46,6 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.ui.widget.ToastManager;
-import org.chromium.ui.widget.ToastManagerJni;
 
 import java.util.ArrayList;
 
@@ -58,10 +57,6 @@ import java.util.ArrayList;
 public final class ToolbarTabletUnitTest {
     @Rule
     public TestRule mFeaturesProcessorRule = new Features.JUnitProcessor();
-    @Rule
-    public JniMocker mJniMocker = new JniMocker();
-    @Mock
-    private ToastManager.Natives mToastManagerJni;
     @Mock
     private LocationBarCoordinator mLocationBar;
     @Mock
@@ -99,7 +94,11 @@ public final class ToolbarTabletUnitTest {
         mBackButton = mToolbarTablet.findViewById(R.id.back_button);
         mForwardButton = mToolbarTablet.findViewById(R.id.forward_button);
         mReloadingButton = mToolbarTablet.findViewById(R.id.refresh_button);
-        mJniMocker.mock(ToastManagerJni.TEST_HOOKS, mToastManagerJni);
+    }
+
+    @After
+    public void tearDown() {
+        ToastManager.resetForTesting();
     }
 
     @Test
@@ -117,8 +116,10 @@ public final class ToolbarTabletUnitTest {
     }
 
     @Test
-    @EnableFeatures(ChromeFeatureList.TAB_STRIP_REDESIGN)
-    public void testButtonPositionForTSR() {
+    @EnableFeatures(
+            {ChromeFeatureList.TAB_STRIP_REDESIGN, ChromeFeatureList.TABLET_TOOLBAR_REORDERING})
+    public void
+    testButtonPosition_TSR() {
         mToolbarTablet.onFinishInflate();
         assertEquals("Back button position is not as expected for Tab Strip Redesign", mBackButton,
                 mToolbarTabletLayout.getChildAt(0));
@@ -128,6 +129,23 @@ public final class ToolbarTabletUnitTest {
                 mReloadingButton, mToolbarTabletLayout.getChildAt(2));
         assertEquals("Home button position is not as expected for Tab Strip Redesign", mHomeButton,
                 mToolbarTabletLayout.getChildAt(3));
+    }
+
+    @Test
+    @DisableFeatures({ChromeFeatureList.TABLET_TOOLBAR_REORDERING})
+    public void testButtonPosition_ShutoffToolbarReordering() {
+        mToolbarTablet.onFinishInflate();
+
+        assertEquals("Home button position is not as expected for TSR disable Toolbar reordering",
+                mHomeButton, mToolbarTabletLayout.getChildAt(0));
+        assertEquals("Back button position is not as expected for TSR disable Toolbar reordering",
+                mBackButton, mToolbarTabletLayout.getChildAt(1));
+        assertEquals(
+                "Forward button position is not as expected for TSR disable Toolbar reordering",
+                mForwardButton, mToolbarTabletLayout.getChildAt(2));
+        assertEquals(
+                "Reloading button position is not as expected for TSR disable Toolbar reordering",
+                mReloadingButton, mToolbarTabletLayout.getChildAt(3));
     }
 
     @Test
@@ -199,7 +217,7 @@ public final class ToolbarTabletUnitTest {
         assertEquals("Initial Toolbar visibility is not as expected", View.VISIBLE,
                 mToolbarTablet.getVisibility());
         // Call
-        mToolbarTablet.setTabSwitcherMode(false, false, false, mMenuButtonCoordinator);
+        mToolbarTablet.setTabSwitcherMode(false);
         assertEquals("Toolbar visibility is not as expected", View.VISIBLE,
                 mToolbarTablet.getVisibility());
         verify(mLocationBar).setUrlBarFocusable(true);
@@ -210,7 +228,7 @@ public final class ToolbarTabletUnitTest {
         assertEquals("Initial Toolbar visibility is not as expected", View.VISIBLE,
                 mToolbarTablet.getVisibility());
         // Call
-        mToolbarTablet.setTabSwitcherMode(true, false, false, mMenuButtonCoordinator);
+        mToolbarTablet.setTabSwitcherMode(true);
         assertEquals("Toolbar visibility is not as expected", View.VISIBLE,
                 mToolbarTablet.getVisibility());
         verify(mLocationBar).setUrlBarFocusable(false);
@@ -290,8 +308,7 @@ public final class ToolbarTabletUnitTest {
     @Test
     @EnableFeatures(ChromeFeatureList.SUPPRESS_TOOLBAR_CAPTURES)
     public void testIsReadyForTextureCapture_InTabSwitcher() {
-        mToolbarTablet.setTabSwitcherMode(/*inTabSwitcherMode*/ true, /*showToolbar*/ true,
-                /*delayAnimation*/ false, /*menuButtonCoordinator*/ null);
+        mToolbarTablet.setTabSwitcherMode(/*inTabSwitcherMode*/ true);
         CaptureReadinessResult result = mToolbarTablet.isReadyForTextureCapture();
         Assert.assertFalse(result.isReady);
         Assert.assertEquals(TopToolbarBlockCaptureReason.TAB_SWITCHER_MODE, result.blockReason);
@@ -338,5 +355,6 @@ public final class ToolbarTabletUnitTest {
         assertTrue("Toast is not as expected",
                 ShadowToast.showedCustomToast(
                         mActivity.getResources().getString(stringId), R.id.toast_text));
+        ToastManager.resetForTesting();
     }
 }

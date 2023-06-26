@@ -4,6 +4,7 @@
 
 #import "ios/chrome/common/app_group/app_group_constants.h"
 
+#import "base/apple/bundle_locations.h"
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/version_info/version_info.h"
@@ -78,7 +79,7 @@ NSString* ApplicationGroup() {
 }
 
 NSString* CommonApplicationGroup() {
-  NSBundle* bundle = [NSBundle mainBundle];
+  NSBundle* bundle = base::apple::FrameworkBundle();
   NSString* group =
       [bundle objectForInfoDictionaryKey:@"KSCommonApplicationGroup"];
   if (![group length]) {
@@ -138,14 +139,7 @@ NSURL* ExternalCommandsItemsFolder() {
 }
 
 NSURL* ContentWidgetFaviconsFolder() {
-  NSURL* groupURL = [[NSFileManager defaultManager]
-      containerURLForSecurityApplicationGroupIdentifier:ApplicationGroup()];
-  NSURL* chromeURL =
-      [groupURL URLByAppendingPathComponent:@"Chrome" isDirectory:YES];
-  NSURL* contentWidgetFaviconsURL =
-      [chromeURL URLByAppendingPathComponent:@"ContentWidgetFavicons"
-                                 isDirectory:YES];
-  return contentWidgetFaviconsURL;
+  return [AppGroupHelper widgetsFaviconsFolder];
 }
 
 NSURL* SharedFaviconAttributesFolder() {

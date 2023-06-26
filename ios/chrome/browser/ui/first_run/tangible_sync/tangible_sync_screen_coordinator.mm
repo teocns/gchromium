@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/first_run/tangible_sync/tangible_sync_screen_coordinator.h"
 
-#import "components/sync/driver/sync_service.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "components/sync/service/sync_service.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
@@ -61,9 +61,9 @@
       SyncServiceFactory::GetForBrowserState(browserState);
 
   BOOL shouldSkipSyncScreen =
-      syncService->GetDisableReasons().Has(
+      syncService->HasDisableReason(
           syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY) ||
-      syncSetupService->IsFirstSetupComplete();
+      syncSetupService->IsInitialSyncFeatureSetupComplete();
   if (shouldSkipSyncScreen) {
     // Don't show sync screen if sync is disabled.
     [_delegate screenWillFinishPresenting];
@@ -86,6 +86,11 @@
   _tangibleSyncCoordinator.coordinatorCompleted = nil;
   _tangibleSyncCoordinator = nil;
   _baseNavigationController = nil;
+  _delegate = nil;
+}
+
+- (void)dealloc {
+  CHECK(!_tangibleSyncCoordinator);
 }
 
 #pragma mark - Private

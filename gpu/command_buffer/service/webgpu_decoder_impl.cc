@@ -15,6 +15,7 @@
 #include "base/auto_reset.h"
 #include "base/bits.h"
 #include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -38,27 +39,25 @@
 #include "gpu/command_buffer/service/isolation_key_provider.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/command_buffer/service/webgpu_decoder.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/config/webgpu_blocklist.h"
 #include "gpu/webgpu/callback.h"
 #include "third_party/abseil-cpp/absl/base/attributes.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
-#include "third_party/skia/include/core/SkPromiseImageTexture.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
 
 #if BUILDFLAG(IS_WIN)
+#include <dawn/native/D3D11Backend.h>
 #include <dawn/native/D3D12Backend.h>
 #include "ui/gl/gl_angle_util_win.h"
-#endif
-
-#if BUILDFLAG(IS_WIN) && BUILDFLAG(ENABLE_VULKAN)
-#include <dawn/native/VulkanBackend.h>
 #endif
 
 namespace gpu {
@@ -77,27 +76,6 @@ static constexpr uint32_t kAllowedReadableMailboxTextureUsages =
 
 static constexpr uint32_t kAllowedMailboxTextureUsages =
     kAllowedWritableMailboxTextureUsages | kAllowedReadableMailboxTextureUsages;
-
-WGPUAdapterType PowerPreferenceToDawnAdapterType(
-    WGPUPowerPreference power_preference) {
-  switch (power_preference) {
-    case WGPUPowerPreference_Undefined:
-      // If on battery power, default to the integrated GPU.
-      if (!base::PowerMonitor::IsInitialized() ||
-          base::PowerMonitor::IsOnBatteryPower()) {
-        return WGPUAdapterType_IntegratedGPU;
-      } else {
-        return WGPUAdapterType_DiscreteGPU;
-      }
-    case WGPUPowerPreference_LowPower:
-      return WGPUAdapterType_IntegratedGPU;
-    case WGPUPowerPreference_HighPerformance:
-      return WGPUAdapterType_DiscreteGPU;
-    default:
-      NOTREACHED();
-      return WGPUAdapterType_CPU;
-  }
-}
 
 class WebGPUDecoderImpl final : public WebGPUDecoder {
  public:
@@ -253,20 +231,6 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
                           int num_entries,
                           int* entries_processed) override;
   base::StringPiece GetLogPrefix() override { return "WebGPUDecoderImpl"; }
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
-  void AttachImageToTextureWithDecoderBinding(uint32_t client_texture_id,
-                                              uint32_t texture_target,
-                                              gl::GLImage* image) override {
-    NOTREACHED();
-  }
-#elif !BUILDFLAG(IS_ANDROID)
-  void AttachImageToTextureWithClientBinding(uint32_t client_texture_id,
-                                             uint32_t texture_target,
-                                             gl::GLImage* image) override {
-    NOTREACHED();
-  }
-#endif
-
   gles2::ContextGroup* GetContextGroup() override { return nullptr; }
   gles2::ErrorState* GetErrorState() override {
     NOTREACHED();
@@ -380,10 +344,9 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
   // only if not returning an error.
   error::Error current_decoder_error_ = error::kNoError;
 
-  void DiscoverAdapters();
-
-  int32_t GetPreferredAdapterIndex(WGPUPowerPreference power_preference,
-                                   bool force_fallback) const;
+  WGPUAdapter CreatePreferredAdapter(WGPUPowerPreference power_preference,
+                                     bool force_fallback,
+                                     bool compatibility_mode) const;
 
   // Decide if a device feature is exposed to render process.
   bool IsFeatureExposed(WGPUAdapter adapter, WGPUFeatureName feature) const;
@@ -430,6 +393,8 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
   // calls that were requested and queued before the isolation key was ready.
   void OnGetIsolationKey(const std::string& isolation_key);
 
+  bool use_blocklist() const;
+
   scoped_refptr<SharedContextState> shared_context_state_;
   const GrContextType gr_context_type_;
 
@@ -439,12 +404,12 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
   std::unique_ptr<dawn::platform::Platform> dawn_platform_;
   std::unique_ptr<DawnInstance> dawn_instance_;
   std::unique_ptr<DawnServiceMemoryTransferService> memory_transfer_service_;
-  std::vector<dawn::native::Adapter> dawn_adapters_;
 
   bool enable_unsafe_webgpu_ = false;
   WebGPUAdapterName use_webgpu_adapter_ = WebGPUAdapterName::kDefault;
   WebGPUPowerPreference use_webgpu_power_preference_ =
       WebGPUPowerPreference::kNone;
+  bool force_webgpu_compat_ = false;
   std::vector<std::string> require_enabled_toggles_;
   std::vector<std::string> require_disabled_toggles_;
   bool allow_unsafe_apis_;
@@ -612,7 +577,7 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
       DCHECK(buffer_size);
 
       base::CheckedNumeric<uint32_t> checked_bytes_per_row(
-          BitsPerPixel(format) / 8);
+          format.BitsPerPixel() / 8);
       checked_bytes_per_row *= size.width();
 
       uint32_t packed_bytes_per_row;
@@ -853,7 +818,7 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
 
       // It's ok to pass in empty GrFlushInfo here since SignalSemaphores()
       // will populate it with semaphores and call GrDirectContext::flush.
-      surface->flush();
+      skgpu::ganesh::Flush(surface);
       // Transition the image back to the desired end state. This is used for
       // transitioning the image to the external queue for Vulkan/GL interop.
       scoped_write_access->ApplyBackendSurfaceEndState();
@@ -1053,15 +1018,18 @@ WebGPUDecoder* CreateWebGPUDecoderImpl(
     const DawnCacheOptions& dawn_cache_options,
     IsolationKeyProvider* isolation_key_provider) {
   // Construct a Dawn caching interface if the Dawn configurations enables it.
-  // If a handle was set, pass the relevant handle and DecoderClient so that
+  // If a handle was set, pass the relevant handle and CacheBlob callback so that
   // writing to disk is enabled. Otherwise pass an incognito in-memory version.
   std::unique_ptr<webgpu::DawnCachingInterface> dawn_caching_interface =
       nullptr;
   if (auto* caching_interface_factory =
           dawn_cache_options.caching_interface_factory.get()) {
     if (dawn_cache_options.handle) {
+      // The DecoderClient outlives the DawnCachingInterface, so it is safe
       dawn_caching_interface = caching_interface_factory->CreateInstance(
-          *dawn_cache_options.handle, client);
+          *dawn_cache_options.handle,
+          base::BindRepeating(&DecoderClient::CacheBlob,
+                              base::Unretained(client)));
     } else {
       dawn_caching_interface = caching_interface_factory->CreateInstance();
     }
@@ -1090,9 +1058,10 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
           std::make_unique<SharedImageRepresentationFactory>(
               shared_image_manager,
               memory_tracker)),
-      dawn_platform_(new DawnPlatform(gpu_preferences.enable_unsafe_webgpu
-                                          ? std::move(dawn_caching_interface)
-                                          : nullptr)),
+      dawn_platform_(new DawnPlatform(
+          base::FeatureList::IsEnabled(features::kWebGPUBlobCache)
+              ? std::move(dawn_caching_interface)
+              : nullptr)),
       dawn_instance_(
           DawnInstance::Create(dawn_platform_.get(), gpu_preferences)),
       memory_transfer_service_(new DawnServiceMemoryTransferService(this)),
@@ -1101,13 +1070,14 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
   enable_unsafe_webgpu_ = gpu_preferences.enable_unsafe_webgpu;
   use_webgpu_adapter_ = gpu_preferences.use_webgpu_adapter;
   use_webgpu_power_preference_ = gpu_preferences.use_webgpu_power_preference;
+  force_webgpu_compat_ = gpu_preferences.force_webgpu_compat;
   require_enabled_toggles_ = gpu_preferences.enabled_dawn_features_list;
   require_disabled_toggles_ = gpu_preferences.disabled_dawn_features_list;
 
-  // Only allow unsafe APIs if the disallow_unsafe_apis toggle is explicitly
-  // disabled.
+  // Only allow unsafe APIs if the allow_unsafe_apis toggle is explicitly
+  // enabled.
   allow_unsafe_apis_ =
-      base::Contains(require_disabled_toggles_, "disallow_unsafe_apis");
+      base::Contains(require_enabled_toggles_, "allow_unsafe_apis");
 
   // Force adapters to report their limits in predetermined tiers unless the
   // adapter_limit_tiers toggle is explicitly disabled.
@@ -1175,7 +1145,7 @@ ContextResult WebGPUDecoderImpl::Initialize(
     use_webgpu_adapter_ = WebGPUAdapterName::kSwiftShader;
   }
 
-  DiscoverAdapters();
+  dawn_instance_->EnableAdapterBlocklist(use_blocklist());
   return ContextResult::kSuccess;
 }
 
@@ -1186,6 +1156,8 @@ bool WebGPUDecoderImpl::IsFeatureExposed(WGPUAdapter adapter,
     case WGPUFeatureName_TimestampQueryInsidePasses:
     case WGPUFeatureName_PipelineStatisticsQuery:
     case WGPUFeatureName_ChromiumExperimentalDp4a:
+    // TODO(dawn:1664): Enable Float32Filterable by default once it is tested.
+    case WGPUFeatureName_Float32Filterable:
     // TODO(crbug.com/1258986): DawnMultiPlanarFormats is a stable feature in
     // Dawn, but currently we hide it from Render process as unsafe apis, so
     // that 0-copy code path, which explicitly checks this feature, is protected
@@ -1235,7 +1207,7 @@ void WebGPUDecoderImpl::RequestAdapterImpl(
   }
 
   if (gr_context_type_ != GrContextType::kVulkan &&
-      use_webgpu_adapter_ != WebGPUAdapterName::kCompat) {
+      use_webgpu_adapter_ != WebGPUAdapterName::kOpenGLES) {
 #if BUILDFLAG(IS_LINUX)
     callback(WGPURequestAdapterStatus_Unavailable, nullptr,
              "WebGPU on Linux requires command-line flag "
@@ -1245,27 +1217,17 @@ void WebGPUDecoderImpl::RequestAdapterImpl(
 #endif  // BUILDFLAG(IS_LINUX)
   }
 
-  int32_t requested_adapter_index = GetPreferredAdapterIndex(
-      options->powerPreference, force_fallback_adapter);
+  WGPUAdapter adapter = CreatePreferredAdapter(
+      options->powerPreference, force_fallback_adapter,
+      options->compatibilityMode || force_webgpu_compat_);
 
-  if (requested_adapter_index < 0) {
+  if (adapter == nullptr) {
     // There are no adapters to return since webgpu is not supported here
     callback(WGPURequestAdapterStatus_Unavailable, nullptr,
              "No available adapters.", userdata);
     return;
   }
-
-  // Currently we treat the index of the adapter in
-  // dawn_adapters_ as the id of the adapter in the server side.
-  DCHECK_LT(static_cast<size_t>(requested_adapter_index),
-            dawn_adapters_.size());
-  const dawn::native::Adapter& adapter =
-      dawn_adapters_[requested_adapter_index];
-
-  // Callback takes ownership of the reference. Add a ref to pass to the
-  // callback.
-  dawn::native::GetProcs().adapterReference(adapter.Get());
-  callback(WGPURequestAdapterStatus_Success, adapter.Get(), nullptr, userdata);
+  callback(WGPURequestAdapterStatus_Success, adapter, nullptr, userdata);
 }
 
 bool WebGPUDecoderImpl::AdapterHasFeatureImpl(WGPUAdapter adapter,
@@ -1510,180 +1472,185 @@ WebGPUDecoderImpl::CreateQueuedRequestDeviceCallback(
       base::Unretained(this), adapter, std::move(desc), callback, userdata);
 }
 
-void WebGPUDecoderImpl::DiscoverAdapters() {
+bool WebGPUDecoderImpl::use_blocklist() const {
   // Enable the blocklist unless --enable-unsafe-webgpu or
   // --disable-dawn-features=adapter_blocklist
-  const bool use_blocklist =
-      !(enable_unsafe_webgpu_ ||
-        base::Contains(require_disabled_toggles_, "adapter_blocklist"));
-  dawn_instance_->EnableAdapterBlocklist(use_blocklist);
+  return !(enable_unsafe_webgpu_ ||
+           base::Contains(require_disabled_toggles_, "adapter_blocklist"));
+}
+
+WGPUAdapter WebGPUDecoderImpl::CreatePreferredAdapter(
+    WGPUPowerPreference power_preference,
+    bool force_fallback,
+    bool compatibility_mode) const {
+  // Update power_preference based on command-line flag
+  // use_webgpu_power_preference_.
+  switch (use_webgpu_power_preference_) {
+    case WebGPUPowerPreference::kNone:
+      if (power_preference == WGPUPowerPreference_Undefined) {
+        // If on battery power, default to the integrated GPU.
+        if (!base::PowerMonitor::IsInitialized() ||
+            base::PowerMonitor::IsOnBatteryPower()) {
+          power_preference = WGPUPowerPreference_HighPerformance;
+        } else {
+          power_preference = WGPUPowerPreference_LowPower;
+        }
+      }
+      break;
+    case WebGPUPowerPreference::kDefaultLowPower:
+      if (power_preference == WGPUPowerPreference_Undefined) {
+        power_preference = WGPUPowerPreference_LowPower;
+      }
+      break;
+    case WebGPUPowerPreference::kDefaultHighPerformance:
+      if (power_preference == WGPUPowerPreference_Undefined) {
+        power_preference = WGPUPowerPreference_HighPerformance;
+      }
+      break;
+    case WebGPUPowerPreference::kForceLowPower:
+      power_preference = WGPUPowerPreference_LowPower;
+      break;
+    case WebGPUPowerPreference::kForceHighPerformance:
+      power_preference = WGPUPowerPreference_HighPerformance;
+      break;
+  }
+
+  // Prepare WGPURequestAdapterOptions.
+  WGPURequestAdapterOptions adapter_options = {};
+  adapter_options.compatibilityMode = compatibility_mode;
+  adapter_options.forceFallbackAdapter = force_fallback;
+  adapter_options.powerPreference = power_preference;
 
 #if BUILDFLAG(IS_WIN)
+  // On Windows, query the LUID of ANGLE's adapter.
   Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device =
       gl::QueryD3D11DeviceObjectFromANGLE();
   if (!d3d11_device) {
-    // In the case where the d3d11 device is nullptr, we want to return a null
-    // adapter
-    return;
+    LOG(ERROR) << "Failed to query ID3D11Device from ANGLE.";
+    return nullptr;
   }
+
   Microsoft::WRL::ComPtr<IDXGIDevice> dxgi_device;
-  d3d11_device.As(&dxgi_device);
-  Microsoft::WRL::ComPtr<IDXGIAdapter> dxgi_adapter;
-  dxgi_device->GetAdapter(&dxgi_adapter);
-  dawn::native::d3d12::AdapterDiscoveryOptions options(std::move(dxgi_adapter));
-  dawn_instance_->DiscoverAdapters(&options);
-
-#if BUILDFLAG(ENABLE_VULKAN)
-  // Also discover the SwiftShader adapter. It will be discovered by default
-  // for other OSes in DiscoverDefaultAdapters.
-  dawn::native::vulkan::AdapterDiscoveryOptions swiftShaderOptions;
-  swiftShaderOptions.forceSwiftShader = true;
-  dawn_instance_->DiscoverAdapters(&swiftShaderOptions);
-#endif  // BUILDFLAG(ENABLE_VULKAN)
-  if (use_webgpu_adapter_ == WebGPUAdapterName::kCompat) {
-    // On compat, discover default adapters to also discover the compat adapter.
-    // TODO(senorblanco): This may incorrectly discover a compat adapter that
-    // does not match the one ANGLE is using.
-    dawn_instance_->DiscoverDefaultAdapters();
+  if (!SUCCEEDED(d3d11_device.As(&dxgi_device))) {
+    LOG(ERROR) << "Failed to get IDXGIDevice from ANGLE.";
+    return nullptr;
   }
-#else   // BUILDFLAG(IS_WIN)
-  // Only discover default adapters on non-Windows. Windows requires
-  // compatibility with ANGLE. Other adapters will not be compatible.
-  dawn_instance_->DiscoverDefaultAdapters();
-#endif  // BUILDFLAG(IS_WIN)
+  Microsoft::WRL::ComPtr<IDXGIAdapter> dxgi_adapter;
+  if (!SUCCEEDED(dxgi_device->GetAdapter(&dxgi_adapter))) {
+    LOG(ERROR) << "Failed to get IDXGIAdapter from ANGLE.";
+    return nullptr;
+  }
 
-  std::vector<dawn::native::Adapter> adapters = dawn_instance_->GetAdapters();
-  for (dawn::native::Adapter& adapter : adapters) {
-    adapter.SetUseTieredLimits(tiered_adapter_limits_);
+  DXGI_ADAPTER_DESC adapter_desc;
+  if (!SUCCEEDED(dxgi_adapter->GetDesc(&adapter_desc))) {
+    LOG(ERROR) << "Failed to get DXGI_ADAPTER_DESC from ANGLE.";
+    return nullptr;
+  }
 
-    WGPUAdapterProperties adapterProperties = {};
-    adapter.GetProperties(&adapterProperties);
+  // Chain the LUID from ANGLE.
+  dawn::native::d3d::RequestAdapterOptionsLUID adapter_options_luid = {};
+  adapter_options_luid.adapterLUID = adapter_desc.AdapterLuid;
+  adapter_options.nextInChain =
+      reinterpret_cast<const WGPUChainedStruct*>(&adapter_options_luid);
+#endif
 
-    if (use_blocklist && IsWebGPUAdapterBlocklisted(adapterProperties)) {
-      continue;
+  // Build a list of backend types we will search for, in order of preference.
+  std::vector<wgpu::BackendType> backend_types;
+  switch (use_webgpu_adapter_) {
+    case WebGPUAdapterName::kD3D11:
+      backend_types = {wgpu::BackendType::D3D11};
+      break;
+    case WebGPUAdapterName::kOpenGLES:
+      backend_types = {wgpu::BackendType::OpenGLES};
+      break;
+    case WebGPUAdapterName::kSwiftShader:
+      backend_types = {wgpu::BackendType::Vulkan};
+      break;
+    case WebGPUAdapterName::kDefault: {
+#if BUILDFLAG(IS_WIN)
+      backend_types = {wgpu::BackendType::D3D12};
+#elif BUILDFLAG(IS_MAC)
+      backend_types = {wgpu::BackendType::Metal};
+#else
+      backend_types = {wgpu::BackendType::Vulkan, wgpu::BackendType::OpenGLES};
+#endif
+      break;
+    }
+  }
+
+  // `CanUseAdapter` is a helper to determine if an adapter is not blocklisted,
+  // supports all required features, and matches the requested adapter options
+  // (some of which may be set by command-line flags).
+  auto CanUseAdapter = [&](const dawn::native::Adapter& adapter) {
+    WGPUAdapterProperties adapter_properties = {};
+    adapter.GetProperties(&adapter_properties);
+
+    if (use_blocklist() && IsWebGPUAdapterBlocklisted(adapter_properties)) {
+      return false;
     }
 
-    const bool is_fallback_adapter =
-        adapterProperties.adapterType == WGPUAdapterType_CPU &&
-        adapterProperties.vendorID == 0x1AE0 &&
-        adapterProperties.deviceID == 0xC0DE;
+    const bool is_swiftshader =
+        adapter_properties.adapterType == WGPUAdapterType_CPU &&
+        adapter_properties.vendorID == 0x1AE0 &&
+        adapter_properties.deviceID == 0xC0DE;
 
     // The adapter must be able to import external images, or it must be a
     // SwiftShader adapter. For SwiftShader, we will perform a manual
     // upload/readback to/from shared images.
-    if (!(adapter.SupportsExternalImages() || is_fallback_adapter)) {
-      continue;
+    if (!(adapter.SupportsExternalImages() || is_swiftshader)) {
+      return false;
     }
 
-    if (use_webgpu_adapter_ == WebGPUAdapterName::kCompat) {
-      if (adapterProperties.backendType == WGPUBackendType_OpenGLES) {
-        dawn_adapters_.push_back(adapter);
+    // If the power preference is forced, only accept specific adapter
+    // types.
+    if (use_webgpu_power_preference_ == WebGPUPowerPreference::kForceLowPower &&
+        adapter_properties.adapterType != WGPUAdapterType_IntegratedGPU) {
+      return false;
+    }
+    if (use_webgpu_power_preference_ ==
+            WebGPUPowerPreference::kForceHighPerformance &&
+        adapter_properties.adapterType != WGPUAdapterType_DiscreteGPU) {
+      return false;
+    }
+
+    return true;
+  };
+
+  // Enumerate adapters in order of the preferred backend type.
+  for (wgpu::BackendType backend_type : backend_types) {
+    adapter_options.backendType = static_cast<WGPUBackendType>(backend_type);
+    for (dawn::native::Adapter& adapter :
+         dawn_instance_->EnumerateAdapters(&adapter_options)) {
+      adapter.SetUseTieredLimits(tiered_adapter_limits_);
+
+      if (!CanUseAdapter(adapter)) {
+        continue;
       }
-    } else if (adapterProperties.backendType != WGPUBackendType_Null &&
-               adapterProperties.backendType != WGPUBackendType_OpenGL &&
-               adapterProperties.backendType != WGPUBackendType_D3D11) {
-      dawn_adapters_.push_back(adapter);
+
+      // Retain a reference to the adapter, and return it.
+      dawn::native::GetProcs().adapterReference(adapter.Get());
+      return adapter.Get();
     }
   }
-}
 
-int32_t WebGPUDecoderImpl::GetPreferredAdapterIndex(
-    WGPUPowerPreference power_preference,
-    bool force_fallback) const {
-  WGPUAdapterType preferred_adapter_type;
-  if (use_webgpu_adapter_ == WebGPUAdapterName::kSwiftShader) {
-    // When it is using SwiftShader, it is using CPU, so ignore webgpu power
-    // preference flag.
-    DCHECK(force_fallback);
-    preferred_adapter_type = WGPUAdapterType_CPU;
-  } else {
-    WGPUPowerPreference adjusted_power_preference = power_preference;
-    switch (use_webgpu_power_preference_) {
-      case WebGPUPowerPreference::kNone:
-        break;
-      case WebGPUPowerPreference::kDefaultLowPower:
-        if (adjusted_power_preference == WGPUPowerPreference_Undefined) {
-          adjusted_power_preference = WGPUPowerPreference_LowPower;
-        }
-        break;
-      case WebGPUPowerPreference::kDefaultHighPerformance:
-        if (adjusted_power_preference == WGPUPowerPreference_Undefined) {
-          adjusted_power_preference = WGPUPowerPreference_HighPerformance;
-        }
-        break;
-      case WebGPUPowerPreference::kForceLowPower:
-        adjusted_power_preference = WGPUPowerPreference_LowPower;
-        break;
-      case WebGPUPowerPreference::kForceHighPerformance:
-        adjusted_power_preference = WGPUPowerPreference_HighPerformance;
-        break;
-    }
-    preferred_adapter_type =
-        PowerPreferenceToDawnAdapterType(adjusted_power_preference);
-  }
+  // If we still don't have an adapter, now try to find the fallback adapter.
+  adapter_options.forceFallbackAdapter = true;
+  adapter_options.backendType = WGPUBackendType_Vulkan;
+  for (dawn::native::Adapter& adapter :
+       dawn_instance_->EnumerateAdapters(&adapter_options)) {
+    adapter.SetUseTieredLimits(tiered_adapter_limits_);
 
-  int32_t discrete_gpu_adapter_index = -1;
-  int32_t integrated_gpu_adapter_index = -1;
-  int32_t cpu_adapter_index = -1;
-  int32_t unknown_adapter_index = -1;
-
-  for (int32_t i = 0; i < static_cast<int32_t>(dawn_adapters_.size()); ++i) {
-    const dawn::native::Adapter& adapter = dawn_adapters_[i];
-    WGPUAdapterProperties adapterProperties = {};
-    adapter.GetProperties(&adapterProperties);
-
-    if (force_fallback &&
-        (adapterProperties.adapterType != WGPUAdapterType_CPU ||
-         adapterProperties.backendType != WGPUBackendType_Vulkan)) {
+    if (!CanUseAdapter(adapter)) {
       continue;
     }
 
-    if (adapterProperties.adapterType == preferred_adapter_type) {
-      return i;
-    }
-    switch (adapterProperties.adapterType) {
-      case WGPUAdapterType_DiscreteGPU:
-        discrete_gpu_adapter_index = i;
-        break;
-      case WGPUAdapterType_IntegratedGPU:
-        integrated_gpu_adapter_index = i;
-        break;
-      case WGPUAdapterType_CPU:
-        cpu_adapter_index = i;
-        break;
-      case WGPUAdapterType_Unknown:
-        unknown_adapter_index = i;
-        break;
-      default:
-        NOTREACHED();
-        break;
-    }
+    // Retain a reference to the adapter, and return it.
+    dawn::native::GetProcs().adapterReference(adapter.Get());
+    return adapter.Get();
   }
 
-  // For now, we always prefer the integrated GPU
-  if (integrated_gpu_adapter_index >= 0 &&
-      use_webgpu_power_preference_ !=
-          WebGPUPowerPreference::kForceHighPerformance) {
-    return integrated_gpu_adapter_index;
-  }
-  if (discrete_gpu_adapter_index >= 0 &&
-      use_webgpu_power_preference_ != WebGPUPowerPreference::kForceLowPower) {
-    return discrete_gpu_adapter_index;
-  }
-  if (use_webgpu_power_preference_ == WebGPUPowerPreference::kForceLowPower ||
-      use_webgpu_power_preference_ ==
-          WebGPUPowerPreference::kForceHighPerformance) {
-    // If we cannot find the forced adapter type, early return here instead of
-    // returning any other adapter.
-    return -1;
-  }
-  if (cpu_adapter_index >= 0) {
-    return cpu_adapter_index;
-  }
-  if (unknown_adapter_index >= 0) {
-    return unknown_adapter_index;
-  }
-  return -1;
+  // No adapter could be found.
+  return nullptr;
 }
 
 const char* WebGPUDecoderImpl::GetCommandName(unsigned int command_id) const {
@@ -1770,6 +1737,8 @@ error::Error WebGPUDecoderImpl::HandleDawnCommands(
     const volatile void* cmd_data) {
   const volatile webgpu::cmds::DawnCommands& c =
       *static_cast<const volatile webgpu::cmds::DawnCommands*>(cmd_data);
+  uint32_t trace_id_high = static_cast<uint32_t>(c.trace_id_high);
+  uint32_t trace_id_low = static_cast<uint32_t>(c.trace_id_low);
   uint32_t size = static_cast<uint32_t>(c.size);
   uint32_t commands_shm_id = static_cast<uint32_t>(c.commands_shm_id);
   uint32_t commands_shm_offset = static_cast<uint32_t>(c.commands_shm_offset);
@@ -1780,10 +1749,10 @@ error::Error WebGPUDecoderImpl::HandleDawnCommands(
     return error::kOutOfBounds;
   }
 
-  TRACE_EVENT_WITH_FLOW0(
-      TRACE_DISABLED_BY_DEFAULT("gpu.dawn"), "DawnCommands",
-      (static_cast<uint64_t>(commands_shm_id) << 32) + commands_shm_offset,
-      TRACE_EVENT_FLAG_FLOW_IN);
+  uint64_t trace_id =
+      (static_cast<uint64_t>(trace_id_high) << 32) + trace_id_low;
+  TRACE_EVENT_WITH_FLOW0(TRACE_DISABLED_BY_DEFAULT("gpu.dawn"), "DawnCommands",
+                         trace_id, TRACE_EVENT_FLAG_FLOW_IN);
 
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("gpu.dawn"),
                "WebGPUDecoderImpl::HandleDawnCommands", "bytes", size);

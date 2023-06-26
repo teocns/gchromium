@@ -14,6 +14,7 @@
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/capture_mode/capture_mode_session.h"
 #include "ash/capture_mode/capture_mode_session_focus_cycler.h"
+#include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/style/color_provider.h"
@@ -38,21 +39,22 @@ namespace ash {
 
 namespace {
 
-constexpr gfx::Size kSettingsSize{256, 248};
+constexpr gfx::Size kSettingsSize{266, 248};
 
 constexpr int kCornerRadius = 10;
 constexpr gfx::RoundedCornersF kRoundedCorners{kCornerRadius};
 
 // Returns the bounds of the settings widget in screen coordinates relative to
-// the bounds of the |capture_mode_bar_view| based on its given preferred
-// |settings_view_size|.
+// the bounds of the `capture_mode_bar_view` based on its given preferred
+// `settings_view_size`, which should be centered with respect to the capture
+// bar.
 gfx::Rect GetWidgetBounds(CaptureModeBarView* capture_mode_bar_view,
                           const gfx::Size& settings_view_size) {
-  DCHECK(capture_mode_bar_view);
+  CHECK(capture_mode_bar_view);
 
   return gfx::Rect(
-      capture_mode_bar_view->settings_button()->GetBoundsInScreen().right() -
-          kSettingsSize.width(),
+      capture_mode_bar_view->GetBoundsInScreen().CenterPoint().x() -
+          kSettingsSize.width() / 2.f,
       capture_mode_bar_view->GetBoundsInScreen().y() -
           capture_mode::kSpaceBetweenCaptureBarAndSettingsMenu -
           settings_view_size.height(),
@@ -78,9 +80,10 @@ CaptureModeSettingsView::CaptureModeSettingsView(
     const bool audio_capture_managed_by_policy =
         controller->IsAudioCaptureDisabledByPolicy();
 
-    DCHECK(!audio_capture_managed_by_policy ||
-           !active_behavior->IsAudioRecordingRequired())
-        << "A projector session should not be allowed to begin if audio "
+    DCHECK(
+        !audio_capture_managed_by_policy ||
+        active_behavior->SupportsAudioRecordingMode(AudioRecordingMode::kOff))
+        << "A client session should not be allowed to begin if audio "
            "recording is diabled by policy.";
 
     audio_input_menu_group_ =
@@ -89,20 +92,42 @@ CaptureModeSettingsView::CaptureModeSettingsView(
             l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_AUDIO_INPUT),
             audio_capture_managed_by_policy));
 
-    if (!active_behavior->IsAudioRecordingRequired()) {
-      // Disallow the user to turn off audio recording if it is required.
-      audio_input_menu_group_->AddOption(
-          /*option_icon=*/nullptr,
-          l10n_util::GetStringUTF16(IDS_ASH_SCREEN_CAPTURE_AUDIO_INPUT_OFF),
-          kAudioOff);
-    }
+    // A list of all the possible audio options.
+    struct {
+      // The backend audio recording mode for this option.
+      AudioRecordingMode audio_recording_mode;
+      // The ID of this menu group option.
+      int option_id;
+      // The ID of the string that will be used for the option's label.
+      int string_id;
+      // True if the option can be added if audio recording is managed by an
+      // admin policy.
+      bool add_if_managed_by_policy;
+    } kAudioOptions[] = {
+        {AudioRecordingMode::kOff, kAudioOff,
+         IDS_ASH_SCREEN_CAPTURE_AUDIO_INPUT_OFF,
+         /*add_if_managed_by_policy=*/true},
+        {AudioRecordingMode::kSystem, kAudioSystem,
+         IDS_ASH_SCREEN_CAPTURE_AUDIO_INPUT_SYSTEM,
+         /*add_if_managed_by_policy=*/false},
+        {AudioRecordingMode::kMicrophone, kAudioMicrophone,
+         IDS_ASH_SCREEN_CAPTURE_AUDIO_INPUT_MICROPHONE,
+         /*add_if_managed_by_policy=*/false},
+        {AudioRecordingMode::kSystemAndMicrophone, kAudioSystemAndMicrophone,
+         IDS_ASH_SCREEN_CAPTURE_AUDIO_INPUT_SYSTEM_AND_MICROPHONE,
+         /*add_if_managed_by_policy=*/false},
+    };
 
-    if (!audio_capture_managed_by_policy) {
-      audio_input_menu_group_->AddOption(
-          /*option_icon=*/nullptr,
-          l10n_util::GetStringUTF16(
-              IDS_ASH_SCREEN_CAPTURE_AUDIO_INPUT_MICROPHONE),
-          kAudioMicrophone);
+    for (const auto& audio_option : kAudioOptions) {
+      if ((!audio_capture_managed_by_policy ||
+           audio_option.add_if_managed_by_policy) &&
+          active_behavior->SupportsAudioRecordingMode(
+              audio_option.audio_recording_mode)) {
+        audio_input_menu_group_->AddOption(
+            /*option_icon=*/nullptr,
+            l10n_util::GetStringUTF16(audio_option.string_id),
+            audio_option.option_id);
+      }
     }
 
     separator_1_ = AddChildView(std::make_unique<views::Separator>());
@@ -258,10 +283,17 @@ void CaptureModeSettingsView::OnOptionSelected(int option_id) const {
   auto* camera_controller = controller->camera_controller();
   switch (option_id) {
     case kAudioOff:
-      controller->EnableAudioRecording(false);
+      controller->SetAudioRecordingMode(AudioRecordingMode::kOff);
+      break;
+    case kAudioSystem:
+      controller->SetAudioRecordingMode(AudioRecordingMode::kSystem);
       break;
     case kAudioMicrophone:
-      controller->EnableAudioRecording(true);
+      controller->SetAudioRecordingMode(AudioRecordingMode::kMicrophone);
+      break;
+    case kAudioSystemAndMicrophone:
+      controller->SetAudioRecordingMode(
+          AudioRecordingMode::kSystemAndMicrophone);
       break;
     case kDownloadsFolder:
       controller->SetUsesDefaultCaptureFolder(true);
@@ -287,11 +319,17 @@ void CaptureModeSettingsView::OnOptionSelected(int option_id) const {
 bool CaptureModeSettingsView::IsOptionChecked(int option_id) const {
   auto* controller = CaptureModeController::Get();
   auto* camera_controller = controller->camera_controller();
+  const auto effective_audio_mode =
+      controller->GetEffectiveAudioRecordingMode();
   switch (option_id) {
     case kAudioOff:
-      return !CaptureModeController::Get()->GetAudioRecordingEnabled();
+      return effective_audio_mode == AudioRecordingMode::kOff;
+    case kAudioSystem:
+      return effective_audio_mode == AudioRecordingMode::kSystem;
     case kAudioMicrophone:
-      return CaptureModeController::Get()->GetAudioRecordingEnabled();
+      return effective_audio_mode == AudioRecordingMode::kMicrophone;
+    case kAudioSystemAndMicrophone:
+      return effective_audio_mode == AudioRecordingMode::kSystemAndMicrophone;
     case kDownloadsFolder:
       return GetCurrentCaptureFolder().is_default_downloads_folder ||
              !is_custom_folder_available_.value_or(false);
@@ -315,8 +353,11 @@ bool CaptureModeSettingsView::IsOptionEnabled(int option_id) const {
   switch (option_id) {
     case kAudioOff:
       return !audio_capture_managed_by_policy &&
-             !active_behavior_->IsAudioRecordingRequired();
+             active_behavior_->SupportsAudioRecordingMode(
+                 AudioRecordingMode::kOff);
+    case kAudioSystem:
     case kAudioMicrophone:
+    case kAudioSystemAndMicrophone:
       return !audio_capture_managed_by_policy;
     case kCustomFolder:
       return is_custom_folder_available_.value_or(false);

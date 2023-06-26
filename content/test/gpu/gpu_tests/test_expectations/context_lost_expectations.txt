@@ -25,7 +25,9 @@
 #         lacros-chrome cros-chrome ]
 # GPU
 # tags: [ amd amd-0x6613 amd-0x679e amd-0x67ef amd-0x6821 amd-0x7340
-#         apple apple-apple-m1 apple-angle-metal-renderer:-apple-m1
+#         apple apple-apple-m1 apple-apple-m2
+#             apple-angle-metal-renderer:-apple-m1
+#             apple-angle-metal-renderer:-apple-m2
 #         arm
 #         google google-0xffff google-0xc0de
 #         intel intel-gen-9 intel-gen-12 intel-0xa2e intel-0xd26 intel-0xa011
@@ -63,6 +65,8 @@
 # tags: [ dawn-backend-validation dawn-no-backend-validation ]
 # WebGPU Adapter
 # tags: [ webgpu-adapter-default webgpu-adapter-swiftshader ]
+# WebGPU Compat Mode
+# tags: [ webgpu-compat webgpu-not-compat ]
 # Clang coverage
 # tags: [ clang-coverage no-clang-coverage ]
 # results: [ Failure RetryOnFailure Skip Slow ]
@@ -76,9 +80,15 @@
 # platform/configuration.
 
 # Mac NVIDIA only uses the low-power GPU.
-crbug.com/1186582 [ mac nvidia ] ContextLost_MacWebGLMultisamplingHighPowerSwitchDoesNotCrash [ Skip ]
-crbug.com/681341 [ mac nvidia ] ContextLost_MacWebGLMultisamplingHighPowerSwitchLosesContext [ Skip ]
-crbug.com/681341 [ mac nvidia ] ContextLost_MacWebGLPreserveDBHighPowerSwitchLosesContext [ Skip ]
+crbug.com/1186582 [ mac angle-opengl nvidia ] ContextLost_MacWebGLMultisamplingHighPowerSwitchDoesNotCrash [ Skip ]
+crbug.com/681341 [ mac angle-opengl nvidia ] ContextLost_MacWebGLMultisamplingHighPowerSwitchLosesContext [ Skip ]
+crbug.com/681341 [ mac angle-opengl nvidia ] ContextLost_MacWebGLPreserveDBHighPowerSwitchLosesContext [ Skip ]
+
+# Metal does not switch the GPU of existing contexts.
+crbug.com/1448964 [ mac angle-metal ] ContextLost_MacWebGLCopyTexSubImage2DHighPowerSwitchDoesNotCrash [ Skip ]
+crbug.com/1448964 [ mac angle-metal ] ContextLost_MacWebGLMultisamplingHighPowerSwitchDoesNotCrash [ Skip ]
+crbug.com/1448964 [ mac angle-metal ] ContextLost_MacWebGLMultisamplingHighPowerSwitchLosesContext [ Skip ]
+crbug.com/1448964 [ mac angle-metal ] ContextLost_MacWebGLPreserveDBHighPowerSwitchLosesContext [ Skip ]
 
 # These tests use base::Process::TerminateCurrentProcessImmediately(0) on the
 # GPU process and expect a normal exit code reported to the browser process.
@@ -175,7 +185,7 @@ crbug.com/1418987 [ linux amd-0x7340 angle-vulkan ] GpuNormalTermination_Origina
 
 crbug.com/1419583 [ linux amd-0x7340 angle-vulkan ] ContextLost_WebGLContextRestoredInHiddenTab [ Failure ]
 
-crbug.com/1429731 [ chromeos chromeos-board-kevin ] ContextLost_WebGPUStressRequestDeviceAndRemoveLoop [ Failure ]
+crbug.com/1419558 [ angle-swiftshader clang-coverage fuchsia fuchsia-board-qemu-x64 google-0xc0de ] ContextLost_WebGLContextLostFromQuantity [ Failure ]
 
 #######################################################################
 # Automated Entries After This Point - Do Not Manually Add Below Here #

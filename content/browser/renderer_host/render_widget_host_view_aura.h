@@ -240,6 +240,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   bool ChangeTextDirectionAndLayoutAlignment(
       base::i18n::TextDirection direction) override;
   void ExtendSelectionAndDelete(size_t before, size_t after) override;
+#if BUILDFLAG(IS_CHROMEOS)
+  void ExtendSelectionAndReplace(size_t before,
+                                 size_t after,
+                                 base::StringPiece16 replacement_text) override;
+#endif
   void EnsureCaretNotInRect(const gfx::Rect& rect) override;
   bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
   void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
@@ -287,6 +292,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // content.
   // https://docs.microsoft.com/en-us/windows/win32/tsf/predefined-properties
   ui::TextInputClient::EditingContext GetTextEditingContext() override;
+
+  void OnFrameFocusChanged() override;
 #endif
 
   // Overridden from display::DisplayObserver:

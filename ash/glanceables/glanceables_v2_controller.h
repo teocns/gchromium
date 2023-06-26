@@ -11,8 +11,11 @@
 #include "base/memory/raw_ptr.h"
 #include "components/account_id/account_id.h"
 
+class PrefRegistrySimple;
+
 namespace ash {
 
+class GlanceablesClassroomClient;
 class GlanceablesTasksClient;
 
 // Root glanceables controller.
@@ -22,6 +25,8 @@ class ASH_EXPORT GlanceablesV2Controller : public SessionObserver {
  public:
   // Convenience wrapper to pass all clients from browser to ash at once.
   struct ClientsRegistration {
+    raw_ptr<GlanceablesClassroomClient, ExperimentalAsh> classroom_client =
+        nullptr;
     raw_ptr<GlanceablesTasksClient, ExperimentalAsh> tasks_client = nullptr;
   };
 
@@ -30,12 +35,19 @@ class ASH_EXPORT GlanceablesV2Controller : public SessionObserver {
   GlanceablesV2Controller& operator=(const GlanceablesV2Controller&) = delete;
   ~GlanceablesV2Controller() override;
 
+  // Registers syncable user profile prefs with the specified `registry`.
+  static void RegisterUserProfilePrefs(PrefRegistrySimple* registry);
+
   // SessionObserver:
   void OnActiveUserSessionChanged(const AccountId& account_id) override;
 
   // Updates `clients_registry_` for a specific `account_id`.
   void UpdateClientsRegistration(const AccountId& account_id,
                                  const ClientsRegistration& registration);
+
+  // Returns a classroom client pointer associated with the
+  // `active_account_id_`. Could return `nullptr`.
+  GlanceablesClassroomClient* GetClassroomClient() const;
 
   // Returns a tasks client pointer associated with the `active_account_id_`.
   // Could return `nullptr`.

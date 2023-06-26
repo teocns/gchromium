@@ -140,10 +140,14 @@ void ScopedTestNativeMessagingHost::RegisterTestExeHost(bool user_level) {
   ASSERT_NO_FATAL_FAILURE(registry_override_.OverrideRegistry(root_key));
 
   // Unlike in the |RegisterTestHost| case above, we must leave the Host
-  // .exe where it was built because the Host will fail to run from the
+  // .exe where it was built, because the Host will fail to run from the
   // temp_dir_ if is_component_build is set for the build.
+  //
+  // The Host's filename deliberately contains the character '&' which causes
+  // the Host to fail to launch if cmd.exe is used as an intermediary between
+  // the extension and the host executable. crbug.com/335558
   base::FilePath host_path =
-      binary_dir.AppendASCII("native_messaging_test_echo_host.exe");
+      binary_dir.AppendASCII("native_messaging_test_echo_&_host.exe");
   ASSERT_NO_FATAL_FAILURE(WriteTestNativeHostManifest(
       temp_dir_.GetPath(), kHostExeName, host_path, user_level, false));
 }

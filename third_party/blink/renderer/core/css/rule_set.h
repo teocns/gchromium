@@ -23,6 +23,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RULE_SET_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_RULE_SET_H_
 
+#include "base/gtest_prod_util.h"
 #include "base/substring_set_matcher/substring_set_matcher.h"
 #include "base/types/pass_key.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -49,7 +50,7 @@ using AddRuleFlags = unsigned;
 enum AddRuleFlag {
   kRuleHasNoSpecialState = 0,
   kRuleIsVisitedDependent = 1 << 0,
-  kRuleIsInitial = 1 << 1,
+  kRuleIsStartingStyle = 1 << 1,
 };
 
 // Some CSS properties do not apply to certain pseudo-elements, and need to be
@@ -96,11 +97,6 @@ class CORE_EXPORT RuleData {
   DISALLOW_NEW();
 
  public:
-  // The `extra_specificity` parameter is added to the specificity of the
-  // RuleData. This is useful for @scope, where inner selectors must gain
-  // additional specificity from the <scope-start> of the enclosing @scope.
-  // https://drafts.csswg.org/css-cascade-6/#scope-atrule
-  //
   // NOTE: You will want to call ComputeBloomFilterHashes() before actually
   // using this RuleData for matching. However, the constructor cannot do it
   // right away, since RuleMap wants to use the space normally used for hashes
@@ -108,7 +104,6 @@ class CORE_EXPORT RuleData {
   RuleData(StyleRule*,
            unsigned selector_index,
            unsigned position,
-           unsigned extra_specificity,
            AddRuleFlags);
 
   unsigned GetPosition() const { return position_; }
@@ -126,7 +121,7 @@ class CORE_EXPORT RuleData {
   void ComputeEntirelyCoveredByBucketing();
   void ResetEntirelyCoveredByBucketing();
   bool SelectorIsEasy() const { return is_easy_; }
-  bool IsInitial() const { return is_initial_; }
+  bool IsStartingStyle() const { return is_starting_style_; }
 
   bool ContainsUncommonAttributeSelector() const {
     return contains_uncommon_attribute_selector_;
@@ -169,6 +164,13 @@ class CORE_EXPORT RuleData {
 
   void Trace(Visitor*) const;
 
+  // Used during merging.
+  void AdjustPosition(int offset) { position_ += offset; }
+  void AdjustBucketPosition(int new_bucket_number, int offset) {
+    bucket_number_ = new_bucket_number;
+    order_in_bucket_ += offset;
+  }
+
   // This number is picked fairly arbitrary. If lowered, be aware that there
   // might be sites and extensions using style rules with selector lists
   // exceeding the number of simple selectors to fit in this bitfield.
@@ -189,8 +191,8 @@ class CORE_EXPORT RuleData {
   unsigned link_match_type_ : 2;
   unsigned valid_property_filter_ : 3;
   unsigned is_entirely_covered_by_bucketing_ : 1;
-  unsigned is_easy_ : 1;     // See EasySelectorChecker.
-  unsigned is_initial_ : 1;  // Inside @initial {}.
+  unsigned is_easy_ : 1;            // See EasySelectorChecker.
+  unsigned is_starting_style_ : 1;  // Inside @starting-style {}.
   // 32 bits above
   union {
     // Used by RuleMap before compaction, to hold what bucket this RuleData
@@ -271,6 +273,7 @@ class RuleMap {
 
  public:
   void Add(const AtomicString& key, const RuleData& rule_data);
+  void Merge(const RuleMap& other, int offset);
   base::span<const RuleData> Find(const AtomicString& key) const {
     DCHECK(buckets.empty() || compacted);
     auto it = buckets.find(key);
@@ -368,6 +371,7 @@ class CORE_EXPORT RuleSet final : public GarbageCollected<RuleSet> {
                     const ContainerQuery* container_query = nullptr,
                     CascadeLayer* cascade_layer = nullptr,
                     const StyleScope* style_scope = nullptr);
+  void Merge(const RuleSet& other, LayerMap& layer_mapping);
 
   const RuleFeatureSet& Features() const { return features_; }
 
@@ -585,6 +589,9 @@ class CORE_EXPORT RuleSet final : public GarbageCollected<RuleSet> {
   CascadeLayer* GetOrAddSubLayer(CascadeLayer*,
                                  const StyleRuleBase::LayerName&);
   void AddRuleToLayerIntervals(const CascadeLayer*, unsigned position);
+  void MergeCascadeLayers(const RuleSet& other,
+                          int offset,
+                          LayerMap& layer_mapping);
 
   // May return nullptr for the implicit outer layer.
   const CascadeLayer* GetLayerForTest(const RuleData&) const;

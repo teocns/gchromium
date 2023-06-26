@@ -25,6 +25,10 @@
 #import "ui/base/cocoa/menu_controller.h"
 #include "ui/base/window_open_disposition.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using base::UserMetricsAction;
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -171,9 +175,7 @@ void OpenBookmarkByGUID(WindowOpenDisposition disposition,
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem*)menuItem {
-  AppController* controller =
-      base::mac::ObjCCastStrict<AppController>([NSApp delegate]);
-  return ![controller keyWindowIsModal];
+  return ![AppController.sharedController keyWindowIsModal];
 }
 
 // NSMenu delegate method: called just before menu is displayed.

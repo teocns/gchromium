@@ -95,7 +95,6 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
     // dividing by 10 until it gets under 100, reaching 10 for both
     // UMA_MAX_BUCKET_VALUE and UMA_MAX_SUBSET_BUCKET_VALUE, and adds +1
     // for overflow. How do we keep that in sync with this code?
-    private static final int UMA_BUCKET_COUNT = 11;
     private static final int HISTORY_TAB_INDEX = 0;
     private static final int JOURNEYS_TAB_INDEX = 1;
 
@@ -347,7 +346,14 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
         mSelectableListLayout.configureWideDisplayStyle();
 
         // 5. Initialize empty view.
-        mEmptyView = mSelectableListLayout.initializeEmptyView(R.string.history_manager_empty);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.EMPTY_STATES)) {
+            mEmptyView = mSelectableListLayout.initializeEmptyStateView(
+                    R.drawable.history_empty_state_illustration,
+                    R.string.history_manager_empty_state,
+                    R.string.history_manager_empty_state_view_or_clear_page_visited);
+        } else {
+            mEmptyView = mSelectableListLayout.initializeEmptyView(R.string.history_manager_empty);
+        }
 
         // 6. Load items.
         mContentManager.startLoadingItems();
@@ -683,7 +689,6 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
         } else if (isHistoryClustersUIShowing()) {
             return mHistoryClustersCoordinator.onBackPressed();
         }
-
         return mSelectableListLayout.onBackPressed();
     }
 

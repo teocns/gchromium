@@ -18,24 +18,6 @@ import org.chromium.components.browser_ui.settings.SettingsLauncher;
  */
 public interface PasswordManagerHandler {
     /**
-     * An interface which a client can use to listen to changes to password and password exception
-     * lists.
-     */
-    interface PasswordListObserver {
-        /**
-         * Called when passwords list is updated.
-         * @param count Number of entries in the password list.
-         */
-        void passwordListAvailable(int count);
-
-        /**
-         * Called when password exceptions list is updated.
-         * @param count Number of entries in the password exception list.
-         */
-        void passwordExceptionListAvailable(int count);
-    }
-
-    /**
      * Called to insert a password entry into the password store.
      */
     @VisibleForTesting
@@ -98,4 +80,10 @@ public interface PasswordManagerHandler {
      */
     void showPasswordEntryEditingView(Context context, SettingsLauncher settingsLauncher, int index,
             boolean isBlockedCredential);
+
+    /**
+     * Checks whether the all the conditions for the migraiton warning to be shown are met.
+     * This includes the flag check, whether there was another warning shown in the past month, etc.
+     */
+    boolean shouldShowMigrationWarning();
 }

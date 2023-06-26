@@ -431,19 +431,10 @@ void FetchManager::Loader::DidReceiveResponse(
                 execution_context_->GetSecurityOrigin()));
   }
 
-  // Step 21 of https://fetch.spec.whatwg.org/#main-fetch
-  // Set response body to null when method is `HEAD` or `CONNECT`, or status
-  // is a null body status.
-  BodyStreamBuffer* buffer = nullptr;
-  if (!Response::IsNullBodyStatus(response.HttpStatusCode()) &&
-      fetch_request_data_->Method() != http_names::kHEAD &&
-      fetch_request_data_->Method() != http_names::kCONNECT) {
-    place_holder_body_ = MakeGarbageCollected<PlaceHolderBytesConsumer>();
-    buffer = BodyStreamBuffer::Create(script_state, place_holder_body_, signal_,
-                                      cached_metadata_handler_);
-  }
+  place_holder_body_ = MakeGarbageCollected<PlaceHolderBytesConsumer>();
   FetchResponseData* response_data =
-      FetchResponseData::CreateWithBuffer(buffer);
+      FetchResponseData::CreateWithBuffer(BodyStreamBuffer::Create(
+          script_state, place_holder_body_, signal_, cached_metadata_handler_));
   if (!execution_context_ || execution_context_->IsContextDestroyed() ||
       response.GetType() == FetchResponseType::kError) {
     // BodyStreamBuffer::Create() may run scripts and cancel this request.
@@ -521,11 +512,6 @@ void FetchManager::Loader::DidReceiveCachedMetadata(mojo_base::BigBuffer data) {
 }
 
 void FetchManager::Loader::DidStartLoadingResponseBody(BytesConsumer& body) {
-  if (!place_holder_body_) {
-    body.Cancel();
-    return;
-  }
-
   if (fetch_request_data_->Integrity().empty() &&
       !response_has_no_store_header_) {
     // BufferingBytesConsumer reads chunks from |bytes_consumer| as soon as
@@ -856,10 +842,16 @@ void FetchManager::Loader::PerformHTTPFetch() {
   }
 
   request.SetBrowsingTopics(fetch_request_data_->BrowsingTopics());
+  request.SetAdAuctionHeaders(fetch_request_data_->AdAuctionHeaders());
   request.SetAttributionReportingEligibility(
       fetch_request_data_->AttributionReportingEligibility());
+  request.SetSharedStorageWritable(
+      fetch_request_data_->SharedStorageWritable());
 
   request.SetOriginalDestination(fetch_request_data_->OriginalDestination());
+
+  request.SetServiceWorkerRaceNetworkRequestToken(
+      fetch_request_data_->ServiceWorkerRaceNetworkRequestToken());
 
   // "3. Append `Host`, ..."
   // FIXME: Implement this when the spec is fixed.

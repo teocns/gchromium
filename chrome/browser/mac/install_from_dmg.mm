@@ -19,12 +19,13 @@
 
 #include <algorithm>
 
+#include "base/apple/bridging.h"
+#include "base/apple/bundle_locations.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/mac/authorization_util.h"
-#include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/mac_util.h"
@@ -46,6 +47,10 @@
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -286,7 +291,7 @@ bool ShouldInstallDialog() {
   NSString* yes = l10n_util::GetNSStringWithFixup(IDS_INSTALL_FROM_DMG_YES);
   NSString* no = l10n_util::GetNSStringWithFixup(IDS_INSTALL_FROM_DMG_NO);
 
-  NSAlert* alert = [[[NSAlert alloc] init] autorelease];
+  NSAlert* alert = [[NSAlert alloc] init];
 
   alert.alertStyle = NSAlertStyleInformational;
   alert.messageText = title;
@@ -318,7 +323,7 @@ base::mac::ScopedAuthorizationRef MaybeShowAuthorizationDialog(
       IDS_INSTALL_FROM_DMG_AUTHENTICATION_PROMPT,
       l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
   return base::mac::AuthorizationCreateToRunAsRoot(
-      base::mac::NSToCFCast(prompt));
+      base::apple::NSToCFPtrCast(prompt));
 }
 
 // Invokes the installer program at `installer_path` to copy `source_path` to
@@ -421,7 +426,7 @@ void ShowErrorDialog() {
       IDS_INSTALL_FROM_DMG_ERROR, l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
   NSString* ok = l10n_util::GetNSStringWithFixup(IDS_OK);
 
-  NSAlert* alert = [[[NSAlert alloc] init] autorelease];
+  NSAlert* alert = [[NSAlert alloc] init];
 
   alert.alertStyle = NSAlertStyleWarning;
   alert.messageText = title;
@@ -437,7 +442,7 @@ void ShowErrorDialog() {
 DiskImageStatus IsAppRunningFromReadOnlyDiskImage(
     std::string* dmg_bsd_device_name) {
   return IsPathOnReadOnlyDiskImage(
-      base::mac::OuterBundle().bundlePath.fileSystemRepresentation,
+      base::apple::OuterBundle().bundlePath.fileSystemRepresentation,
       dmg_bsd_device_name);
 }
 
@@ -469,7 +474,7 @@ bool MaybeInstallFromDiskImage() {
       return false;
     }
 
-    NSString* source_path = base::mac::OuterBundle().bundlePath;
+    NSString* source_path = base::apple::OuterBundle().bundlePath;
     NSString* application_name = source_path.lastPathComponent;
     NSString* target_path =
         [application_directory stringByAppendingPathComponent:application_name];
@@ -481,8 +486,8 @@ bool MaybeInstallFromDiskImage() {
     }
 
     NSURL* installer_url =
-        [base::mac::FrameworkBundle() URLForResource:@"install"
-                                       withExtension:@"sh"];
+        [base::apple::FrameworkBundle() URLForResource:@"install"
+                                         withExtension:@"sh"];
     if (!installer_url) {
       VLOG(1) << "Could not locate install.sh";
       return false;

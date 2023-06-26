@@ -212,6 +212,8 @@ public class CredentialEditControllerTest {
         Context context = ApplicationProvider.getApplicationContext();
         mMediator.onCopyPassword(context);
 
+        verify(mReauthenticationHelper)
+                .reauthenticate(eq(ReauthReason.COPY_PASSWORD), any(Callback.class));
         ClipboardManager clipboard =
                 (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
         assertNotNull(clipboard.getPrimaryClip());

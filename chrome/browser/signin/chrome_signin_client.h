@@ -27,6 +27,10 @@ class ForceSigninVerifier;
 #endif
 class Profile;
 
+namespace version_info {
+enum class Channel;
+}
+
 class ChromeSigninClient
     : public SigninClient
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -81,6 +85,7 @@ class ChromeSigninClient
   std::unique_ptr<GaiaAuthFetcher> CreateGaiaAuthFetcher(
       GaiaAuthConsumer* consumer,
       gaia::GaiaSource source) override;
+  version_info::Channel GetClientChannel() override;
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   // network::NetworkConnectionTracker::NetworkConnectionObserver
@@ -120,7 +125,7 @@ class ChromeSigninClient
       const base::FilePath& profile_path);
   void OnCloseBrowsersAborted(const base::FilePath& profile_path);
 
-  raw_ptr<Profile> profile_;
+  raw_ptr<Profile, DanglingUntriaged> profile_;
 
   // Stored callback from PreSignOut();
   base::OnceCallback<void(SignoutDecision)> on_signout_decision_reached_;

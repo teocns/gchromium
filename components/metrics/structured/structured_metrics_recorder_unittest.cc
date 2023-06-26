@@ -173,6 +173,8 @@ class StructuredMetricsRecorderTest : public testing::Test {
         .Append("device_keys");
   }
 
+  void TearDown() override { StructuredMetricsClient::Get()->UnsetDelegate(); }
+
   void Wait() { task_environment_.RunUntilIdle(); }
 
   void WriteTestingProfileKeys() {
@@ -359,7 +361,7 @@ TEST_F(StructuredMetricsRecorderTest, EventsNotReportedWhenRecordingDisabled) {
 // Ensure that disabling the structured metrics feature flag prevents all
 // structured metrics reporting.
 TEST_F(StructuredMetricsRecorderTest, EventsNotReportedWhenFeatureDisabled) {
-  scoped_feature_list_.InitAndDisableFeature(kStructuredMetrics);
+  scoped_feature_list_.InitAndDisableFeature(features::kStructuredMetrics);
 
   Init();
   // OnRecordingEnabled should not actually enable recording because the flag is
@@ -860,8 +862,8 @@ TEST_F(StructuredMetricsRecorderTest, ExternalMetricsAreReported) {
   recorder_ = std::make_unique<TestStructuredMetricsRecorder>(
       system_profile_provider_.get());
   OnProfileAdded(TempDirPath());
-  OnRecordingEnabled();
   SetExternalMetricsDirForTest(events_dir);
+  OnRecordingEnabled();
   task_environment_.AdvanceClock(base::Hours(10));
   Wait();
   EXPECT_EQ(GetUMAEventMetrics().events_size(), 3);
@@ -880,8 +882,8 @@ TEST_F(StructuredMetricsRecorderTest,
   recorder_ = std::make_unique<TestStructuredMetricsRecorder>(
       system_profile_provider_.get());
   OnProfileAdded(TempDirPath());
-  OnRecordingDisabled();
   SetExternalMetricsDirForTest(events_dir);
+  OnRecordingDisabled();
   task_environment_.AdvanceClock(base::Hours(10));
   Wait();
   EXPECT_EQ(GetUMAEventMetrics().events_size(), 0);
@@ -1076,6 +1078,31 @@ TEST_F(StructuredMetricsRecorderTest, DisallowedProjectAreDropped) {
   const auto data = GetEventMetrics();
   ASSERT_EQ(data.events_size(), 1);
   ASSERT_EQ(data.events(0).project_name_hash(), kProjectTwoHash);
+}
+
+class TestProcessor : public EventsProcessorInterface {
+  bool ShouldProcessOnEventRecord(const Event& event) override { return true; }
+
+  // no-op
+  void OnEventsRecord(Event* event) override {}
+
+  void OnProvideIndependentMetrics(
+      ChromeUserMetricsExtension* uma_proto) override {
+    uma_proto->mutable_structured_data()->set_is_device_enrolled(true);
+  }
+};
+
+TEST_F(StructuredMetricsRecorderTest, AppliesProcessorCorrectly) {
+  Init();
+
+  // Processor that sets |is_device_enrolled| to true.
+  Recorder::GetInstance()->AddEventsProcessor(
+      std::make_unique<TestProcessor>());
+
+  events::v2::test_project_one::TestEventOne().SetTestMetricTwo(1).Record();
+  const auto data = GetEventMetrics();
+
+  EXPECT_TRUE(data.is_device_enrolled());
 }
 
 }  // namespace metrics::structured

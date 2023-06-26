@@ -9,7 +9,7 @@
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_features.h"
 #import "ios/chrome/browser/bookmarks/bookmark_ios_unit_test_support.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -67,7 +67,7 @@ TEST_P(BookmarksHomeViewControllerTest,
     controller.snackbarCommandsHandler = mockSnackbarCommandHandler;
 
     const bookmarks::BookmarkNode* mobileNode =
-        profile_bookmark_model_->mobile_node();
+        local_or_syncable_bookmark_model_->mobile_node();
     AddBookmark(mobileNode, u"foo");
     controller.displayedFolderNode = mobileNode;
     // sections: Bookmarks, root profile, root account, message.
@@ -92,6 +92,7 @@ TEST_P(BookmarksHomeViewControllerTest,
                          [controller.tableViewModel
                              sectionForSectionIdentifier:
                                  BookmarksHomeSectionIdentifierMessages]]);
+    [controller shutdown];
   }
 }
 
@@ -124,9 +125,9 @@ TEST_P(BookmarksHomeViewControllerTest,
     controller.snackbarCommandsHandler = mockSnackbarCommandHandler;
 
     const bookmarks::BookmarkNode* rootNode =
-        profile_bookmark_model_->root_node();
+        local_or_syncable_bookmark_model_->root_node();
     const bookmarks::BookmarkNode* mobileNode =
-        profile_bookmark_model_->mobile_node();
+        local_or_syncable_bookmark_model_->mobile_node();
     AddBookmark(mobileNode, u"foo");  // Ensure there are bookmarks
     controller.displayedFolderNode = rootNode;
     // sections: Promo, Bookmarks, root profile, root account, message.
@@ -156,6 +157,7 @@ TEST_P(BookmarksHomeViewControllerTest,
                          [controller.tableViewModel
                              sectionForSectionIdentifier:
                                  BookmarksHomeSectionIdentifierMessages]]);
+    [controller shutdown];
   }
 }
 
@@ -187,7 +189,8 @@ TEST_P(BookmarksHomeViewControllerTest, Metrics) {
     controller.applicationCommandsHandler = mockApplicationCommandHandler;
     controller.snackbarCommandsHandler = mockSnackbarCommandHandler;
 
-    controller.displayedFolderNode = profile_bookmark_model_->mobile_node();
+    controller.displayedFolderNode =
+        local_or_syncable_bookmark_model_->mobile_node();
     base::UserActionTester user_action_tester;
     std::string user_action = "MobileKeyCommandClose";
     ASSERT_EQ(user_action_tester.GetActionCount(user_action), 0);
@@ -195,6 +198,7 @@ TEST_P(BookmarksHomeViewControllerTest, Metrics) {
     [controller keyCommand_close];
 
     EXPECT_EQ(user_action_tester.GetActionCount(user_action), 1);
+    [controller shutdown];
   }
 }
 

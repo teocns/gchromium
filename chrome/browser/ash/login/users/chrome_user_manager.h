@@ -30,7 +30,6 @@ class ChromeUserManager : public user_manager::UserManagerBase,
   ~ChromeUserManager() override;
 
   // user_manager::UserManagerBase:
-  bool IsCurrentUserNew() const override;
   void UpdateLoginState(const user_manager::User* active_user,
                         const user_manager::User* primary_user,
                         bool is_current_user_owner) const override;
@@ -49,13 +48,6 @@ class ChromeUserManager : public user_manager::UserManagerBase,
   virtual void SetUserAffiliation(
       const AccountId& account_id,
       const base::flat_set<std::string>& user_affiliation_ids) = 0;
-
-  // Checks whether full management disclosure is needed for the public/managed
-  // session login screen UI. Full disclosure is needed if the session is
-  // managed and any risky extensions or network certificates are forced
-  // through the policies.
-  virtual bool IsFullManagementDisclosureNeeded(
-      policy::DeviceLocalAccountPolicyBroker* broker) const = 0;
 
  private:
   LoginState::LoggedInUserType GetLoggedInUserType(

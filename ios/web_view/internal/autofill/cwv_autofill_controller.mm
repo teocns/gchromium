@@ -31,7 +31,7 @@
 #import "components/password_manager/ios/ios_password_manager_driver.h"
 #import "components/password_manager/ios/ios_password_manager_driver_factory.h"
 #import "components/password_manager/ios/shared_password_controller.h"
-#import "components/sync/driver/sync_service.h"
+#import "components/sync/service/sync_service.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/web_state.h"
@@ -321,13 +321,14 @@ using UserDecision =
             popupDelegate:
                 (const base::WeakPtr<autofill::AutofillPopupDelegate>&)
                     delegate {
-  // frontend_id is > 0 for Autofill suggestions, == 0 for Autocomplete
-  // suggestions, and < 0 for special suggestions such as clear form.
   // We only want Autofill suggestions.
   std::vector<autofill::Suggestion> filtered_suggestions;
   base::ranges::copy_if(suggestions, std::back_inserter(filtered_suggestions),
                         [](const autofill::Suggestion& suggestion) {
-                          return suggestion.frontend_id > 0;
+                          return suggestion.popup_item_id ==
+                                     autofill::PopupItemId::kAddressEntry ||
+                                 suggestion.popup_item_id ==
+                                     autofill::PopupItemId::kCreditCardEntry;
                         });
   [_autofillAgent showAutofillPopup:filtered_suggestions
                       popupDelegate:delegate];
@@ -729,6 +730,10 @@ using UserDecision =
 - (void)attachListenersForBottomSheet:
             (const std::vector<autofill::FieldRendererId>&)rendererIds
                               inFrame:(web::WebFrame*)frame {
+  // No op.
+}
+
+- (void)detachListenersForBottomSheet:(web::WebFrame*)frame {
   // No op.
 }
 

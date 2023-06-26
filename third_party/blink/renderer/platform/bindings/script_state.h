@@ -11,7 +11,6 @@
 #include "gin/public/gin_embedders.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/renderer/platform/bindings/scoped_persistent.h"
-#include "third_party/blink/renderer/platform/bindings/v8_cross_origin_callback_info.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/self_keep_alive.h"
@@ -76,7 +75,7 @@ class V8PerContextData;
 // ScriptState is created when v8::Context is created.
 // ScriptState is destroyed when v8::Context is garbage-collected and
 // all V8 proxy objects that have references to the ScriptState are destructed.
-class PLATFORM_EXPORT ScriptState final : public GarbageCollected<ScriptState> {
+class PLATFORM_EXPORT ScriptState : public GarbageCollected<ScriptState> {
  public:
   class Scope final {
     STACK_ALLOCATED();
@@ -124,16 +123,15 @@ class PLATFORM_EXPORT ScriptState final : public GarbageCollected<ScriptState> {
     v8::Local<v8::Context> context_;
   };
 
-  // If this ScriptState is associated with an ExecutionContext then it must be
-  // provided here, otherwise providing nullptr is fine.
-  ScriptState(v8::Local<v8::Context>,
-              scoped_refptr<DOMWrapperWorld>,
-              ExecutionContext* execution_context);
+  static ScriptState* Create(v8::Local<v8::Context>,
+                             scoped_refptr<DOMWrapperWorld>,
+                             ExecutionContext*);
+
   ScriptState(const ScriptState&) = delete;
   ScriptState& operator=(const ScriptState&) = delete;
-  ~ScriptState();
+  virtual ~ScriptState();
 
-  void Trace(Visitor*) const;
+  virtual void Trace(Visitor*) const;
 
   static ScriptState* Current(v8::Isolate* isolate) {  // DEPRECATED
     return From(isolate->GetCurrentContext());
@@ -147,25 +145,6 @@ class PLATFORM_EXPORT ScriptState final : public GarbageCollected<ScriptState> {
   static ScriptState* ForCurrentRealm(
       const v8::PropertyCallbackInfo<v8::Value>& info) {
     return From(info.GetIsolate()->GetCurrentContext());
-  }
-
-  static ScriptState* ForRelevantRealm(
-      const v8::FunctionCallbackInfo<v8::Value>& info) {
-    return ForRelevantRealm(info.Holder());
-  }
-
-  static ScriptState* ForRelevantRealm(const V8CrossOriginCallbackInfo& info) {
-    return ForRelevantRealm(info.Holder());
-  }
-
-  static ScriptState* ForRelevantRealm(
-      const v8::PropertyCallbackInfo<v8::Value>& info) {
-    return ForRelevantRealm(info.Holder());
-  }
-
-  static ScriptState* ForRelevantRealm(
-      const v8::PropertyCallbackInfo<void>& info) {
-    return ForRelevantRealm(info.Holder());
   }
 
   static ScriptState* ForRelevantRealm(v8::Local<v8::Object> object) {
@@ -192,6 +171,19 @@ class PLATFORM_EXPORT ScriptState final : public GarbageCollected<ScriptState> {
     return script_state;
   }
 
+  // For use when it is not absolutely certain that the v8::Context is
+  // associated with a ScriptState. This is necessary in unit tests when a
+  // v8::Context is created directly on the v8 API without going through the
+  // usual blink codepaths.
+  static ScriptState* MaybeFrom(v8::Local<v8::Context> context) {
+    DCHECK(!context.IsEmpty());
+    if (context->GetNumberOfEmbedderDataFields() <=
+        kV8ContextPerContextDataIndex) {
+      return nullptr;
+    }
+    return From(context);
+  }
+
   v8::Isolate* GetIsolate() const { return isolate_; }
   DOMWrapperWorld& World() const { return *world_; }
   const V8ContextToken& GetToken() const { return token_; }
@@ -213,6 +205,11 @@ class PLATFORM_EXPORT ScriptState final : public GarbageCollected<ScriptState> {
   // invoked by a weak callback if a V8 GC were run, in a worker thread
   // termination.
   void DissociateContext();
+
+ protected:
+  ScriptState(v8::Local<v8::Context>,
+              scoped_refptr<DOMWrapperWorld>,
+              ExecutionContext*);
 
  private:
   static void OnV8ContextCollectedCallback(
@@ -244,6 +241,13 @@ class PLATFORM_EXPORT ScriptState final : public GarbageCollected<ScriptState> {
   // Serves as a unique ID for this context, which can be used to name the
   // context in browser/renderer communications.
   V8ContextToken token_;
+
+  using CreateCallback = ScriptState* (*)(v8::Local<v8::Context>,
+                                          scoped_refptr<DOMWrapperWorld>,
+                                          ExecutionContext*);
+  static CreateCallback s_create_callback_;
+  static void SetCreateCallback(CreateCallback);
+  friend class ScriptStateImpl;
 
   static constexpr int kV8ContextPerContextDataIndex =
       static_cast<int>(gin::kPerContextDataStartIndex) +

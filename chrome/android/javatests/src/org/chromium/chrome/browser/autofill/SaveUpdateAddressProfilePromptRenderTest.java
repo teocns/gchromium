@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.autofill;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 
 import android.view.View;
@@ -12,7 +15,6 @@ import androidx.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -29,12 +31,14 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
-import org.chromium.chrome.browser.autofill.settings.AutofillProfileBridge;
-import org.chromium.chrome.browser.autofill.settings.AutofillProfileBridgeJni;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.sync.SyncService;
 import org.chromium.ui.test.util.BlankUiTestActivityTestCase;
 import org.chromium.ui.test.util.NightModeTestUtils;
 import org.chromium.ui.test.util.RenderTestRule;
@@ -48,7 +52,8 @@ import java.util.List;
  */
 @DoNotBatch(reason = "The tests can't be batched because they run for different set-ups.")
 @RunWith(ParameterizedRunner.class)
-@EnableFeatures({ChromeFeatureList.AUTOFILL_ADDRESS_PROFILE_SAVE_PROMPT_NICKNAME_SUPPORT})
+@EnableFeatures({ChromeFeatureList.AUTOFILL_ADDRESS_PROFILE_SAVE_PROMPT_NICKNAME_SUPPORT,
+        ChromeFeatureList.AUTOFILL_ENABLE_SUPPORT_FOR_HONORIFIC_PREFIXES})
 public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivityTestCase {
     private static final long NATIVE_SAVE_UPDATE_ADDRESS_PROFILE_PROMPT_CONTROLLER = 100L;
     @ParameterAnnotations.ClassParameter
@@ -73,7 +78,15 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
     @Mock
     private AutofillProfileBridge.Natives mAutofillProfileBridgeJni;
     @Mock
+    private PersonalDataManager mPersonalDataManager;
+    @Mock
     private Profile mProfile;
+    @Mock
+    private IdentityServicesProvider mIdentityServicesProvider;
+    @Mock
+    private IdentityManager mIdentityManager;
+    @Mock
+    private SyncService mSyncService;
 
     private SaveUpdateAddressProfilePromptController mPromptController;
     private SaveUpdateAddressProfilePrompt mPrompt;
@@ -87,6 +100,12 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
     @Override
     public void setUpTest() throws Exception {
         MockitoAnnotations.initMocks(this);
+        runOnUiThreadBlocking(() -> {
+            PersonalDataManager.setInstanceForTesting(mPersonalDataManager);
+            SyncServiceFactory.overrideForTests(mSyncService);
+            IdentityServicesProvider.setInstanceForTests(mIdentityServicesProvider);
+            when(mIdentityServicesProvider.getIdentityManager(any())).thenReturn(mIdentityManager);
+        });
 
         mPromptController = SaveUpdateAddressProfilePromptController.create(
                 NATIVE_SAVE_UPDATE_ADDRESS_PROFILE_PROMPT_CONTROLLER);
@@ -101,6 +120,7 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
     @Override
     public void tearDownTest() throws Exception {
         runOnUiThreadBlocking(mPrompt::dismiss);
+        PersonalDataManager.setInstanceForTesting(null);
         super.tearDownTest();
     }
 
@@ -114,10 +134,10 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
     @Feature({"RenderTest"})
     public void saveLocalOrSyncAddress() throws Exception {
         View dialogView = runOnUiThreadBlocking(() -> {
-            Assert.assertNotNull(getActivity());
             mPrompt = new SaveUpdateAddressProfilePrompt(mPromptController,
                     getActivity().getModalDialogManager(), getActivity(), mProfile,
-                    new AutofillProfile(), /*isUpdate=*/false, /*isMigrationToAccount=*/false);
+                    AutofillProfile.builder().build(), /*isUpdate=*/false,
+                    /*isMigrationToAccount=*/false);
             mPrompt.setDialogDetails(/*title=*/"Dialog title", /*positiveButtonText=*/"Accept",
                     /*negativeButtonText=*/"Cancel");
             mPrompt.setSaveOrMigrateDetails(
@@ -136,7 +156,8 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
         View dialogView = runOnUiThreadBlocking(() -> {
             mPrompt = new SaveUpdateAddressProfilePrompt(mPromptController,
                     getActivity().getModalDialogManager(), getActivity(), mProfile,
-                    new AutofillProfile(), /*isUpdate=*/false, /*isMigrationToAccount=*/false);
+                    AutofillProfile.builder().build(), /*isUpdate=*/false,
+                    /*isMigrationToAccount=*/false);
             mPrompt.setDialogDetails(/*title=*/"Dialog title", /*positiveButtonText=*/"Accept",
                     /*negativeButtonText=*/"Cancel");
             mPrompt.setSaveOrMigrateDetails(
@@ -160,7 +181,8 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
         View dialogView = runOnUiThreadBlocking(() -> {
             mPrompt = new SaveUpdateAddressProfilePrompt(mPromptController,
                     getActivity().getModalDialogManager(), getActivity(), mProfile,
-                    new AutofillProfile(), /*isUpdate=*/false, /*isMigrationToAccount=*/true);
+                    AutofillProfile.builder().build(), /*isUpdate=*/false,
+                    /*isMigrationToAccount=*/true);
             mPrompt.setDialogDetails(/*title=*/"Dialog title", /*positiveButtonText=*/"Accept",
                     /*negativeButtonText=*/"Cancel");
             mPrompt.setSaveOrMigrateDetails(
@@ -184,7 +206,8 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
         View dialogView = runOnUiThreadBlocking(() -> {
             mPrompt = new SaveUpdateAddressProfilePrompt(mPromptController,
                     getActivity().getModalDialogManager(), getActivity(), mProfile,
-                    new AutofillProfile(), /*isUpdate=*/true, /*isMigrationToAccount=*/false);
+                    AutofillProfile.builder().build(), /*isUpdate=*/true,
+                    /*isMigrationToAccount=*/false);
             mPrompt.setDialogDetails(/*title=*/"Dialog title", /*positiveButtonText=*/"Accept",
                     /*negativeButtonText=*/"Cancel");
             mPrompt.setUpdateDetails(
@@ -203,7 +226,8 @@ public class SaveUpdateAddressProfilePromptRenderTest extends BlankUiTestActivit
         View dialogView = runOnUiThreadBlocking(() -> {
             mPrompt = new SaveUpdateAddressProfilePrompt(mPromptController,
                     getActivity().getModalDialogManager(), getActivity(), mProfile,
-                    new AutofillProfile(), /*isUpdate=*/true, /*isMigrationToAccount=*/false);
+                    AutofillProfile.builder().build(), /*isUpdate=*/true,
+                    /*isMigrationToAccount=*/false);
             mPrompt.setDialogDetails(/*title=*/"Dialog title", /*positiveButtonText=*/"Accept",
                     /*negativeButtonText=*/"Cancel");
             mPrompt.setUpdateDetails(

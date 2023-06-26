@@ -165,6 +165,10 @@ OmniboxFieldTrial::MLConfig& GetMLConfigInternal() {
   return s_config;
 }
 
+bool IsKoreanLocale(const std::string& locale) {
+  return locale == "ko" || locale == "ko-KR";
+}
+
 }  // namespace
 
 HUPScoringParams::ScoreBuckets::ScoreBuckets()
@@ -538,21 +542,6 @@ bool OmniboxFieldTrial::HUPSearchDatabase() {
   return value.empty() || (value == "true");
 }
 
-int OmniboxFieldTrial::KeywordScoreForSufficientlyCompleteMatch() {
-  std::string value_str = base::GetFieldTrialParamValue(
-      kBundledExperimentFieldTrialName,
-      kKeywordScoreForSufficientlyCompleteMatchRule);
-  if (value_str.empty()) {
-    return -1;
-  }
-  // This is a best-effort conversion; we trust the hand-crafted parameters
-  // downloaded from the server to be perfect.  There's no need for handle
-  // errors smartly.
-  int value;
-  base::StringToInt(value_str, &value);
-  return value;
-}
-
 bool OmniboxFieldTrial::IsFuzzyUrlSuggestionsEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kOmniboxFuzzyUrlSuggestions);
 }
@@ -633,6 +622,15 @@ bool OmniboxFieldTrial::ShouldEncodeLeadingSpaceForOnDeviceTailSuggest() {
                                                  /*default_value=*/false);
 }
 
+bool OmniboxFieldTrial::IsOnDeviceHeadSuggestEnabledForLocale(
+    const std::string& locale) {
+  if (IsKoreanLocale(locale) &&
+      !base::FeatureList::IsEnabled(omnibox::kOnDeviceHeadProviderKorean)) {
+    return false;
+  }
+  return IsOnDeviceHeadSuggestEnabledForAnyMode();
+}
+
 std::string OmniboxFieldTrial::OnDeviceHeadModelLocaleConstraint(
     bool is_incognito) {
   const base::Feature* feature =
@@ -648,19 +646,11 @@ std::string OmniboxFieldTrial::OnDeviceHeadModelLocaleConstraint(
   return constraint;
 }
 
-bool OmniboxFieldTrial::ShouldDisableCGIParamMatching() {
-  return base::FeatureList::IsEnabled(omnibox::kDisableCGIParamMatching);
-}
-
-bool OmniboxFieldTrial::IsSiteSearchStarterPackEnabled() {
-  return base::FeatureList::IsEnabled(omnibox::kSiteSearchStarterPack);
-}
-
 // Omnibox UI simplification - Uniform Suggestion Row Heights
 const base::FeatureParam<bool> OmniboxFieldTrial::kSquareSuggestIconAnswers(
     &omnibox::kSquareSuggestIcons,
     "OmniboxSquareSuggestIconAnswers",
-    false);
+    true);
 const base::FeatureParam<bool> OmniboxFieldTrial::kSquareSuggestIconIcons(
     &omnibox::kSquareSuggestIcons,
     "OmniboxSquareSuggestIconIcons",
@@ -682,7 +672,7 @@ bool OmniboxFieldTrial::IsUniformRowHeightEnabled() {
 const base::FeatureParam<int> OmniboxFieldTrial::kRichSuggestionVerticalMargin(
     &omnibox::kUniformRowHeight,
     "OmniboxRichSuggestionVerticalMargin",
-    4);
+    6);
 
 bool OmniboxFieldTrial::IsChromeRefreshIconsEnabled() {
   static bool enabled =
@@ -692,10 +682,26 @@ bool OmniboxFieldTrial::IsChromeRefreshIconsEnabled() {
   return enabled;
 }
 
-bool OmniboxFieldTrial::IsGM3TextStyleEnabled() {
+bool OmniboxFieldTrial::IsChromeRefreshSuggestIconsEnabled() {
   return features::GetChromeRefresh2023Level() ==
              features::ChromeRefresh2023Level::kLevel2 ||
-         base::FeatureList::IsEnabled(omnibox::kOmniboxSteadyStateTextStyle);
+         base::FeatureList::IsEnabled(omnibox::kExpandedStateSuggestIcons);
+}
+
+bool OmniboxFieldTrial::IsChromeRefreshActionChipIconsEnabled() {
+  return features::GetChromeRefresh2023Level() ==
+             features::ChromeRefresh2023Level::kLevel2 ||
+         base::FeatureList::IsEnabled(omnibox::kCr2023ActionChipsIcons);
+}
+
+bool OmniboxFieldTrial::IsChromeRefreshSuggestHoverFillShapeEnabled() {
+  return features::GetChromeRefresh2023Level() ==
+             features::ChromeRefresh2023Level::kLevel2 ||
+         base::FeatureList::IsEnabled(omnibox::kSuggestionHoverFillShape);
+}
+
+bool OmniboxFieldTrial::IsGM3TextStyleEnabled() {
+  return base::FeatureList::IsEnabled(omnibox::kOmniboxSteadyStateTextStyle);
 }
 
 // In order to control the value of this "font size" param via Finch, the
@@ -756,11 +762,6 @@ const char OmniboxFieldTrial::kHQPNumTitleWordsRule[] = "HQPNumTitleWords";
 const char OmniboxFieldTrial::kHQPAlsoDoHUPLikeScoringRule[] =
     "HQPAlsoDoHUPLikeScoring";
 const char OmniboxFieldTrial::kHUPSearchDatabaseRule[] = "HUPSearchDatabase";
-const char OmniboxFieldTrial::kKeywordRequiresRegistryRule[] =
-    "KeywordRequiresRegistry";
-const char OmniboxFieldTrial::kKeywordScoreForSufficientlyCompleteMatchRule[] =
-    "KeywordScoreForSufficientlyCompleteMatch";
-
 const char OmniboxFieldTrial::kHUPNewScoringTypedCountRelevanceCapParam[] =
     "TypedCountRelevanceCap";
 const char OmniboxFieldTrial::kHUPNewScoringTypedCountHalfLifeTimeParam[] =
@@ -861,20 +862,6 @@ bool IsZeroSuggestPrefetchingEnabledInContext(
   }
 }
 
-// Shortcut boost
-const base::FeatureParam<int> kShortcutBoostSearchScore(
-    &omnibox::kShortcutBoost,
-    "ShortcutBoostSearchScore",
-    0);
-const base::FeatureParam<int> kShortcutBoostUrlScore(&omnibox::kShortcutBoost,
-                                                     "ShortcutBoostUrlScore",
-                                                     0);
-
-const base::FeatureParam<bool> kShortcutBoostCounterfactual(
-    &omnibox::kShortcutBoost,
-    "ShortcutBoostCounterfactual",
-    false);
-
 // Rich autocompletion.
 
 bool IsRichAutocompletionEnabled() {
@@ -950,11 +937,6 @@ const base::FeatureParam<bool>
         "RichAutocompletionAutocompletePreferUrlsOverPrefixes",
         false);
 
-const base::FeatureParam<int> kSiteSearchStarterPackRelevanceScore(
-    &omnibox::kSiteSearchStarterPack,
-    "SiteSearchStarterPackRelevanceScore",
-    1350);
-
 const base::FeatureParam<bool> kDomainSuggestionsCounterfactual(
     &omnibox::kDomainSuggestions,
     "DomainSuggestionsCounterfactual",
@@ -1010,9 +992,15 @@ const base::FeatureParam<bool> kDomainSuggestionsAlternativeScoring(
 
 // If true, enables scoring signal annotators for logging Omnibox scoring
 // signals to OmniboxEventProto.
-const base::FeatureParam<bool> kEnableScoringSignalsAnnotators(
+const base::FeatureParam<bool> kEnableScoringSignalsAnnotatorsForLogging(
     &omnibox::kLogUrlScoringSignals,
     "enable_scoring_signals_annotators",
+    false);
+
+// If true, enables scoring signal annotators for ML scoring.
+const base::FeatureParam<bool> kEnableScoringSignalsAnnotatorsForMlScoring(
+    &omnibox::kMlUrlScoring,
+    "enable_scoring_signals_annotators_for_ml_scoring",
     false);
 
 // If true, runs the ML scoring model but does not assign new relevance scores
@@ -1047,11 +1035,19 @@ const base::FeatureParam<bool> kMlUrlScoringPreserveDefault(
     "MlUrlScoringPreserveDefault",
     false);
 
+// If true, the ML model scores a batch of urls.
+const base::FeatureParam<bool> kMlBatchUrlScoring(&omnibox::kMlUrlScoring,
+                                                  "MlBatchUrlScoring",
+                                                  true);
+
 MLConfig::MLConfig() {
   log_url_scoring_signals =
       base::FeatureList::IsEnabled(omnibox::kLogUrlScoringSignals);
-  enable_scoring_signals_annotators = kEnableScoringSignalsAnnotators.Get();
+  enable_scoring_signals_annotators =
+      kEnableScoringSignalsAnnotatorsForLogging.Get() ||
+      kEnableScoringSignalsAnnotatorsForMlScoring.Get();
   ml_url_scoring = base::FeatureList::IsEnabled(omnibox::kMlUrlScoring);
+  ml_batch_url_scoring = kMlBatchUrlScoring.Get();
   ml_url_scoring_counterfactual = kMlUrlScoringCounterfactual.Get();
   ml_url_scoring_increase_num_candidates =
       kMlUrlScoringIncreaseNumCandidates.Get();
@@ -1076,9 +1072,14 @@ const MLConfig& GetMLConfig() {
   return GetMLConfigInternal();
 }
 
-bool IsLogUrlScoringSignalsEnabled() {
+bool IsReportingUrlScoringSignalsEnabled() {
   return GetMLConfig().log_url_scoring_signals;
 }
+
+bool IsPopulatingUrlScoringSignalsEnabled() {
+  return IsReportingUrlScoringSignalsEnabled() || IsMlUrlScoringEnabled();
+}
+
 bool AreScoringSignalsAnnotatorsEnabled() {
   return GetMLConfig().enable_scoring_signals_annotators;
 }
@@ -1088,6 +1089,9 @@ bool IsMlUrlScoringEnabled() {
 #else
   return false;
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+}
+bool IsMlBatchUrlScoringEnabled() {
+  return IsMlUrlScoringEnabled() && GetMLConfig().ml_batch_url_scoring;
 }
 bool IsMlUrlScoringCounterfactual() {
   return IsMlUrlScoringEnabled() && GetMLConfig().ml_url_scoring_counterfactual;
@@ -1115,29 +1119,6 @@ const base::FeatureParam<bool> kRealboxSecondaryZeroSuggestCounterfactual(
     false);
 
 // <- Two-column realbox
-// ---------------------------------------------------------
-// Inspire Me ->
-
-const base::FeatureParam<int> kInspireMeAdditionalRelatedQueries(
-    &omnibox::kInspireMe,
-    "AdditionalRelatedQueries",
-    0);
-
-const base::FeatureParam<int> kInspireMeAdditionalTrendingQueries(
-    &omnibox::kInspireMe,
-    "AdditionalTrendingQueries",
-    0);
-
-// <- Inspire Me
-// ---------------------------------------------------------
-// Actions In Suggest ->
-// When set to true, permits Entity suggestion with associated Actions to be
-// promoted over the Escape Hatch.
-const base::FeatureParam<bool> kActionsInSuggestPromoteEntitySuggestion(
-    &omnibox::kActionsInSuggest,
-    "PromoteEntitySuggestion",
-    false);
-// <- Actions In Suggest
 // ---------------------------------------------------------
 // Android UI Revamp ->
 const base::FeatureParam<bool> kOmniboxModernizeVisualUpdateMergeClipboardOnNTP(

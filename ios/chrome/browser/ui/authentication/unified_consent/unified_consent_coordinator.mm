@@ -5,7 +5,7 @@
 #import "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_coordinator.h"
 
 #import "base/check_op.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
@@ -66,13 +66,21 @@
 }
 
 - (void)start {
+  [super start];
   [self.unifiedConsentMediator start];
 }
 
 - (void)stop {
   [self.identityChooserCoordinator stop];
+  self.identityChooserCoordinator = nil;
   [self.unifiedConsentMediator disconnect];
   self.unifiedConsentMediator = nil;
+  self.unifiedConsentViewController = nil;
+  [super stop];
+}
+
+- (void)dealloc {
+  CHECK(!self.unifiedConsentMediator);
 }
 
 - (void)scrollToBottom {

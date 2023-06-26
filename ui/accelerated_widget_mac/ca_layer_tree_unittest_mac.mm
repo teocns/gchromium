@@ -5,6 +5,7 @@
 #import <AVFoundation/AVFoundation.h>
 #include <memory>
 
+#include "base/test/scoped_feature_list.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
@@ -47,11 +48,6 @@ struct CALayerProperties {
   bool allow_av_layers = true;
   bool allow_solid_color_layers = true;
 };
-
-gfx::ScopedIOSurface CreateScopedIOSurface(const gfx::Size& size,
-                                           gfx::BufferFormat format) {
-  return gfx::ScopedIOSurface(gfx::CreateIOSurface(size, format));
-}
 
 base::ScopedCFTypeRef<CVPixelBufferRef> CreateCVPixelBuffer(
     gfx::ScopedIOSurface io_surface) {
@@ -130,8 +126,8 @@ class CALayerTreePropertyUpdatesTest : public CALayerTreeTest {
     properties.background_color = SkColors::kRed;
     properties.edge_aa_mask = ui::CALayerEdge::kLayerEdgeLeft;
     properties.opacity = 0.5f;
-    properties.io_surface = CreateScopedIOSurface(gfx::Size(256, 256),
-                                                  gfx::BufferFormat::BGRA_8888);
+    properties.io_surface =
+        gfx::CreateIOSurface(gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
 
     std::unique_ptr<ui::CARendererLayerTree> ca_layer_tree;
     CALayer* root_layer = nil;
@@ -193,8 +189,8 @@ class CALayerTreePropertyUpdatesTest : public CALayerTreeTest {
                 gfx::Rect([content_layer bounds]));
       EXPECT_EQ(kCALayerLeftEdge, [content_layer edgeAntialiasingMask]);
       EXPECT_EQ(properties.opacity, [content_layer opacity]);
-      EXPECT_NSEQ(kCAFilterLinear, [content_layer minificationFilter]);
-      EXPECT_NSEQ(kCAFilterLinear, [content_layer magnificationFilter]);
+      EXPECT_NSEQ(kCAFilterNearest, [content_layer minificationFilter]);
+      EXPECT_NSEQ(kCAFilterNearest, [content_layer magnificationFilter]);
       EXPECT_EQ(properties.scale_factor, [content_layer contentsScale]);
     }
 
@@ -408,7 +404,7 @@ class CALayerTreePropertyUpdatesTest : public CALayerTreeTest {
     // Add the clipping and IOSurface contents back.
     {
       properties.is_clipped = true;
-      properties.io_surface = CreateScopedIOSurface(
+      properties.io_surface = gfx::CreateIOSurface(
           gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
       UpdateCALayerTree(ca_layer_tree, &properties, superlayer_);
 
@@ -573,8 +569,8 @@ TEST_F(CALayerTreeTest, SplitSortingContextZero) {
   // We'll use the IOSurface contents to identify the content layers.
   gfx::ScopedIOSurface io_surfaces[5];
   for (size_t i = 0; i < 5; ++i) {
-    io_surfaces[i] = CreateScopedIOSurface(gfx::Size(256, 256),
-                                           gfx::BufferFormat::BGRA_8888);
+    io_surfaces[i] =
+        gfx::CreateIOSurface(gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
   }
 
   // Have 5 transforms:
@@ -656,8 +652,8 @@ TEST_F(CALayerTreeTest, SortingContexts) {
   // We'll use the IOSurface contents to identify the content layers.
   gfx::ScopedIOSurface io_surfaces[3];
   for (size_t i = 0; i < 3; ++i) {
-    io_surfaces[i] = CreateScopedIOSurface(gfx::Size(256, 256),
-                                           gfx::BufferFormat::BGRA_8888);
+    io_surfaces[i] =
+        gfx::CreateIOSurface(gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
   }
 
   int sorting_context_ids[3] = {3, -1, 0};
@@ -758,9 +754,12 @@ TEST_F(CALayerTreeTest, SortingContextMustHaveConsistentClip) {
 
 // Test updating each layer's properties.
 TEST_F(CALayerTreeTest, AVLayer) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({ui::kFullscreenLowPowerBackdropMac}, {});
+
   CALayerProperties properties;
   properties.io_surface =
-      CreateScopedIOSurface(gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
+      gfx::CreateIOSurface(gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
 
   std::unique_ptr<ui::CARendererLayerTree> ca_layer_tree;
   CALayer* content_layer_old = nil;
@@ -777,7 +776,7 @@ TEST_F(CALayerTreeTest, AVLayer) {
 
   // Pass a YUV 420 frame. This will become an AVSampleBufferDisplayLayer
   // because it is in fullscreen low power mode.
-  properties.io_surface = CreateScopedIOSurface(
+  properties.io_surface = gfx::CreateIOSurface(
       gfx::Size(256, 256), gfx::BufferFormat::YUV_420_BIPLANAR);
   {
     UpdateCALayerTree(ca_layer_tree, &properties, superlayer_);
@@ -789,7 +788,7 @@ TEST_F(CALayerTreeTest, AVLayer) {
   content_layer_old = content_layer_new;
 
   // Pass a similar frame. Nothing should change.
-  properties.io_surface = CreateScopedIOSurface(
+  properties.io_surface = gfx::CreateIOSurface(
       gfx::Size(256, 128), gfx::BufferFormat::YUV_420_BIPLANAR);
   {
     UpdateCALayerTree(ca_layer_tree, &properties, superlayer_);
@@ -815,7 +814,7 @@ TEST_F(CALayerTreeTest, AVLayer) {
   // Now try a P010 frame. Because this may be HDR, we should jump back to
   // having an AVSampleBufferDisplayLayer.
   properties.io_surface =
-      CreateScopedIOSurface(gfx::Size(128, 256), gfx::BufferFormat::P010);
+      gfx::CreateIOSurface(gfx::Size(128, 256), gfx::BufferFormat::P010);
   {
     UpdateCALayerTree(ca_layer_tree, &properties, superlayer_);
     content_layer_new = GetOnlyContentLayer();
@@ -830,7 +829,7 @@ TEST_F(CALayerTreeTest, AVLayer) {
 
   // Pass a frame with a CVPixelBuffer which, when scaled down, will have a
   // fractional dimension.
-  properties.io_surface = CreateScopedIOSurface(
+  properties.io_surface = gfx::CreateIOSurface(
       gfx::Size(513, 512), gfx::BufferFormat::YUV_420_BIPLANAR);
   properties.cv_pixel_buffer = CreateCVPixelBuffer(properties.io_surface);
   properties.color_space = gfx::ColorSpace::CreateREC709();
@@ -848,7 +847,7 @@ TEST_F(CALayerTreeTest, AVLayer) {
 
   // Pass a frame that is clipped.
   properties.contents_rect = gfx::RectF(0, 0, 1, 0.9);
-  properties.io_surface = CreateScopedIOSurface(
+  properties.io_surface = gfx::CreateIOSurface(
       gfx::Size(256, 256), gfx::BufferFormat::YUV_420_BIPLANAR);
   {
     UpdateCALayerTree(ca_layer_tree, &properties, superlayer_);
@@ -862,8 +861,11 @@ TEST_F(CALayerTreeTest, AVLayer) {
 
 // Ensure that blocklisting AVSampleBufferDisplayLayer works.
 TEST_F(CALayerTreeTest, AVLayerBlocklist) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({ui::kFullscreenLowPowerBackdropMac}, {});
+
   CALayerProperties properties;
-  properties.io_surface = CreateScopedIOSurface(
+  properties.io_surface = gfx::CreateIOSurface(
       gfx::Size(256, 256), gfx::BufferFormat::YUV_420_BIPLANAR);
 
   std::unique_ptr<ui::CARendererLayerTree> ca_layer_tree;
@@ -919,8 +921,11 @@ TEST_F(CALayerTreeTest, AVLayerBlocklist) {
 
 // Test fullscreen low power detection.
 TEST_F(CALayerTreeTest, FullscreenLowPower) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures({ui::kFullscreenLowPowerBackdropMac}, {});
+
   CALayerProperties properties;
-  properties.io_surface = CreateScopedIOSurface(
+  properties.io_surface = gfx::CreateIOSurface(
       gfx::Size(256, 256), gfx::BufferFormat::YUV_420_BIPLANAR);
   properties.cv_pixel_buffer = CreateCVPixelBuffer(properties.io_surface);
   properties.color_space = gfx::ColorSpace::CreateREC709();
@@ -1066,11 +1071,11 @@ TEST_F(CALayerTreeTest, HDRTrigger) {
 
   // We only copy images that have both high-bit-depth and an HDR color space.
   auto sdr_image =
-      CreateScopedIOSurface(gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
+      gfx::CreateIOSurface(gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
   auto tricky_sdr_image =
-      CreateScopedIOSurface(gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
+      gfx::CreateIOSurface(gfx::Size(256, 256), gfx::BufferFormat::BGRA_8888);
   auto hdr_image =
-      CreateScopedIOSurface(gfx::Size(256, 256), gfx::BufferFormat::RGBA_F16);
+      gfx::CreateIOSurface(gfx::Size(256, 256), gfx::BufferFormat::RGBA_F16);
 
   // Schedule and commit the HDR layer.
   properties.io_surface = hdr_image;

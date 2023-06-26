@@ -21,7 +21,9 @@
 // Put gpu_vsync_mac.h (which includes ui/display/mac/display_link_mac.h)
 // after ui/gl/gl_xxx.h. There is a conflict between MacOSX sdk gltypes.h and
 // third_party/mesa_headers/GL/glext.h
+#if BUILDFLAG(IS_MAC)
 #include "gpu/ipc/service/gpu_vsync_mac.h"
+#endif
 
 @class CAContext;
 @class CALayer;
@@ -60,9 +62,11 @@ class ImageTransportSurfaceOverlayMacEGL : public gl::Presenter {
   void SetCALayerErrorCode(gfx::CALayerResult ca_layer_error_code) override;
 
   // GLSurface override
+#if BUILDFLAG(IS_MAC)
   bool SupportsGpuVSync() const override;
   void SetVSyncDisplayID(int64_t display_id) override;
   void SetGpuVSyncEnabled(bool enabled) override;
+#endif
 
  private:
   ~ImageTransportSurfaceOverlayMacEGL() override;
@@ -88,7 +92,9 @@ class ImageTransportSurfaceOverlayMacEGL : public gl::Presenter {
   // backpressure.
   uint64_t previous_frame_fence_ = 0;
 
+#if BUILDFLAG(IS_MAC)
   std::unique_ptr<GpuVSyncMac> gpu_vsync_mac_;
+#endif
 
   base::WeakPtrFactory<ImageTransportSurfaceOverlayMacEGL> weak_ptr_factory_;
 };

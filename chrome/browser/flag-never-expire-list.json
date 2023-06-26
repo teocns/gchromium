@@ -14,6 +14,7 @@
 // test (AboutFlagsTest.OnlyPermittedFlagsNeverExpire).
 [
   "allow-all-sites-to-initiate-mirroring",
+  "allow-devtools-in-system-ui",
   "allow-previews",
   "always-enable-hdcp",
   "arc-native-bridge-toggle",
@@ -66,6 +67,7 @@
   "enable-web-authentication-testing-api",
   "enable-web-payments-experimental-features",
   "enable-webassembly-baseline",
+  "enable-webassembly-lazy-compilation",
   "enable-webassembly-tiering",
   "enable-webgl-developer-extensions",
   "enable-webgl-draft-extensions",
@@ -123,6 +125,7 @@
   "ui-slow-animations",
   "unsafely-treat-insecure-origin-as-secure",
   "update-menu-item-custom-summary",
+  "use-android-staging-smds",
   "use-angle",
   "use-custom-messages-domain",
   "use-fake-device-for-media-stream",

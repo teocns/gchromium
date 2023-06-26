@@ -93,11 +93,14 @@ typedef void (^PasswordSuggestionsAvailableCompletion)(
         url::Origin origin = url::Origin::Create(GURL(usernameAndRealm.realm));
         realm = SysUTF8ToNSString(password_manager::GetShownOrigin(origin));
       }
-      [results addObject:[FormSuggestion suggestionWithValue:username
-                                          displayDescription:realm
-                                                        icon:nil
-                                                  identifier:0
-                                              requiresReauth:YES]];
+      [results
+          addObject:[FormSuggestion suggestionWithValue:username
+                                     displayDescription:realm
+                                                   icon:nil
+                                            popupItemId:autofill::PopupItemId::
+                                                            kAutocompleteEntry
+                                      backendIdentifier:nil
+                                         requiresReauth:YES]];
     }
   }
 
@@ -197,13 +200,21 @@ typedef void (^PasswordSuggestionsAvailableCompletion)(
     _suggestionsAvailableCompletion = nil;
   }
 }
-- (void)processWithNoSavedCredentials {
+- (void)processWithNoSavedCredentialsWithFrame:(web::WebFrame*)frame {
   // Only update |_processedPasswordSuggestions| if PasswordManager was
   // queried for some forms. This is needed to protect against a case when
   // there are no forms on the pageload and they are added dynamically.
   if (_sentPasswordFormToPasswordManager) {
     _processedPasswordSuggestions = YES;
   }
+
+  AccountSelectFillData* fillData = [self getFillDataFromFrame:frame];
+  if (!fillData) {
+    auto it = _fillDataMap.insert(
+        std::make_pair(frame, std::make_unique<AccountSelectFillData>()));
+    fillData = it.first->second.get();
+  }
+  fillData->ResetCache();
 
   if (_suggestionsAvailableCompletion) {
     _suggestionsAvailableCompletion(nullptr);

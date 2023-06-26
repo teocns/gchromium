@@ -217,28 +217,26 @@ H264SEIMessage::H264SEIMessage() {
   memset(this, 0, sizeof(*this));
 }
 
-void H264SEIContentLightLevelInfo::PopulateHDRMetadata(
-    gfx::HDRMetadata& hdr_metadata) const {
-  hdr_metadata.max_content_light_level = max_content_light_level;
-  hdr_metadata.max_frame_average_light_level = max_picture_average_light_level;
+gfx::HdrMetadataCta861_3 H264SEIContentLightLevelInfo::ToGfx() const {
+  return gfx::HdrMetadataCta861_3(max_content_light_level,
+                                  max_picture_average_light_level);
 }
 
-void H264SEIMasteringDisplayInfo::PopulateColorVolumeMetadata(
-    gfx::ColorVolumeMetadata& color_volume_metadata) const {
+gfx::HdrMetadataSmpteSt2086 H264SEIMasteringDisplayInfo::ToGfx() const {
   constexpr auto kChromaDenominator = 50000.0f;
   constexpr auto kLumaDenoninator = 10000.0f;
   // display primaries are in G/B/R order in MDCV SEI.
-  color_volume_metadata.primaries = {
-      display_primaries[2][0] / kChromaDenominator,
-      display_primaries[2][1] / kChromaDenominator,
-      display_primaries[0][0] / kChromaDenominator,
-      display_primaries[0][1] / kChromaDenominator,
-      display_primaries[1][0] / kChromaDenominator,
-      display_primaries[1][1] / kChromaDenominator,
-      white_points[0] / kChromaDenominator,
-      white_points[1] / kChromaDenominator};
-  color_volume_metadata.luminance_max = max_luminance / kLumaDenoninator;
-  color_volume_metadata.luminance_min = min_luminance / kLumaDenoninator;
+  return gfx::HdrMetadataSmpteSt2086(
+      {display_primaries[2][0] / kChromaDenominator,
+       display_primaries[2][1] / kChromaDenominator,
+       display_primaries[0][0] / kChromaDenominator,
+       display_primaries[0][1] / kChromaDenominator,
+       display_primaries[1][0] / kChromaDenominator,
+       display_primaries[1][1] / kChromaDenominator,
+       white_points[0] / kChromaDenominator,
+       white_points[1] / kChromaDenominator},
+      /*luminance_max=*/max_luminance / kLumaDenoninator,
+      /*luminance_min=*/min_luminance / kLumaDenoninator);
 }
 
 H264SEI::H264SEI() = default;
@@ -497,8 +495,7 @@ bool H264Parser::ParseNALUs(const uint8_t* stream,
       return false;
     }
   }
-  NOTREACHED();
-  return false;
+  NOTREACHED_NORETURN();
 }
 
 H264Parser::Result H264Parser::AdvanceToNextNALU(H264NALU* nalu) {

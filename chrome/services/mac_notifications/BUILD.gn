@@ -33,9 +33,11 @@ source_set("mac_notifications") {
     "//mojo/public/mojom/base",
   ]
 
-  frameworks = [ "Foundation.framework" ]
-  weak_frameworks = [
-    "UserNotifications.framework",  # macOS 10.14
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  frameworks = [
+    "UserNotifications.framework",
+    "Foundation.framework",
   ]
 }
 
@@ -59,8 +61,10 @@ source_set("unit_tests") {
     "//third_party/ocmock",
   ]
 
-  frameworks = [ "Foundation.framework" ]
-  weak_frameworks = [
-    "UserNotifications.framework",  # macOS 10.14
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  frameworks = [
+    "UserNotifications.framework",
+    "Foundation.framework",
   ]
 }

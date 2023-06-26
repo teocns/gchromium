@@ -47,7 +47,7 @@ class PageInfoUI;
 // information and allows users to change the permissions. |PageInfo|
 // objects must be created on the heap. They destroy themselves after the UI is
 // closed.
-class PageInfo : private content_settings::CookieControlsView {
+class PageInfo : private content_settings::OldCookieControlsObserver {
  public:
   // Status of a connection to a website.
   enum SiteConnectionStatus {
@@ -294,6 +294,9 @@ class PageInfo : private content_settings::CookieControlsView {
   // This method is called when the user pressed "Mark as legitimate" button.
   void OnAllowlistPasswordReuseButtonPressed();
 
+  // This method is called when the user opens the Cookies & Site Data subpage.
+  void OnCookiesPageOpened();
+
   // Return a pointer to the ObjectPermissionContextBase corresponding to the
   // content settings type, |type|. Returns nullptr for content settings
   // for which there's no ObjectPermissionContextBase.
@@ -338,15 +341,17 @@ class PageInfo : private content_settings::CookieControlsView {
  private:
   FRIEND_TEST_ALL_PREFIXES(PageInfoTest,
                            NonFactoryDefaultAndRecentlyChangedPermissionsShown);
+  FRIEND_TEST_ALL_PREFIXES(PageInfoTest, StorageAccessGrantsAreFiltered);
   FRIEND_TEST_ALL_PREFIXES(PageInfoTest, IncognitoPermissionsEmptyByDefault);
   FRIEND_TEST_ALL_PREFIXES(PageInfoTest, IncognitoPermissionsDontShowAsk);
 
-  // CookieControlsView:
+  // OldCookieControlsObserver:
   void OnStatusChanged(CookieControlsStatus status,
                        CookieControlsEnforcement enforcement,
                        int allowed_cookies,
                        int blocked_cookies) override;
   void OnCookiesCountChanged(int allowed_cookies, int blocked_cookies) override;
+  void OnStatefulBounceCountChanged(int bounce_count) override;
 
   // Populates this object's UI state with provided security context. This
   // function does not update visible UI-- that's part of Present*().
@@ -359,7 +364,7 @@ class PageInfo : private content_settings::CookieControlsView {
   void PopulatePermissionInfo(PermissionInfo& permission_info,
                               HostContentSettingsMap* content_settings,
                               const content_settings::SettingInfo& info,
-                              const base::Value& value) const;
+                              ContentSetting setting) const;
 
   // Returns whether |info| should be displayed in the UI.
   bool ShouldShowPermission(const PageInfo::PermissionInfo& info) const;
@@ -432,7 +437,7 @@ class PageInfo : private content_settings::CookieControlsView {
   // specific data (local stored objects like cookies), site-specific
   // permissions (location, pop-up, plugin, etc. permissions) and site-specific
   // information (identity, connection status, etc.).
-  raw_ptr<PageInfoUI> ui_;
+  raw_ptr<PageInfoUI, DanglingUntriaged> ui_;
 
   // A web contents getter used to retrieve the associated WebContents object.
   base::WeakPtr<content::WebContents> web_contents_;
@@ -475,11 +480,11 @@ class PageInfo : private content_settings::CookieControlsView {
   std::u16string identity_status_description_android_;
 #endif
 
-  // Set when the user has explicitly bypassed an SSL error for this host or
-  // explicitly denied it (the latter of which is not currently possible in the
-  // Chrome UI). When |show_ssl_decision_revoke_button| is true, the connection
-  // area of the page info will include an option for the user to revoke their
-  // decision to bypass the SSL error for this host.
+  // Set when the user has explicitly bypassed an SSL error for this host
+  // and/or the user has explicitly bypassed an HTTP warning (from HTTPS-First
+  // Mode) for this host. When `show_ssl_decision_revoke_button` is true, the
+  // connection area of the page info UI will include an option for the user
+  // to revoke their decision to bypass warnings for this host.
   bool show_ssl_decision_revoke_button_;
 
   // Details about the connection to the website. In case of an encrypted
@@ -520,7 +525,7 @@ class PageInfo : private content_settings::CookieControlsView {
 
   std::unique_ptr<content_settings::CookieControlsController> controller_;
   base::ScopedObservation<content_settings::CookieControlsController,
-                          content_settings::CookieControlsView>
+                          content_settings::OldCookieControlsObserver>
       observation_{this};
 
   CookieControlsStatus status_ = CookieControlsStatus::kUninitialized;

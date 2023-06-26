@@ -7,6 +7,7 @@
 
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/privacy_sandbox/canonical_topic.h"
+#include "components/privacy_sandbox/privacy_sandbox_attestations/privacy_sandbox_attestations.h"
 
 class GURL;
 
@@ -43,6 +44,11 @@ class PrivacySandboxSettings : public KeyedService {
     // consulted on every access check, and it is acceptable for this to change
     // return value over the life of the service.
     virtual bool IsPrivacySandboxRestricted() const = 0;
+
+    // Allows the delegate to query in real time if Privacy Sandbox is currently
+    // unrestricted. Unlike IsPrivacySandboxRestricted, does NOT
+    // restrict/unrestrict access to the Privacy Sandbox.
+    virtual bool IsPrivacySandboxCurrentlyUnrestricted() const = 0;
 
     // Whether the current profile is Incognito or not. For Incognito, the
     // privacy sandbox APIs are restricted.
@@ -139,6 +145,16 @@ class PrivacySandboxSettings : public KeyedService {
   virtual bool IsFledgeAllowed(const url::Origin& top_frame_origin,
                                const url::Origin& auction_party) const = 0;
 
+  // Determine whether |destination_origin| is allowed to receive events
+  // (reportEvent(), automatic beacons) reported by an API like Protected
+  // Audience or Shared Storage. This does not check if the API itself is
+  // allowed by the calling context, since the corresponding registerAdBeacon
+  // and selectUrl caller sites were also checked for attestation.
+  virtual bool IsEventReportingDestinationAttested(
+      const url::Origin& destination_origin,
+      privacy_sandbox::PrivacySandboxAttestationsGatedAPI invoking_api)
+      const = 0;
+
   // Determines whether Shared Storage is allowable in a particular context.
   // `top_frame_origin` can be the same as `accessing_origin` in the case of a
   // top-level document calling Shared Storage.
@@ -191,6 +207,12 @@ class PrivacySandboxSettings : public KeyedService {
   // delegate. Forwards directly to the corresponding delegate function.
   // Virtual to allow mocking in tests.
   virtual bool IsPrivacySandboxRestricted() const = 0;
+
+  // Returns whether the Privacy Sandbox is being unrestricted by the associated
+  // delegate. Forwards directly to the corresponding delegate function.
+  // Virtual to allow mocking in tests. Unlike IsPrivacySandboxRestricted
+  // this method always return the current restriction status.
+  virtual bool IsPrivacySandboxCurrentlyUnrestricted() const = 0;
 
   // Returns whether the privacy sandbox restricted notice should be shown,
   // based on account characteristics. Forwards to the delegate. Virtual for

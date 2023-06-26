@@ -270,8 +270,7 @@ void TestRenderFrame::Navigate(
       /*subresource_overrides=*/absl::nullopt,
       blink::mojom::ControllerServiceWorkerInfoPtr(),
       blink::mojom::ServiceWorkerContainerInfoForClientPtr(),
-      /*prefetch_loader_factory=*/mojo::NullRemote(),
-      /*topics_loader_factory=*/mojo::NullRemote(),
+      /*subresource_proxying_loader_factory=*/mojo::NullRemote(),
       /*keep_alive_loader_factory=*/mojo::NullRemote(), blink::DocumentToken(),
       base::UnguessableToken::Create(), blink::ParsedPermissionsPolicy(),
       blink::mojom::PolicyContainer::New(
@@ -280,6 +279,7 @@ void TestRenderFrame::Navigate(
       /*code_cache_host=*/mojo::NullRemote(),
       /*resource_cache=*/mojo::NullRemote(), /*cookie_manager_info=*/nullptr,
       /*storage_info=*/nullptr,
+      /*coop_forbids_document_to_be_cross_origin_isolated=*/true,
       base::BindOnce(&MockFrameHost::DidCommitProvisionalLoad,
                      base::Unretained(mock_frame_host_.get())));
 }

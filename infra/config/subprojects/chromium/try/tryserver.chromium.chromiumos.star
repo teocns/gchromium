@@ -5,7 +5,7 @@
 
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
-load("//lib/builders.star", "goma", "os", "reclient")
+load("//lib/builders.star", "os", "reclient")
 load("//lib/try.star", "try_")
 load("//lib/consoles.star", "consoles")
 load("//project.star", "settings")
@@ -56,6 +56,7 @@ try_.orchestrator_builder(
     name = "chromeos-amd64-generic-rel",
     branch_selector = branches.selector.CROS_LTS_BRANCHES,
     mirrors = ["ci/chromeos-amd64-generic-rel"],
+    check_for_flakiness = True,
     compilator = "chromeos-amd64-generic-rel-compilator",
     experiments = {
         # go/nplus1shardsproposal
@@ -72,6 +73,7 @@ try_.compilator_builder(
     name = "chromeos-amd64-generic-rel-compilator",
     branch_selector = branches.selector.CROS_LTS_BRANCHES,
     cores = "8|16",
+    check_for_flakiness = True,
     main_list_view = "try",
 )
 
@@ -166,7 +168,6 @@ try_.builder(
         ),
     ),
     builderless = not settings.is_main,
-    goma_backend = goma.backend.RBE_PROD,
     main_list_view = "try",
 )
 
@@ -195,7 +196,6 @@ try_.builder(
     mirrors = [
         "ci/lacros-arm64-generic-rel",
     ],
-    goma_backend = goma.backend.RBE_PROD,
     main_list_view = "try",
 )
 
@@ -221,7 +221,6 @@ try_.builder(
     mirrors = [
         "ci/chromeos-jacuzzi-rel",
     ],
-    goma_backend = goma.backend.RBE_PROD,
     main_list_view = "try",
 )
 
@@ -231,7 +230,6 @@ try_.builder(
     mirrors = [
         "ci/chromeos-octopus-rel",
     ],
-    goma_backend = goma.backend.RBE_PROD,
     main_list_view = "try",
 )
 
@@ -246,6 +244,7 @@ try_.orchestrator_builder(
     mirrors = [
         "ci/linux-chromeos-rel",
     ],
+    check_for_flakiness = True,
     compilator = "linux-chromeos-rel-compilator",
     coverage_test_types = ["unit", "overall"],
     experiments = {
@@ -263,6 +262,7 @@ try_.orchestrator_builder(
 try_.compilator_builder(
     name = "linux-chromeos-rel-compilator",
     branch_selector = branches.selector.CROS_LTS_BRANCHES,
+    check_for_flakiness = True,
     main_list_view = "try",
 )
 
@@ -283,8 +283,10 @@ try_.orchestrator_builder(
     ],
     check_for_flakiness = True,
     compilator = "linux-lacros-rel-compilator",
+    coverage_test_types = ["unit", "overall"],
     main_list_view = "try",
     tryjob = try_.job(),
+    use_clang_coverage = True,
     # TODO(crbug.com/1372179): Use orchestrator pool once overloaded test pools
     # are addressed
     # use_orchestrator_pool = True,
@@ -294,6 +296,7 @@ try_.compilator_builder(
     name = "linux-lacros-rel-compilator",
     branch_selector = branches.selector.CROS_BRANCHES,
     cores = 32,
+    check_for_flakiness = True,
     main_list_view = "try",
 )
 

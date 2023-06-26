@@ -38,14 +38,15 @@ class FakeMojoPasswordManagerDriver
 
 #if BUILDFLAG(IS_ANDROID)
   MOCK_METHOD(void,
-              ShowTouchToFill,
-              (autofill::mojom::SubmissionReadinessState),
+              ShowKeyboardReplacingSurface,
+              (autofill::mojom::SubmissionReadinessState, bool),
               (override));
 #endif
 
   MOCK_METHOD(void,
               ShowPasswordSuggestions,
-              (base::i18n::TextDirection,
+              (autofill::FieldRendererId element_id,
+               base::i18n::TextDirection,
                const std::u16string&,
                int,
                const gfx::RectF&),

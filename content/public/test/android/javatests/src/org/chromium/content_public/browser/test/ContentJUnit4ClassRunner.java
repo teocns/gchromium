@@ -21,13 +21,6 @@ import java.util.List;
  * A custom runner for //content JUnit4 tests.
  */
 public class ContentJUnit4ClassRunner extends BaseJUnit4ClassRunner {
-    static {
-        // Always try to add the testing HTTPS root to the cert verifier. We do this here because we
-        // need this to happen before the native code loads the user-added roots, and this is the
-        // safest place to put it.
-        EmbeddedTestServer.initTestCerts();
-    }
-
     /**
      * Create a ContentJUnit4ClassRunner to run {@code klass} and initialize values
      *
@@ -51,5 +44,10 @@ public class ContentJUnit4ClassRunner extends BaseJUnit4ClassRunner {
     @Override
     protected List<TestHook> getPreTestHooks() {
         return addToList(super.getPreTestHooks(), new ChildProcessAllocatorSettingsHook());
+    }
+
+    @Override
+    protected List<ClassHook> getPreClassHooks() {
+        return addToList(super.getPreClassHooks(), EmbeddedTestServer.getPreClassHook());
     }
 }

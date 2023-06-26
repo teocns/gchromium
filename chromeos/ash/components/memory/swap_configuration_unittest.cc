@@ -4,6 +4,7 @@
 
 #include "chromeos/ash/components/memory/swap_configuration.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "chromeos/ash/components/dbus/resourced/fake_resourced_client.h"
@@ -25,7 +26,7 @@ class SwapConfigurationPressureThreshold : public testing::Test {
  protected:
   base::test::TaskEnvironment task_environment_;
   base::test::ScopedFeatureList feature_list_;
-  FakeResourcedClient* resourced_client_ = nullptr;
+  raw_ptr<FakeResourcedClient, ExperimentalAsh> resourced_client_ = nullptr;
 };
 
 }  // namespace
@@ -34,18 +35,18 @@ TEST_F(SwapConfigurationPressureThreshold, NoArcDefault) {
   feature_list_.InitAndEnableFeature(kCrOSMemoryPressureSignalStudyNonArc);
   ConfigureSwap(/*arc_enabled=*/false);
 
-  EXPECT_EQ(resourced_client_->get_critical_margin_bps(), 1500u);
+  EXPECT_EQ(resourced_client_->get_critical_margin_bps(), 520u);
   EXPECT_EQ(resourced_client_->get_moderate_margin_bps(), 4000u);
 }
 
 TEST_F(SwapConfigurationPressureThreshold, NoArcCustom) {
   feature_list_.InitAndEnableFeatureWithParameters(
       kCrOSMemoryPressureSignalStudyNonArc,
-      {{kCrOSMemoryPressureSignalStudyNonArcCriticalBps.name, "1700"},
+      {{kCrOSMemoryPressureSignalStudyNonArcCriticalBps.name, "1500"},
        {kCrOSMemoryPressureSignalStudyNonArcModerateBps.name, "6000"}});
   ConfigureSwap(/*arc_enabled=*/false);
 
-  EXPECT_EQ(resourced_client_->get_critical_margin_bps(), 1700u);
+  EXPECT_EQ(resourced_client_->get_critical_margin_bps(), 1500u);
   EXPECT_EQ(resourced_client_->get_moderate_margin_bps(), 6000u);
 }
 

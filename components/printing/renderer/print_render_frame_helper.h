@@ -32,6 +32,8 @@
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/public/web/web_print_client.h"
 #include "third_party/blink/public/web/web_print_params.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 
 // RenderViewTest-based tests crash on Android
@@ -146,15 +148,7 @@ class PrintRenderFrameHelper
   // valid.
   static constexpr double kEpsilon = 0.01f;
 
-  // Disable print preview and switch to system dialog printing even if full
-  // printing is build-in. This method is used by CEF.
-  static void DisablePreview();
-
   void PrintNode(const blink::WebNode& node);
-
-  // Get the scale factor. Returns |input_scale_factor| if it is valid and
-  // |is_pdf| is false, and 1.0f otherwise.
-  static double GetScaleFactor(double input_scale_factor, bool is_pdf);
 
   const mojo::AssociatedRemote<mojom::PrintManagerHost>& GetPrintManagerHost();
 
@@ -278,13 +272,6 @@ class PrintRenderFrameHelper
       SnapshotForContentAnalysisCallback callback) override;
 #endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
 
-  // Get |page_size| and |content_area| information from
-  // |page_layout_in_points|.
-  void GetPageSizeAndContentAreaFromPageLayout(
-      const mojom::PageSizeMargins& page_layout_in_points,
-      gfx::Size* page_size,
-      gfx::Rect* content_area);
-
   // Update |ignore_css_margins_| based on settings.
   void UpdateFrameMarginsCssInfo(const base::Value::Dict& settings);
 
@@ -321,7 +308,7 @@ class PrintRenderFrameHelper
       base::ReadOnlySharedMemoryRegion preview_document_region);
 
   // Helper method to calculate the scale factor for fit-to-page.
-  int GetFitToPageScaleFactor(const gfx::Rect& printable_area_in_points);
+  int GetFitToPageScaleFactor(const gfx::RectF& printable_area_in_points);
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
   // Main printing code -------------------------------------------------------
@@ -386,17 +373,6 @@ class PrintRenderFrameHelper
                          blink::WebLocalFrame* frame,
                          MetafileSkia* metafile);
 
-  // Renders page contents from |frame| to |content_area| of |canvas|.
-  // |page_number| is zero-based.
-  // When method is called, canvas should be setup to draw to |canvas_area|
-  // with |scale_factor|.
-  static float RenderPageContent(blink::WebLocalFrame* frame,
-                                 uint32_t page_number,
-                                 const gfx::Rect& canvas_area,
-                                 const gfx::Rect& content_area,
-                                 double scale_factor,
-                                 cc::PaintCanvas* canvas);
-
   // Helper methods -----------------------------------------------------------
 
   // Increments the IPC nesting level when an IPC message is received.
@@ -404,25 +380,6 @@ class PrintRenderFrameHelper
 
   // Decrements the IPC nesting level once an IPC message has been processed.
   void IPCProcessed();
-
-  // Helper method to get page layout in points and fit to page if needed.
-  static mojom::PageSizeMarginsPtr ComputePageLayoutInPointsForCss(
-      blink::WebLocalFrame* frame,
-      uint32_t page_index,
-      const mojom::PrintParams& default_params,
-      bool ignore_css_margins,
-      double* scale_factor);
-
-  // Given the |device| and |canvas| to draw on, prints the appropriate headers
-  // and footers using strings from |header_footer_info| on to the canvas.
-  static void PrintHeaderAndFooter(
-      cc::PaintCanvas* canvas,
-      uint32_t page_number,
-      uint32_t total_pages,
-      const blink::WebLocalFrame& source_frame,
-      float webkit_scale_factor,
-      const mojom::PageSizeMargins& page_layout_in_points,
-      const mojom::PrintParams& params);
 
   // Script Initiated Printing ------------------------------------------------
 

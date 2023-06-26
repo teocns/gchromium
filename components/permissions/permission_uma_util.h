@@ -40,7 +40,7 @@ class PermissionRequest;
 // When updating, you also need to update:
 //   1) The PermissionRequestType enum in tools/metrics/histograms/enums.xml.
 //   2) The PermissionRequestTypes suffix list in
-//      tools/metrics/histograms/histograms.xml.
+//      tools/metrics/histograms/metadata/histogram_suffixes_list.xml.
 //   3) GetPermissionRequestString below.
 //
 // The usual rules of updating UMA values applies to this enum:
@@ -79,6 +79,7 @@ enum class RequestTypeForUma {
   PERMISSION_FILE_HANDLING = 28,
   PERMISSION_U2F_API_REQUEST = 29,
   PERMISSION_TOP_LEVEL_STORAGE_ACCESS = 30,
+  PERMISSION_MIDI = 31,
   // NUM must be the last value in the enum.
   NUM
 };
@@ -607,6 +608,15 @@ class PermissionUmaUtil {
 
   static void RecordTopLevelPermissionsHeaderPolicyOnNavigation(
       content::RenderFrameHost* render_frame_host);
+
+  // Logs a metric that captures how long since revocation, due to a site being
+  // considered unused, the user regrants a revoked permission.
+  static void RecordPermissionRegrantForUnusedSites(
+      const GURL& origin,
+      ContentSettingsType request_type,
+      PermissionSourceUI source_ui,
+      content::BrowserContext* browser_context,
+      base::Time current_time);
 
   // A scoped class that will check the current resolved content setting on
   // construction and report a revocation metric accordingly if the revocation

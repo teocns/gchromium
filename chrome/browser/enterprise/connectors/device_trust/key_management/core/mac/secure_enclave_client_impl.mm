@@ -11,8 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "base/apple/bridging.h"
 #include "base/containers/span.h"
-#include "base/mac/bridging.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece.h"
@@ -26,6 +26,10 @@
 #include "third_party/boringssl/src/include/openssl/ec_key.h"
 #include "third_party/boringssl/src/include/openssl/evp.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace enterprise_connectors {
 
@@ -103,7 +107,7 @@ base::ScopedCFTypeRef<CFMutableDictionaryRef> CreateAttributesForKey() {
   CFDictionarySetValue(attributes, kSecAttrTokenID,
                        kSecAttrTokenIDSecureEnclave);
   CFDictionarySetValue(attributes, kSecAttrKeySizeInBits,
-                       base::mac::NSToCFPtrCast(@256));
+                       base::apple::NSToCFPtrCast(@256));
   CFDictionarySetValue(
       attributes, kSecAttrLabel,
       base::SysUTF8ToCFStringRef(constants::kDeviceTrustSigningKeyLabel));

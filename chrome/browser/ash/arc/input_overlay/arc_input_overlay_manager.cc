@@ -23,6 +23,7 @@
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/input_overlay/input_overlay_resources_util.h"
+#include "chrome/browser/ash/arc/input_overlay/util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/app_restore/window_properties.h"
 #include "components/exo/shell_surface_base.h"
@@ -308,14 +309,6 @@ void ArcInputOverlayManager::OnDisplayMetricsChanged(
   it->second->UpdatePositionsForRegister();
 }
 
-void ArcInputOverlayManager::ResetForPendingTouchInjector(
-    std::unique_ptr<TouchInjector> touch_injector) {
-  auto* window = touch_injector->window();
-  loading_data_windows_.erase(window);
-  touch_injector.reset();
-  RemoveWindowObservation(window);
-}
-
 void ArcInputOverlayManager::RemoveWindowObservation(aura::Window* window) {
   if (window_observations_.IsObservingSource(window)) {
     window_observations_.RemoveObservation(window);
@@ -423,15 +416,7 @@ void ArcInputOverlayManager::OnDidCheckGioApplicable(
     return;
   }
 
-  auto* window = touch_injector->window();
-  DCHECK(window);
-  if (!loading_data_windows_.contains(window) || window->is_destroying()) {
-    return;
-  }
-
-  input_overlay_enabled_windows_.emplace(window, std::move(touch_injector));
-  loading_data_windows_.erase(window);
-  RegisterFocusedWindow();
+  OnLoadingFinished(std::move(touch_injector));
 }
 
 void ArcInputOverlayManager::OnProtoDataAvailable(
@@ -444,20 +429,7 @@ void ArcInputOverlayManager::OnProtoDataAvailable(
     touch_injector->NotifyFirstTimeLaunch();
   }
 
-  auto* window = touch_injector->window();
-  DCHECK(window);
-  // Check if |window| is destroyed or destroying when calling this function.
-  if (!loading_data_windows_.contains(window) || window->is_destroying()) {
-    ResetForPendingTouchInjector(std::move(touch_injector));
-    return;
-  }
-
-  touch_injector->RecordMenuStateOnLaunch();
-  // Now we can safely add <*window, touch_injector> in
-  // |input_overlay_enabled_windows_|.
-  input_overlay_enabled_windows_.emplace(window, std::move(touch_injector));
-  loading_data_windows_.erase(window);
-  RegisterFocusedWindow();
+  OnLoadingFinished(std::move(touch_injector));
 }
 
 void ArcInputOverlayManager::OnSaveProtoFile(
@@ -578,6 +550,46 @@ void ArcInputOverlayManager::RemoveDisplayOverlayController() {
   }
   DCHECK(display_overlay_controller_);
   display_overlay_controller_.reset();
+}
+
+void ArcInputOverlayManager::ResetForPendingTouchInjector(
+    std::unique_ptr<TouchInjector> touch_injector) {
+  auto* window = touch_injector->window();
+
+  // If `window` is destroyed, it will be removed from `loading_data_window_` by
+  // OnWindowDestroying(). So it is safe to call Window class functions after
+  // checking `loading_data_window_`.
+  if ((IsGameDashboardFlagOn() || IsBeta()) &&
+      loading_data_windows_.contains(window) && !window->is_destroying()) {
+    // GIO status is known here and GIO is not available.
+    window->SetProperty(ash::kArcGameControlsFlagsKey,
+                        ash::ArcGameControlsFlag::kKnown);
+  }
+  loading_data_windows_.erase(window);
+  touch_injector.reset();
+  RemoveWindowObservation(window);
+}
+
+void ArcInputOverlayManager::OnLoadingFinished(
+    std::unique_ptr<TouchInjector> touch_injector) {
+  auto* window = touch_injector->window();
+  DCHECK(window);
+  // Check if |window| is destroyed or destroying when calling this function.
+  if (!loading_data_windows_.contains(window) || window->is_destroying()) {
+    ResetForPendingTouchInjector(std::move(touch_injector));
+    return;
+  }
+
+  touch_injector->UpdateFlags();
+
+  // Record the menu state when there is at least one action.
+  if (!touch_injector->actions().empty()) {
+    touch_injector->RecordMenuStateOnLaunch();
+  }
+
+  input_overlay_enabled_windows_.emplace(window, std::move(touch_injector));
+  loading_data_windows_.erase(window);
+  RegisterFocusedWindow();
 }
 
 }  // namespace arc::input_overlay

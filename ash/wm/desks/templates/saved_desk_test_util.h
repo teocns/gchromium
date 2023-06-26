@@ -99,6 +99,15 @@ class SavedDeskGridViewTestApi {
   raw_ptr<SavedDeskGridView, ExperimentalAsh> grid_view_;
 };
 
+// Represents the visual state of a saved desk item - whether it is currently
+// showing the icons, the hover container (the launch button) or is in some
+// indeterminate state.
+enum class SavedDeskItemHoverState {
+  kIndeterminate,
+  kIcons,  // Currently showing icons.
+  kHover,  // Currently showing hover state.
+};
+
 // Wrapper for `SavedDeskItemView` that exposes internal state to test
 // functions.
 class SavedDeskItemViewTestApi {
@@ -116,13 +125,11 @@ class SavedDeskItemViewTestApi {
 
   const base::Uuid uuid() const { return item_view_->saved_desk_->uuid(); }
 
-  const views::View* hover_container() const {
-    return item_view_->hover_container_;
-  }
-
   // Icons views are stored in the view hierarchy so this convenience function
   // returns them as a vector of SavedDeskIconView*.
   std::vector<SavedDeskIconView*> GetIconViews() const;
+
+  SavedDeskItemHoverState GetHoverState() const;
 
  private:
   raw_ptr<const SavedDeskItemView, ExperimentalAsh> item_view_;
@@ -162,6 +169,8 @@ class SavedDeskControllerTestApi {
 
   void SetAdminTemplate(std::unique_ptr<DeskTemplate> admin_template);
 
+  void ResetAutoLaunch();
+
  private:
   raw_ptr<SavedDeskController, ExperimentalAsh> saved_desk_controller_;
 };
@@ -180,13 +189,13 @@ std::vector<SavedDeskItemView*> GetItemViewsFromDeskLibrary(
 SavedDeskItemView* GetItemViewFromSavedDeskGrid(size_t grid_item_index);
 
 // These buttons are the ones on the primary root window.
-views::Button* GetZeroStateLibraryButton();
-views::Button* GetExpandedStateLibraryButton();
-views::Button* GetSaveDeskAsTemplateButton();
-views::Button* GetSaveDeskForLaterButton();
-views::Button* GetSavedDeskItemButton(int index);
-views::Button* GetSavedDeskItemDeleteButton(int index);
-views::Button* GetSavedDeskDialogAcceptButton();
+const views::Button* GetZeroStateLibraryButton();
+const views::Button* GetExpandedStateLibraryButton();
+const views::Button* GetSaveDeskAsTemplateButton();
+const views::Button* GetSaveDeskForLaterButton();
+const views::Button* GetSavedDeskItemButton(int index);
+const views::Button* GetSavedDeskItemDeleteButton(int index);
+const views::Button* GetSavedDeskDialogAcceptButton();
 
 // A lot of the UI relies on calling into the local desk data manager to
 // update, which sends callbacks via posting tasks. Call `WaitForSavedDeskUI()`

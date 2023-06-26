@@ -29,6 +29,7 @@
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_types.h"
 #include "ash/wm/overview/overview_utils.h"
+#include "ash/wm/snap_group/snap_group_controller.h"
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_divider.h"
 #include "ash/wm/splitview/split_view_metrics_controller.h"
@@ -51,6 +52,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/ranges/algorithm.h"
+#include "base/time/time.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "components/app_restore/desk_template_read_handler.h"
@@ -229,19 +231,6 @@ OverviewSession* GetOverviewSession() {
              : nullptr;
 }
 
-// We don't want to show overview session on the other half of the screen if the
-// overview is empty.
-bool ShouldShowOverviewInClamshellOnWindowSnapped() {
-  auto window_list =
-      Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
-  base::EraseIf(window_list, window_util::ShouldExcludeForOverview);
-  return IsSnapGroupEnabledInClamshellMode() &&
-         Shell::Get()
-             ->snap_group_controller()
-             ->IsArm1AutomaticallyLockEnabled() &&
-         !window_list.empty();
-}
-
 void RemoveSnappingWindowFromOverviewIfApplicable(
     OverviewSession* overview_session,
     aura::Window* window) {
@@ -259,7 +248,7 @@ void RemoveSnappingWindowFromOverviewIfApplicable(
   // repositioned in this case as they have been positioned to the right place
   // during dragging.
   item->EnsureVisible();
-  item->RestoreWindow(/*reset_transform=*/false);
+  item->RestoreWindow(/*reset_transform=*/false, /*animate=*/true);
   overview_session->RemoveItem(item);
 }
 
@@ -276,6 +265,26 @@ void TriggerWMEventToSnapWindow(WindowState* window_state,
   window_state->OnWMEvent(&window_event);
 }
 
+// TODO(b/286963080) : The removal of snap group should be handled in
+// `SnapGroup`.
+void MaybeRemoveSnapGroupContainingWindow(aura::Window* window) {
+  // Snap group should not be removed when entering overview mode, as it is not
+  // an exit point for snap group. The snap groups vector stored in
+  // `SnapGroupController` will be used later to restore the snapped state of
+  // windows in snap group on overview exit.
+  Shell* shell = Shell::Get();
+  if (!window || !IsSnapGroupEnabledInClamshellMode() ||
+      shell->overview_controller()->InOverviewSession()) {
+    return;
+  }
+
+  SnapGroupController* snap_group_controller = shell->snap_group_controller();
+  if (auto* snap_group =
+          snap_group_controller->GetSnapGroupForGivenWindow(window)) {
+    snap_group_controller->RemoveSnapGroup(snap_group);
+  }
+}
+
 }  // namespace
 
 // -----------------------------------------------------------------------------
@@ -289,17 +298,19 @@ class SplitViewController::DividerSnapAnimation
     : public gfx::SlideAnimation,
       public gfx::AnimationDelegate {
  public:
+  // Before you change the value of `duration`, read the comment on
+  // kIsWindowMovedTimeoutMs in tablet_mode_window_drag_delegate.cc.
   DividerSnapAnimation(SplitViewController* split_view_controller,
                        int starting_position,
-                       int ending_position)
+                       int ending_position,
+                       base::TimeDelta duration,
+                       gfx::Tween::Type tween_type)
       : gfx::SlideAnimation(this),
         split_view_controller_(split_view_controller),
         starting_position_(starting_position),
         ending_position_(ending_position) {
-    // Before you change this value, read the comment on kIsWindowMovedTimeoutMs
-    // in tablet_mode_window_drag_delegate.cc.
-    SetSlideDuration(base::Milliseconds(300));
-    SetTweenType(gfx::Tween::EASE_IN);
+    SetSlideDuration(duration);
+    SetTweenType(tween_type);
 
     aura::Window* window = split_view_controller->primary_window()
                                ? split_view_controller->primary_window()
@@ -973,6 +984,7 @@ void SplitViewController::OnWMEvent(aura::Window* window,
   // to-be-snapped window. b/267380892
   absl::optional<float> new_snap_ratio = WindowState::Get(window)->snap_ratio();
   if (new_snap_ratio) {
+    const float old_divider_position = divider_position_;
     divider_position_ = GetDividerPosition(to_snap_position, *new_snap_ratio);
     if (split_view_divider_) {
       split_view_divider_->UpdateDividerBounds();
@@ -996,11 +1008,16 @@ void SplitViewController::OnWMEvent(aura::Window* window,
       if (window_length + other_window_length +
               kSplitviewDividerShortSideLength >
           work_area_size) {
-        // If `other_window` can't fit in the opposite position, open Overview.
-        // TODO(b/265204266): Do bounce animation instead of open Overview.
-        Shell::Get()->overview_controller()->StartOverview(
-            OverviewStartAction::kSplitView,
-            OverviewEnterExitType::kImmediateEnter);
+        // If `other_window` can't fit in the opposite position, set
+        // `divider_snap_animation_` to Hide then Show, to give off the
+        // impression of bouncing the divider back to `old_divider_position`.
+        // Note the duration is 2 * 250ms to bounce out then in.
+        tablet_resize_mode_ = TabletResizeMode::kFast;
+        divider_snap_animation_ = std::make_unique<DividerSnapAnimation>(
+            this, divider_position_, old_divider_position,
+            base::Milliseconds(500), gfx::Tween::FAST_OUT_SLOW_IN_3);
+        divider_snap_animation_->Hide();
+        divider_snap_animation_->Show();
       } else {
         // If both windows are already snapped and one window snap ratio
         // changes, the other window should also get updated.
@@ -1510,7 +1527,8 @@ void SplitViewController::EndResizeWithDivider(
     EndSplitViewAfterResizingAtEdgeIfAppropriate();
   } else {
     divider_snap_animation_ = std::make_unique<DividerSnapAnimation>(
-        this, divider_position_, target_divider_position);
+        this, divider_position_, target_divider_position,
+        base::Milliseconds(300), gfx::Tween::EASE_IN);
     divider_snap_animation_->Show();
   }
 }
@@ -1554,14 +1572,9 @@ void SplitViewController::EndSplitView(EndReason end_reason) {
 
   auto_snap_controller_.reset();
 
-  // Only need to handle the cases when the `primary_window_` and
-  // `secondary_window_` are not destroyed. The window destroyed cases will be
-  // handed in `OnWindowDestroying` of snap_group.cc.
-  if (IsSnapGroupEnabledInClamshellMode()) {
-    Shell::Get()->snap_group_controller()->RemoveSnapGroupContainingWindow(
-        primary_window_ == nullptr ? secondary_window_.get()
-                                   : primary_window_.get());
-  }
+  // This may be an exit point for snap group as the window state changes unless
+  // split view ends due to overview starts.
+  MaybeRemoveSnapGroupContainingWindow(primary_window_);
 
   StopObserving(SnapPosition::kPrimary);
   StopObserving(SnapPosition::kSecondary);
@@ -1731,17 +1744,17 @@ void SplitViewController::MaybeDetachWindow(aura::Window* dragged_window) {
   }
 }
 
-void SplitViewController::OpenOverviewOnTheOtherSideOfTheScreen(
+void SplitViewController::OpenPartialOverviewToUpdateSnapGroup(
     SnapPosition snap_position) {
   // Update the value of `default_snap_position_` so that the other snap
   // position will not been observed in `OnOverviewModeStarting()`.
   default_snap_position_ = snap_position;
 
-  if (!IsInOverviewSession() && !DesksController::Get()->animation() &&
-      ShouldShowOverviewInClamshellOnWindowSnapped()) {
+  if (!IsInOverviewSession() && !DesksController::Get()->animation()) {
     Shell::Get()->snap_group_controller()->RemoveSnapGroupContainingWindow(
         primary_window_);
     split_view_divider_.reset();
+    in_snap_group_creation_session_ = true;
     Shell::Get()->overview_controller()->StartOverview(
         OverviewStartAction::kSplitView, OverviewEnterExitType::kNormal);
   }
@@ -1974,7 +1987,15 @@ void SplitViewController::OnPinnedStateChanged(aura::Window* pinned_window) {
 }
 
 void SplitViewController::OnOverviewModeStarting() {
-  DCHECK(InSplitViewMode());
+  CHECK(InSplitViewMode());
+
+  // While in clamshell split view mode without being in a snap group
+  // creation session, a full overview session should be triggered. In this
+  // case, split view should end.
+  if (InClamshellSplitViewMode() && !in_snap_group_creation_session_) {
+    EndSplitView();
+    return;
+  }
 
   // If split view mode is active, reset |state_| to make it be able to select
   // another window from overview window grid.
@@ -2018,10 +2039,13 @@ void SplitViewController::OnOverviewModeEnding(
     if (window != GetDefaultSnappedWindow()) {
       absl::optional<float> snap_ratio = ComputeSnapRatio(window);
       if (snap_ratio) {
+        const bool was_active =
+            overview_session->IsWindowActiveWindowBeforeOverview(window);
         // Remove the overview item before snapping because the overview session
         // is unavailable to retrieve outside this function after
         // OnOverviewEnding is notified.
-        overview_item->RestoreWindow(/*reset_transform=*/false);
+        overview_item->RestoreWindow(/*reset_transform=*/false,
+                                     /*animate=*/true);
         overview_session->RemoveItem(overview_item.get());
 
         SnapWindow(window,
@@ -2030,6 +2054,10 @@ void SplitViewController::OnOverviewModeEnding(
                        : SnapPosition::kPrimary,
                    WindowSnapActionSource::kAutoSnapInSplitView,
                    /*activate_window=*/false, *snap_ratio);
+        if (was_active) {
+          wm::ActivateWindow(window);
+        }
+
         // If ending overview causes a window to snap, also do not do exiting
         // overview animation.
         overview_session->SetWindowListNotAnimatedWhenExiting(root_window_);
@@ -2056,6 +2084,10 @@ void SplitViewController::OnOverviewModeEnded() {
       !IsSnapGroupEnabledInClamshellMode()) {
     EndSplitView();
   }
+
+  // Reset the value as we are guaranteed to be out of snap group creation
+  // session on overview ended.
+  in_snap_group_creation_session_ = false;
 }
 
 void SplitViewController::OnDisplayRemoved(
@@ -2701,11 +2733,22 @@ void SplitViewController::OnWindowSnapped(
 
   SnapGroupController* snap_group_controller =
       Shell::Get()->snap_group_controller();
-  if (state_ == State::kBothSnapped && IsSnapGroupEnabledInClamshellMode() &&
+  const bool snap_group_enabled_in_clamshell =
+      IsSnapGroupEnabledInClamshellMode();
+  if (state_ == State::kBothSnapped && snap_group_enabled_in_clamshell &&
       snap_group_controller->IsArm1AutomaticallyLockEnabled()) {
-    snap_group_controller->AddSnapGroup(primary_window_, secondary_window_);
-    DCHECK(snap_group_controller->AreWindowsInSnapGroup(primary_window_,
-                                                        secondary_window_));
+    CHECK(primary_window_);
+    CHECK(secondary_window_);
+    if (!snap_group_controller->AreWindowsInSnapGroup(primary_window_,
+                                                      secondary_window_)) {
+      CHECK(snap_group_controller->AddSnapGroup(primary_window_,
+                                                secondary_window_));
+    }
+
+    if (!split_view_divider_) {
+      CreateSplitViewDividerInClamshell();
+      split_view_divider_->RefreshStackingOrder();
+    }
   }
 
   // If the snapped window was removed from overview and was the active window
@@ -2743,19 +2786,18 @@ void SplitViewController::OnWindowSnapped(
     }
   }
 
-  // Make sure overview is opened on the other side of the screen if there is
+  // Overview will be opened on the other side of the screen if there is
   // only one snapped window in split screen when in tablet mode or clamshell
-  // mode with feature flag `kSnapGroup` enabled and feature param
-  // `kAutomaticallyLockGroup` set to true.
-  if (!IsInOverviewSession() &&
+  // mode when `CanEnterOverview()` returns true, the check will happen in
+  // `OverviewController`.
+  if (!IsInOverviewSession() && !DesksController::Get()->animation() &&
       (split_view_type_ == SplitViewType::kTabletType ||
-       ShouldShowOverviewInClamshellOnWindowSnapped()) &&
+       snap_group_enabled_in_clamshell) &&
       (state_ == State::kPrimarySnapped ||
        state_ == State::kSecondarySnapped)) {
-    if (!DesksController::Get()->animation()) {
-      Shell::Get()->overview_controller()->StartOverview(
-          OverviewStartAction::kSplitView, OverviewEnterExitType::kNormal);
-    }
+    in_snap_group_creation_session_ = snap_group_enabled_in_clamshell;
+    Shell::Get()->overview_controller()->StartOverview(
+        OverviewStartAction::kSplitView, OverviewEnterExitType::kNormal);
     return;
   }
 
@@ -3044,9 +3086,11 @@ void SplitViewController::InsertWindowToOverview(aura::Window* window,
 void SplitViewController::FinishWindowResizing(aura::Window* window) {
   if (window != nullptr) {
     WindowState* window_state = WindowState::Get(window);
-    window_state->OnCompleteDrag(gfx::PointF(
-        GetEndDragLocationInScreen(window, previous_event_location_)));
-    window_state->DeleteDragDetails();
+    if (window_state->is_dragged()) {
+      window_state->OnCompleteDrag(gfx::PointF(
+          GetEndDragLocationInScreen(window, previous_event_location_)));
+      window_state->DeleteDragDetails();
+    }
   }
 }
 

@@ -200,7 +200,7 @@ source_set("filters") {
     deps += [ "//media/base/android" ]
   }
 
-  if (is_mac) {
+  if (is_apple) {
     sources += [
       "mac/audio_toolbox_audio_decoder.cc",
       "mac/audio_toolbox_audio_decoder.h",
@@ -219,8 +219,6 @@ source_set("filters") {
     sources += [
       "win/media_foundation_audio_decoder.cc",
       "win/media_foundation_audio_decoder.h",
-      "win/media_foundation_utils.cc",
-      "win/media_foundation_utils.h",
     ]
     deps += [ "//media/base/win:media_foundation_util" ]
     if (enable_platform_dts_audio) {
@@ -253,6 +251,10 @@ source_set("filters") {
       "hls_demuxer_status.h",
       "hls_manifest_demuxer_engine.cc",
       "hls_manifest_demuxer_engine.h",
+      "hls_rendition.cc",
+      "hls_rendition.h",
+      "hls_vod_rendition.cc",
+      "hls_vod_rendition.h",
       "manifest_demuxer.cc",
       "manifest_demuxer.h",
     ]
@@ -411,6 +413,7 @@ source_set("unit_tests") {
     sources += [
       "hls_codec_detector_unittest.cc",
       "hls_data_source_provider_unittest.cc",
+      "hls_manifest_demuxer_engine_unittest.cc",
       "hls_test_helpers.cc",
       "hls_test_helpers.h",
       "manifest_demuxer_unittest.cc",

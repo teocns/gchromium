@@ -326,7 +326,7 @@ void PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse(
   }
 
   // At most one stream is expected as this function is not used with the
-  // getDisplayMediaSet API (only used with getUserMedia).
+  // getAllScreensMedia API (only used with getUserMedia).
   DCHECK_LE(stream_devices_set.stream_devices.size(), 1u);
   blink::mojom::StreamDevices devices;
   if (!stream_devices_set.stream_devices.empty()) {
@@ -397,7 +397,7 @@ void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
       if (system_audio_permission == SystemPermission::kNotDetermined) {
         // Using WeakPtr since callback can come at any time and we might be
         // destroyed.
-        system_media_permissions::RequestSystemAudioCapturePermisson(
+        system_media_permissions::RequestSystemAudioCapturePermission(
             base::BindOnce(&PermissionBubbleMediaAccessHandler::
                                OnAccessRequestResponseForBinding,
                            weak_factory_.GetWeakPtr(), web_contents, request_id,
@@ -424,7 +424,7 @@ void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
       if (system_video_permission == SystemPermission::kNotDetermined) {
         // Using WeakPtr since callback can come at any time and we might be
         // destroyed.
-        system_media_permissions::RequestSystemVideoCapturePermisson(
+        system_media_permissions::RequestSystemVideoCapturePermission(
             base::BindOnce(&PermissionBubbleMediaAccessHandler::
                                OnAccessRequestResponseForBinding,
                            weak_factory_.GetWeakPtr(), web_contents, request_id,
@@ -455,7 +455,8 @@ void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
         FROM_HERE,
         base::BindOnce(
             &PermissionBubbleMediaAccessHandler::ProcessQueuedAccessRequest,
-            base::Unretained(this), web_contents));
+            base::Unretained(this),
+            base::UnsafeDanglingUntriaged(web_contents)));
   }
 
   std::move(callback).Run(stream_devices_set, final_result, std::move(ui));

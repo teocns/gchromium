@@ -14,7 +14,6 @@
 #include "base/component_export.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/values.h"
 #include "build/build_config.h"
 #include "printing/mojom/print.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -196,6 +195,13 @@ struct COMPONENT_EXPORT(PRINT_BACKEND) PrinterSemanticCapsAndDefaults {
     // Origin (x,y) is at the bottom-left.
     gfx::Rect printable_area_um;
 
+    // This is used to represent a printer that supports a variable height.
+    // This will either be equal to 0 (which indicates the height is not
+    // variable) or this will be larger than the height in `size_um` (which
+    // indicates the height can be anywhere in that range).  Note that
+    // `printable_area_um` is always based on `size_um`.
+    int max_height_um = 0;
+
     bool operator==(const Paper& other) const;
   };
   using Papers = std::vector<Paper>;
@@ -325,7 +331,6 @@ class COMPONENT_EXPORT(PRINT_BACKEND) PrintBackend
 
   // Provide the actual backend for CreateInstance().
   static scoped_refptr<PrintBackend> CreateInstanceImpl(
-      const base::Value::Dict* print_backend_settings,
       const std::string& locale);
 };
 

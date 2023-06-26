@@ -14,8 +14,8 @@
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_item+Controller.h"
@@ -226,9 +226,11 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   self.dragDropHandler.dragDataSource = self;
   self.tableView.dragDelegate = self.dragDropHandler;
   self.tableView.dragInteractionEnabled = true;
+  self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
+  [super viewWillAppear:animated];
   // In case the sign-in promo visibility is changed before the first layout,
   // we need to refresh the empty view margin after the layout is done, to apply
   // the correct top margin value according to the promo view's height.
@@ -238,6 +240,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 - (void)viewWillTransitionToSize:(CGSize)size
        withTransitionCoordinator:
            (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
   if (self.editingWithSwipe)
     [self exitEditingModeAnimated:YES];
 }
@@ -959,13 +962,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   if ([model hasSectionForSectionIdentifier:sectionID])
     return NSIntegerMax;
 
-  // There are at most two sections in the table.  The only time this creation
-  // will result in the index of 1 is while creating the read section when there
-  // are also unread items.
-  BOOL hasUnreadItems = [self hasItemInSection:kSectionIdentifierUnread];
-  BOOL creatingReadSection = (sectionID == kSectionIdentifierRead);
-  NSInteger sectionIndex = (hasUnreadItems && creatingReadSection) ? 1 : 0;
-
+  NSInteger sectionIndex = [self newSectionIndexForId:sectionID];
   void (^updates)(void) = ^{
     [model insertSectionWithIdentifier:sectionID atIndex:sectionIndex];
     [model setHeader:[self headerForSectionIndex:sectionID]
@@ -1145,7 +1142,6 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   [self loadItems];
   [self.audience readingListHasItems:YES];
   self.tableView.alwaysBounceVertical = YES;
-  self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
   [self removeEmptyTableView];
 }
 
@@ -1166,7 +1162,6 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   self.navigationItem.largeTitleDisplayMode =
       UINavigationItemLargeTitleDisplayModeNever;
   self.tableView.alwaysBounceVertical = NO;
-  self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
   [self.audience readingListHasItems:NO];
   [self updateEmptyViewTopMargin];
 }
@@ -1197,6 +1192,25 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   } else {
     [self setEmptyViewTopOffset:0.0];
   }
+}
+
+// Computes the index of the section to be created, given the sections that
+// already exist.
+- (NSInteger)newSectionIndexForId:(ReadingListSectionIdentifier)newSectionID {
+  ReadingListSectionIdentifier sections[] = {kSectionIdentifierSignInPromo,
+                                             kSectionIdentifierUnread,
+                                             kSectionIdentifierRead};
+  NSInteger sectionIndex = 0;
+  for (ReadingListSectionIdentifier section : sections) {
+    if (newSectionID == section) {
+      return sectionIndex;
+    }
+    if ([self hasItemInSection:section]) {
+      sectionIndex++;
+    }
+  }
+  NOTREACHED();
+  return 0;
 }
 
 @end

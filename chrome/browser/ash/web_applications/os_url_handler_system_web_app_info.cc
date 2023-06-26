@@ -36,9 +36,9 @@ OsUrlHandlerSystemWebAppDelegate::OsUrlHandlerSystemWebAppDelegate(
 
 OsUrlHandlerSystemWebAppDelegate::~OsUrlHandlerSystemWebAppDelegate() = default;
 
-std::unique_ptr<WebAppInstallInfo>
+std::unique_ptr<web_app::WebAppInstallInfo>
 OsUrlHandlerSystemWebAppDelegate::GetWebAppInfo() const {
-  auto info = std::make_unique<WebAppInstallInfo>();
+  auto info = std::make_unique<web_app::WebAppInstallInfo>();
   info->start_url = GURL(chrome::kChromeUIOsUrlAppURL);
   info->scope = GURL(chrome::kChromeUIOsUrlAppURL);
   info->title = l10n_util::GetStringUTF16(IDS_OS_URL_HANDLER_APP_NAME);
@@ -113,7 +113,7 @@ bool OsUrlHandlerSystemWebAppDelegate::IsUrlInSystemAppScope(
   // chrome:// scheme urls anymore, we should be safely able to assume that they
   // might have been os:// schemed URLs when being called from Lacros.
   target_url =
-      crosapi::gurl_os_handler_utils::GetSystemUrlFromChromeUrl(target_url);
+      crosapi::gurl_os_handler_utils::GetOsUrlFromChromeUrl(target_url);
   return ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(target_url);
 }
 

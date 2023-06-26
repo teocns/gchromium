@@ -86,6 +86,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
+#include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
@@ -205,6 +206,9 @@ bool HasTimelines(const StyleResolverState& state) {
     return true;
   }
   if (state.StyleBuilder().ViewTimelineName()) {
+    return true;
+  }
+  if (state.StyleBuilder().TimelineScope()) {
     return true;
   }
   if (ElementAnimations* element_animations = GetElementAnimations(state)) {
@@ -808,6 +812,9 @@ void StyleResolver::ForEachUARulesForElement(const Element& element,
       func(default_style_sheets.DefaultSVGStyle());
     } else if (element.namespaceURI() == mathml_names::kNamespaceURI) {
       func(default_style_sheets.DefaultMathMLStyle());
+    }
+    if (Fullscreen::HasFullscreenElements()) {
+      func(default_style_sheets.DefaultFullscreenStyle());
     }
   } else {
     func(default_style_sheets.DefaultPrintStyle());
@@ -1440,14 +1447,17 @@ void StyleResolver::ApplyBaseStyleNoCache(
   if (match_result.HasFlag(MatchFlag::kAffectedByActive)) {
     state.StyleBuilder().SetAffectedByActive();
   }
-  if (match_result.HasFlag(MatchFlag::kAffectedByInitial)) {
-    state.StyleBuilder().SetIsPseudoInitialStyle();
+  if (match_result.HasFlag(MatchFlag::kAffectedByStartingStyle)) {
+    state.StyleBuilder().SetIsStartingStyle();
   }
   if (match_result.DependsOnSizeContainerQueries()) {
     state.StyleBuilder().SetDependsOnSizeContainerQueries(true);
   }
   if (match_result.DependsOnStyleContainerQueries()) {
     state.StyleBuilder().SetDependsOnStyleContainerQueries(true);
+  }
+  if (match_result.DependsOnStickyContainerQueries()) {
+    state.StyleBuilder().SetDependsOnStickyContainerQueries(true);
   }
   if (match_result.FirstLineDependsOnSizeContainerQueries()) {
     state.StyleBuilder().SetFirstLineDependsOnSizeContainerQueries(true);
@@ -2239,6 +2249,7 @@ FilterOperations StyleResolver::ComputeFilterOperations(
                            nullptr /* StyleRecalcContext */,
                            StyleRequest(parent.get()));
 
+  GetDocument().GetStyleEngine().UpdateViewportSize();
   state.SetStyle(*parent);
 
   StyleBuilder::ApplyProperty(GetCSSPropertyFilter(), state,
@@ -2419,6 +2430,7 @@ Font StyleResolver::ComputeFont(Element& element,
   StyleResolverState state(GetDocument(), element,
                            nullptr /* StyleRecalcContext */,
                            StyleRequest(&style));
+  GetDocument().GetStyleEngine().UpdateViewportSize();
   state.SetStyle(style);
   if (const ComputedStyle* parent_style = element.GetComputedStyle()) {
     state.SetParentStyle(parent_style);
@@ -2735,6 +2747,18 @@ void StyleResolver::PropagateStyleToViewport() {
                    SetForcedColorAdjust, EForcedColorAdjust::kAuto);
   }
 
+  // scroll-start
+  {
+    PROPAGATE_FROM(document_element_style, ScrollStartBlock,
+                   SetScrollStartBlock, ScrollStartData());
+    PROPAGATE_FROM(document_element_style, ScrollStartInline,
+                   SetScrollStartInline, ScrollStartData());
+    PROPAGATE_FROM(document_element_style, ScrollStartX, SetScrollStartX,
+                   ScrollStartData());
+    PROPAGATE_FROM(document_element_style, ScrollStartY, SetScrollStartY,
+                   ScrollStartData());
+  }
+
   changed |= PropagateScrollSnapStyleToViewport(
       GetDocument(), document_element_style, new_viewport_style_builder);
 
@@ -2935,6 +2959,7 @@ scoped_refptr<const ComputedStyle> StyleResolver::ResolvePositionFallbackStyle(
   StyleRuleTry* try_rule = position_fallback_rule->TryRules()[index];
   StyleResolverState state(GetDocument(), element);
   state.SetStyle(base_style);
+  state.SetIsResolvingPositionFallbackStyle();
   const CSSPropertyValueSet& properties = try_rule->Properties();
 
   STACK_UNINITIALIZED StyleCascade cascade(state);

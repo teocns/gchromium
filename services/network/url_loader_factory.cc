@@ -45,25 +45,26 @@ namespace {
 // The interval to send load updates.
 constexpr auto kUpdateLoadStatesInterval = base::Milliseconds(250);
 
-bool LoadInfoIsMoreInteresting(uint32_t a_load_state,
-                               uint64_t a_upload_size,
-                               uint32_t b_load_state,
-                               uint64_t b_upload_size) {
+bool LoadInfoIsMoreInteresting(const URLLoader::PartialLoadInfo& a,
+                               const URLLoader::PartialLoadInfo& b) {
   // Set |*_uploading_size| to be the size of the corresponding upload body if
   // it's currently being uploaded.
 
   uint64_t a_uploading_size = 0;
-  if (a_load_state == net::LOAD_STATE_SENDING_REQUEST)
-    a_uploading_size = a_upload_size;
+  if (a.load_state.state == net::LOAD_STATE_SENDING_REQUEST) {
+    a_uploading_size = a.upload_progress.size();
+  }
 
   uint64_t b_uploading_size = 0;
-  if (b_load_state == net::LOAD_STATE_SENDING_REQUEST)
-    b_uploading_size = b_upload_size;
+  if (b.load_state.state == net::LOAD_STATE_SENDING_REQUEST) {
+    b_uploading_size = b.upload_progress.size();
+  }
 
-  if (a_uploading_size != b_uploading_size)
+  if (a_uploading_size != b_uploading_size) {
     return a_uploading_size > b_uploading_size;
+  }
 
-  return a_load_state > b_load_state;
+  return a.load_state.state > b.load_state.state;
 }
 
 }  // namespace
@@ -84,8 +85,6 @@ URLLoaderFactory::URLLoaderFactory(
       cors_url_loader_factory_(cors_url_loader_factory),
       cookie_observer_(std::move(params_->cookie_observer)),
       trust_token_observer_(std::move(params_->trust_token_observer)),
-      url_loader_network_service_observer_(
-          std::move(params_->url_loader_network_observer)),
       devtools_observer_(std::move(params_->devtools_observer)) {
   DCHECK(context);
   DCHECK_NE(mojom::kInvalidProcessId, params_->process_id);
@@ -150,8 +149,8 @@ mojom::CrossOriginEmbedderPolicyReporter* URLLoaderFactory::GetCoepReporter()
   return cors_url_loader_factory_->coep_reporter();
 }
 
-bool URLLoaderFactory::ShouldRequireNetworkIsolationKey() const {
-  return context_->require_network_isolation_key();
+bool URLLoaderFactory::ShouldRequireIsolationInfo() const {
+  return context_->require_network_anonymization_key();
 }
 
 scoped_refptr<ResourceSchedulerClient>
@@ -406,8 +405,9 @@ mojom::TrustTokenAccessObserver* URLLoaderFactory::GetTrustTokenAccessObserver()
 
 mojom::URLLoaderNetworkServiceObserver*
 URLLoaderFactory::GetURLLoaderNetworkServiceObserver() const {
-  if (url_loader_network_service_observer_)
-    return url_loader_network_service_observer_.get();
+  if (cors_url_loader_factory_->url_loader_network_service_observer()) {
+    return cors_url_loader_factory_->url_loader_network_service_observer();
+  }
   if (!context_->network_service())
     return nullptr;
   return context_->network_service()
@@ -433,25 +433,26 @@ void URLLoaderFactory::MaybeStartUpdateLoadInfoTimer() {
 void URLLoaderFactory::UpdateLoadInfo() {
   DCHECK(!waiting_on_load_state_ack_);
 
-  mojom::LoadInfoPtr most_interesting;
   URLLoader* most_interesting_url_loader = nullptr;
+  URLLoader::PartialLoadInfo most_interesting_load_info;
 
   SCOPED_UMA_HISTOGRAM_TIMER("NetworkService.URLLoaderFactory.UpdateLoadInfo");
 
   for (auto& loader : cors_url_loader_factory_->url_loaders()) {
-    if (!most_interesting ||
-        LoadInfoIsMoreInteresting(
-            loader->GetLoadState(), loader->GetUploadProgress().size(),
-            most_interesting->load_state, most_interesting->upload_size)) {
-      most_interesting = loader->CreateLoadInfo();
+    URLLoader::PartialLoadInfo load_info = loader->GetPartialLoadInfo();
+
+    if (!most_interesting_url_loader ||
+        LoadInfoIsMoreInteresting(load_info, most_interesting_load_info)) {
       most_interesting_url_loader = loader.get();
+      most_interesting_load_info = std::move(load_info);
     }
   }
 
   if (most_interesting_url_loader) {
     most_interesting_url_loader->GetURLLoaderNetworkServiceObserver()
         ->OnLoadingStateUpdate(
-            std::move(most_interesting),
+            most_interesting_url_loader->CreateLoadInfo(
+                most_interesting_load_info),
             base::BindOnce(&URLLoaderFactory::AckUpdateLoadInfo,
                            base::Unretained(this)));
     waiting_on_load_state_ack_ = true;

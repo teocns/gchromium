@@ -51,6 +51,8 @@
 #endif
 
 #if BUILDFLAG(IS_OZONE)
+#include "gpu/vulkan/drm_modifiers_filter_vulkan.h"
+#include "ui/ozone/public/drm_modifiers_filter.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
 #endif
@@ -98,6 +100,10 @@ void InitializePlatformOverlaySettings(GPUInfo* gpu_info,
   // Also, this has to be called after falling back to SwiftShader decision is
   // finalized because this function depends on GL is ANGLE's GLES or not.
   gl::DirectCompositionOverlayWorkarounds workarounds = {
+      .disable_sw_video_overlays = gpu_feature_info.IsWorkaroundEnabled(
+          DISABLE_DIRECT_COMPOSITION_SW_VIDEO_OVERLAYS),
+      .disable_decode_swap_chain =
+          gpu_feature_info.IsWorkaroundEnabled(DISABLE_DECODE_SWAP_CHAIN),
       .enable_bgra8_overlays_with_yuv_overlay_support =
           gpu_feature_info.IsWorkaroundEnabled(
               gpu::ENABLE_BGRA8_OVERLAYS_WITH_YUV_OVERLAY_SUPPORT),
@@ -768,19 +774,23 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   ui::OzonePlatform::GetInstance()->AfterSandboxEntry();
   gpu_feature_info_.supported_buffer_formats_for_allocation_and_texturing =
       std::move(supported_buffer_formats_for_texturing);
-#endif
+#if BUILDFLAG(ENABLE_VULKAN)
+  auto* factory = ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
+  if (gpu_feature_info_.status_values[GPU_FEATURE_TYPE_VULKAN] ==
+          kGpuFeatureStatusEnabled &&
+      factory->SupportsDrmModifiersFilter()) {
+    DCHECK(vulkan_implementation_ &&
+           vulkan_implementation_->GetVulkanInstance() &&
+           vulkan_implementation_->GetVulkanInstance()->vk_instance() !=
+               VK_NULL_HANDLE);
+    factory->SetDrmModifiersFilter(std::make_unique<DrmModifiersFilterVulkan>(
+        vulkan_implementation_.get()));
+  }
+#endif  // BUILDFLAG(ENABLE_VULKAN)
+#endif  // BUILDFLAG(IS_OZONE)
 
   if (!watchdog_thread_)
     watchdog_init.SetGpuWatchdogPtr(nullptr);
-
-#if BUILDFLAG(IS_WIN)
-  if (gpu_feature_info_.IsWorkaroundEnabled(DISABLE_DECODE_SWAP_CHAIN))
-    gl::DisableDirectCompositionDecodeSwapChain();
-  if (gpu_feature_info_.IsWorkaroundEnabled(
-          DISABLE_DIRECT_COMPOSITION_SW_VIDEO_OVERLAYS)) {
-    gl::DisableDirectCompositionSoftwareOverlays();
-  }
-#endif
 
 #if defined(USE_EGL) && !BUILDFLAG(IS_MAC)
   if (gpu_feature_info_.IsWorkaroundEnabled(CHECK_EGL_FENCE_BEFORE_WAIT))
@@ -983,11 +993,6 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
 
   DisableInProcessGpuVulkan(&gpu_feature_info_, &gpu_preferences_);
 
-#if BUILDFLAG(IS_WIN)
-  if (gpu_feature_info_.IsWorkaroundEnabled(DISABLE_DECODE_SWAP_CHAIN))
-    gl::DisableDirectCompositionDecodeSwapChain();
-#endif
-
   UMA_HISTOGRAM_ENUMERATION("GPU.GLImplementation", gl::GetGLImplementation());
 }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -1036,24 +1041,6 @@ bool GpuInit::InitializeVulkan() {
   // histograms.xml when we start Vulkan finch on Windows.
 
   if (!vulkan_implementation_)
-    return false;
-
-  const base::FeatureParam<std::string> disable_patterns(
-      &features::kVulkan, "disable_by_gl_renderer",
-      "*Mali-G?? M*" /* https://crbug.com/1183702 */);
-  if (MatchGLInfo(gpu_info_.gl_renderer, disable_patterns.Get()))
-    return false;
-
-  const base::FeatureParam<std::string> disable_driver_patterns(
-      &features::kVulkan, "disable_by_gl_driver",
-#if BUILDFLAG(IS_ANDROID)
-      "324.0|331.0|334.0|378.0|415.0|420.0|444.0" /* https://crbug.com/1246857
-                                                   */
-#else
-      ""
-#endif
-  );
-  if (MatchGLInfo(gpu_info_.gpu.driver_version, disable_driver_patterns.Get()))
     return false;
 
   const base::FeatureParam<std::string> force_enable_patterns(

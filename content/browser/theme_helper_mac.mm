@@ -256,7 +256,7 @@ namespace content {
 
 struct ThemeHelperMac::ObjCStorage {
   // ObjC object that observes notifications from the system.
-  base::scoped_nsobject<SystemThemeObserver> theme_observer_;
+  base::scoped_nsobject<SystemThemeObserver> theme_observer;
 };
 
 // static
@@ -286,7 +286,7 @@ ThemeHelperMac::ThemeHelperMac()
   LoadSystemColors();
 
   // Start observing for changes.
-  objc_storage_->theme_observer_.reset([[SystemThemeObserver alloc]
+  objc_storage_->theme_observer.reset([[SystemThemeObserver alloc]
       initWithColorsChangedCallback:base::BindRepeating(
                                         &ThemeHelperMac::LoadSystemColors,
                                         base::Unretained(this))]);
@@ -313,24 +313,14 @@ void ThemeHelperMac::LoadSystemColorsForCurrentAppearance(
         break;
       }
       case blink::MacSystemColorID::kControlAccentColor:
-        if (@available(macOS 10.14, *)) {
-          values[i] = NSColorToSkColor(NSColor.controlAccentColor);
-        } else {
-          // controlAccentColor property is not available before macOS 10.14,
-          // so keyboardFocusIndicatorColor is used instead.
-          values[i] = NSColorToSkColor(NSColor.keyboardFocusIndicatorColor);
-        }
+        values[i] = NSColorToSkColor(NSColor.controlAccentColor);
         break;
       case blink::MacSystemColorID::kKeyboardFocusIndicator:
         values[i] = NSColorToSkColor(NSColor.keyboardFocusIndicatorColor);
         break;
       case blink::MacSystemColorID::kSecondarySelectedControl:
-        if (@available(macOS 10.14, *)) {
-          values[i] = NSColorToSkColor(
-              NSColor.unemphasizedSelectedContentBackgroundColor);
-        } else {
-          values[i] = NSColorToSkColor(NSColor.secondarySelectedControlColor);
-        }
+        values[i] = NSColorToSkColor(
+            NSColor.unemphasizedSelectedContentBackgroundColor);
         break;
       case blink::MacSystemColorID::kSelectedTextBackground:
         values[i] = NSColorToSkColor(NSColor.selectedTextBackgroundColor);
@@ -360,7 +350,7 @@ void ThemeHelperMac::LoadSystemColors() {
               static_cast<size_t>(blink::MacSystemColorID::kCount),
               static_cast<size_t>(blink::MacSystemColorID::kCount)));
         }];
-  } else if (@available(macOS 10.14, *)) {
+  } else {
     NSAppearance* saved_appearance = NSAppearance.currentAppearance;
     NSAppearance.currentAppearance =
         [NSAppearance appearanceNamed:NSAppearanceNameAqua];
@@ -372,12 +362,6 @@ void ThemeHelperMac::LoadSystemColors() {
         values.subspan(static_cast<size_t>(blink::MacSystemColorID::kCount),
                        static_cast<size_t>(blink::MacSystemColorID::kCount)));
     NSAppearance.currentAppearance = saved_appearance;
-  } else {
-    LoadSystemColorsForCurrentAppearance(values.subspan(
-        0, static_cast<size_t>(blink::MacSystemColorID::kCount)));
-    LoadSystemColorsForCurrentAppearance(
-        values.subspan(static_cast<size_t>(blink::MacSystemColorID::kCount),
-                       static_cast<size_t>(blink::MacSystemColorID::kCount)));
   }
 }
 

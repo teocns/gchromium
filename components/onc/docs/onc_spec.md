@@ -506,6 +506,22 @@ field **WiFi** must be set to an object of type [WiFi](#WiFi-type).
           shouldn't associate with any AP. `"00:00:00:00:00:00"` shouldn't be a
           part of any other list of values, otherwise it may cause an error.
 
+* **BSSIDRequested**
+    * (optional) - **string**
+    * BSSID that the AP should connect to. BSSIDs
+      should be formatted as colon-separated octets (e.g.
+      `"00:01:02:03:04:05"`).
+    * If the AP cannot connect to the requested BSSID, then it will not fallback
+      to another BSSID and will remain unconnected.
+    * If **BSSIDRequested** is empty and **BSSIDAllowlist** is not, then the
+      WiFi network will follow the values in **BSSIDAllowlist**
+    * If **BSSIDAllowlist** is empty and **BSSIDRequested** is not, then the
+      WiFi network will follow the value in **BSSIDRequested**
+    * If **BSSIDRequested** and **BSSIDAllowlist** have a disjoint set of
+      values, then the WiFi network will not connect.
+    * If **BSSIDRequested** is also in **BSSIDAllowlist**, then the network will
+      follow the value in **BSSIDRequested**
+
 * **EAP**
     * (required if **Security** is
         *WEP-8021X* or *WPA-EAP*, otherwise ignored) - [EAP](#EAP-type)
@@ -1624,15 +1640,21 @@ ONC configuration of of **Cellular** networks is not yet supported.
 
 * **SMDPAddress**
     * (optional, read-only) - **string**
-    * When set with the address of an SMDP+ server, indicates that the eSIM
-      profile for this network should be downloaded and installed using this
-      address. This field is mutually exclusive with SMDSAddress.
+    * The activation code containing the address of the SM-DP+ server that
+      should be used to download and install an eSIM profile for this network.
+      This field is mutually exclusive with SMDSAddress. While this field has
+      "address" in its name for backwards compatibility, its value is expected
+      to be formatted according to the GSMA specification. Policies that do not
+      conform to the GSMA specification will fail. Learn more about the
+      specification at
+      https://www.gsma.com/newsroom/wp-content/uploads/SGP.22_v2.2.pdf.
 
 * **SMDSAddress**
     * (optional, read-only) - **string**
-    * When set with the address of an SMDS server, indicates that the eSIM
-      profile for this network should be downloaded and installed using this
-      address. This field is mutually exclusive with SMDPAddress and is expected
+    * The activation code containing the address of the SM-DS server that should
+      be used to download and install an eSIM profile for this network. This
+      field is mutually exclusive with SMDPAddress. While this field has
+      "address" in its name for backwards compatibility, its value is expected
       to be formatted according to the GSMA specification. Policies that do not
       conform to the GSMA specification will fail. Learn more about the
       specification at

@@ -12,7 +12,6 @@
 #include "base/functional/bind.h"
 #include "base/types/expected.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/web_applications/commands/sub_app_install_command.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
@@ -48,9 +47,8 @@ namespace {
 // Resolve string `path` with `origin`, and if the resulting GURL isn't same
 // origin with `origin` then return an error (for which the caller needs to
 // raise a `ReportBadMessageAndDeleteThis`).
-base::expected<std::string, std::string> ConvertPathToUrl(
-    const std::string& path,
-    const url::Origin& origin) {
+base::expected<GURL, std::string> ConvertPathToUrl(const std::string& path,
+                                                   const url::Origin& origin) {
   GURL resolved = origin.GetURL().Resolve(path);
 
   if (!origin.IsSameOriginWith(resolved)) {
@@ -58,42 +56,40 @@ base::expected<std::string, std::string> ConvertPathToUrl(
         "SubAppsServiceImpl: Different origin arg to that of the calling app.");
   }
 
-  return base::ok(resolved.spec());
+  if (resolved.is_empty()) {
+    return base::unexpected("SubAppsServiceImpl: Empty url.");
+  }
+
+  if (!resolved.is_valid()) {
+    return base::unexpected("SubAppsServiceImpl: Invalid url.");
+  }
+
+  return base::ok(resolved);
 }
 
-std::string ConvertUrlToPath(const UnhashedAppId& unhashed_app_id) {
-  return GURL(unhashed_app_id).PathForRequest();
+std::string ConvertUrlToPath(const ManifestId& manifest_id) {
+  return manifest_id.PathForRequest();
 }
 
-base::expected<std::vector<std::pair<UnhashedAppId, GURL>>, std::string>
+base::expected<std::vector<std::pair<ManifestId, GURL>>, std::string>
 AddOptionsFromMojo(
     const url::Origin& origin,
     const std::vector<SubAppsServiceAddParametersPtr>& sub_apps_to_add_mojo) {
-  std::vector<std::pair<UnhashedAppId, GURL>> sub_apps;
+  std::vector<std::pair<ManifestId, GURL>> sub_apps;
   for (const auto& sub_app : sub_apps_to_add_mojo) {
-    base::expected<std::string, std::string> unhashed_app_id =
-        ConvertPathToUrl(sub_app->unhashed_app_id_path, origin);
-    if (!unhashed_app_id.has_value()) {
-      return base::unexpected(unhashed_app_id.error());
+    base::expected<ManifestId, std::string> manifest_id =
+        ConvertPathToUrl(sub_app->manifest_id_path, origin);
+    if (!manifest_id.has_value()) {
+      return base::unexpected(manifest_id.error());
     }
-    base::expected<std::string, std::string> install_url =
+    base::expected<GURL, std::string> install_url =
         ConvertPathToUrl(sub_app->install_url_path, origin);
     if (!install_url.has_value()) {
       return base::unexpected(install_url.error());
     }
-    sub_apps.emplace_back(unhashed_app_id.value(), install_url.value());
+    sub_apps.emplace_back(manifest_id.value(), install_url.value());
   }
   return sub_apps;
-}
-
-SubAppsServiceImpl::AddResultsMojo AddResultsToMojo(
-    const SubAppsServiceImpl::AddResults& add_results) {
-  SubAppsServiceImpl::AddResultsMojo add_results_mojo;
-  for (const auto& [unhashed_app_id, result_code] : add_results) {
-    add_results_mojo.emplace_back(SubAppsServiceAddResult::New(
-        ConvertUrlToPath(unhashed_app_id), result_code));
-  }
-  return add_results_mojo;
 }
 
 WebAppProvider* GetWebAppProvider(content::RenderFrameHost& render_frame_host) {
@@ -110,9 +106,11 @@ const AppId* GetAppId(content::RenderFrameHost& render_frame_host) {
   return WebAppTabHelper::GetAppId(initiator_web_contents);
 }
 
-void OnAdd(SubAppsServiceImpl::AddCallback result_callback,
-           SubAppsServiceImpl::AddResults results) {
-  std::move(result_callback).Run(AddResultsToMojo(results));
+blink::mojom::SubAppsServiceResultCode InstallResultCodeToMojo(
+    webapps::InstallResultCode install_result_code) {
+  return webapps::IsSuccess(install_result_code)
+             ? blink::mojom::SubAppsServiceResultCode::kSuccess
+             : blink::mojom::SubAppsServiceResultCode::kFailure;
 }
 
 }  // namespace
@@ -123,6 +121,9 @@ SubAppsServiceImpl::SubAppsServiceImpl(
     : DocumentService(render_frame_host, std::move(receiver)) {}
 
 SubAppsServiceImpl::~SubAppsServiceImpl() = default;
+
+SubAppsServiceImpl::AddCallInfo::AddCallInfo() = default;
+SubAppsServiceImpl::AddCallInfo::~AddCallInfo() = default;
 
 // static
 void SubAppsServiceImpl::CreateIfAllowed(
@@ -160,20 +161,28 @@ void SubAppsServiceImpl::Add(
   }
 
   const AppId* parent_app_id = GetAppId(render_frame_host());
-  // Verify that the calling app is installed itself. This check is done here
-  // and not in `CreateIfAllowed` because of a potential race between doing the
-  // check there and then running the current function, and the parent app being
-  // installed/uninstalled.
-  if (!parent_app_id) {
+  // Verify that the calling app is installed itself and is not a sub app
+  // itself. This check is done here and not in `CreateIfAllowed` because of a
+  // potential race between doing the check there and then running the current
+  // function, and the parent app being installed/uninstalled.
+  if (!parent_app_id || provider->registrar_unsafe()
+                            .GetAppById(*parent_app_id)
+                            ->IsSubAppInstalledApp()) {
     std::vector<SubAppsServiceAddResultPtr> result;
     for (const auto& sub_app : sub_apps_to_add) {
       result.emplace_back(SubAppsServiceAddResult::New(
-          sub_app->unhashed_app_id_path, SubAppsServiceResultCode::kFailure));
+          sub_app->manifest_id_path, SubAppsServiceResultCode::kFailure));
     }
-    return std::move(result_callback).Run(/*mojom_results=*/std::move(result));
+    std::move(result_callback).Run(/*mojom_results=*/std::move(result));
+    return;
   }
 
-  base::expected<std::vector<std::pair<UnhashedAppId, GURL>>, std::string>
+  if (sub_apps_to_add.empty()) {
+    std::move(result_callback).Run(/*mojom_results=*/{});
+    return;
+  }
+
+  base::expected<std::vector<std::pair<ManifestId, GURL>>, std::string>
       add_options = AddOptionsFromMojo(
           render_frame_host().GetLastCommittedOrigin(), sub_apps_to_add);
   if (!add_options.has_value()) {
@@ -181,14 +190,127 @@ void SubAppsServiceImpl::Add(
     return ReportBadMessageAndDeleteThis(add_options.error());
   }
 
-  auto install_command = std::make_unique<SubAppInstallCommand>(
-      *parent_app_id, add_options.value(),
-      base::BindOnce(&OnAdd, std::move(result_callback)),
-      Profile::FromBrowserContext(render_frame_host().GetBrowserContext()),
-      std::make_unique<WebAppUrlLoader>(),
-      std::make_unique<WebAppDataRetriever>());
+  CHECK(AreWebAppsUserInstallable(
+      Profile::FromBrowserContext(render_frame_host().GetBrowserContext())));
 
-  provider->command_manager().ScheduleCommand(std::move(install_command));
+  // Assign id to this add call
+  int add_call_id = next_add_call_id_++;
+  AddCallInfo& add_call_info = add_call_info_[add_call_id];
+  add_call_info.mojo_callback = std::move(result_callback);
+
+  CollectInstallData(add_call_id, add_options.value());
+}
+
+void SubAppsServiceImpl::CollectInstallData(
+    int add_call_id,
+    std::vector<std::pair<ManifestId, GURL>> requested_installs) {
+  const auto install_info_collector = base::BarrierCallback<
+      std::pair<ManifestId, std::unique_ptr<WebAppInstallInfo>>>(
+      requested_installs.size(),
+      base::BindOnce(&SubAppsServiceImpl::ProcessInstallData,
+                     weak_ptr_factory_.GetWeakPtr(), add_call_id));
+
+  WebAppProvider* provider = GetWebAppProvider(render_frame_host());
+  // Schedule data collection for each requested install
+  for (const auto& [manifest_id, url_to_load] : requested_installs) {
+    // Check if app is already installed as a sub app
+    if (provider->registrar_unsafe().WasInstalledBySubApp(
+            GenerateAppIdFromManifestId(manifest_id))) {
+      add_call_info_[add_call_id].results.emplace_back(
+          SubAppsServiceAddResult::New(
+              ConvertUrlToPath(manifest_id),
+              blink::mojom::SubAppsServiceResultCode::kSuccess));
+      install_info_collector.Run(std::pair(GURL(), nullptr));
+      continue;
+    }
+
+    provider->scheduler().FetchInstallInfoFromInstallUrl(
+        manifest_id, url_to_load,
+        base::BindOnce(
+            [](ManifestId manifest_app_id,
+               std::unique_ptr<WebAppInstallInfo> install_info) {
+              return std::pair(manifest_app_id, std::move(install_info));
+            },
+            manifest_id)
+            .Then(install_info_collector));
+  }
+}
+
+void SubAppsServiceImpl::ProcessInstallData(
+    int add_call_id,
+    std::vector<std::pair<ManifestId, std::unique_ptr<WebAppInstallInfo>>>
+        install_data) {
+  AddCallInfo& add_call_info = add_call_info_[add_call_id];
+  const AppId* parent_app_id = GetAppId(render_frame_host());
+
+  for (auto& [manifest_id, install_info] : install_data) {
+    // If manifest_id is empty, the app was already installed and no install
+    // info was collected. If it is invalid, do not to trigger an installation
+    // since the command will run into problems.
+    if (!manifest_id.is_valid()) {
+      continue;
+    }
+
+    if (install_info) {
+      install_info->parent_app_id = *parent_app_id;
+      install_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
+      add_call_info.install_infos.emplace_back(std::move(install_info));
+    } else {
+      // Log error if install info could not be loaded
+      add_call_info.results.emplace_back(SubAppsServiceAddResult::New(
+          ConvertUrlToPath(manifest_id),
+          blink::mojom::SubAppsServiceResultCode::kFailure));
+    }
+  }
+
+  if (add_call_info.install_infos.empty()) {
+    FinishAddCall(add_call_id, {});
+    return;
+  }
+
+  ScheduleSubAppInstalls(add_call_id);
+}
+
+void SubAppsServiceImpl::ScheduleSubAppInstalls(int add_call_id) {
+  AddCallInfo& add_call_info = add_call_info_[add_call_id];
+
+  const auto install_results_collector = base::BarrierCallback<
+      std::tuple<ManifestId, AppId, webapps::InstallResultCode>>(
+      add_call_info.install_infos.size(),
+      base::BindOnce(&SubAppsServiceImpl::FinishAddCall,
+                     weak_ptr_factory_.GetWeakPtr(), add_call_id));
+
+  // Schedule install for each install_info that was collected
+  WebAppProvider* provider = GetWebAppProvider(render_frame_host());
+  for (auto& install_info : add_call_info.install_infos) {
+    ManifestId manifest_id = install_info->manifest_id;
+    provider->scheduler().InstallFromInfo(
+        std::move(install_info), /*overwrite_existing_manifest_fields=*/false,
+        webapps::WebappInstallSource::SUB_APP,
+        base::BindOnce(
+            [](ManifestId manifest_id, const AppId& app_id,
+               webapps::InstallResultCode result_code) {
+              return std::tuple(manifest_id, app_id, result_code);
+            },
+            manifest_id)
+            .Then(install_results_collector));
+  }
+}
+
+void SubAppsServiceImpl::FinishAddCall(
+    int add_call_id,
+    std::vector<std::tuple<ManifestId, AppId, webapps::InstallResultCode>>
+        install_results) {
+  AddCallInfo& add_call_info = add_call_info_[add_call_id];
+
+  for (const auto& [manifest_id, app_id, result_code] : install_results) {
+    add_call_info.results.emplace_back(SubAppsServiceAddResult::New(
+        ConvertUrlToPath(manifest_id), InstallResultCodeToMojo(result_code)));
+  }
+
+  std::move(add_call_info.mojo_callback).Run(std::move(add_call_info.results));
+
+  add_call_info_.erase(add_call_id);
 }
 
 void SubAppsServiceImpl::List(ListCallback result_callback) {
@@ -215,10 +337,9 @@ void SubAppsServiceImpl::List(ListCallback result_callback) {
   std::vector<SubAppsServiceListResultEntryPtr> sub_apps_list;
   for (const AppId& sub_app_id : registrar.GetAllSubAppIds(*parent_app_id)) {
     const WebApp* sub_app = registrar.GetAppById(sub_app_id);
-    UnhashedAppId unhashed_app_id =
-        GenerateAppIdUnhashed(sub_app->manifest_id(), sub_app->start_url());
+    ManifestId manifest_id = sub_app->manifest_id();
     sub_apps_list.push_back(SubAppsServiceListResultEntry::New(
-        ConvertUrlToPath(unhashed_app_id), sub_app->untranslated_name()));
+        ConvertUrlToPath(manifest_id), sub_app->untranslated_name()));
   }
 
   std::move(result_callback)
@@ -227,14 +348,14 @@ void SubAppsServiceImpl::List(ListCallback result_callback) {
 }
 
 void SubAppsServiceImpl::Remove(
-    const std::vector<std::string>& unhashed_app_id_paths,
+    const std::vector<std::string>& manifest_id_paths,
     RemoveCallback result_callback) {
   WebAppProvider* provider = GetWebAppProvider(render_frame_host());
   if (!provider->on_registry_ready().is_signaled()) {
     provider->on_registry_ready().Post(
         FROM_HERE,
         base::BindOnce(&SubAppsServiceImpl::Remove,
-                       weak_ptr_factory_.GetWeakPtr(), unhashed_app_id_paths,
+                       weak_ptr_factory_.GetWeakPtr(), manifest_id_paths,
                        std::move(result_callback)));
     return;
   }
@@ -243,9 +364,9 @@ void SubAppsServiceImpl::Remove(
   const AppId* calling_app_id = GetAppId(render_frame_host());
   if (!calling_app_id) {
     std::vector<SubAppsServiceRemoveResultPtr> result;
-    for (const std::string& unhashed_app_id_path : unhashed_app_id_paths) {
+    for (const std::string& manifest_id_path : manifest_id_paths) {
       result.emplace_back(SubAppsServiceRemoveResult::New(
-          unhashed_app_id_path, SubAppsServiceResultCode::kFailure));
+          manifest_id_path, SubAppsServiceResultCode::kFailure));
     }
 
     return std::move(result_callback).Run(std::move(result));
@@ -253,28 +374,27 @@ void SubAppsServiceImpl::Remove(
 
   auto remove_barrier_callback =
       base::BarrierCallback<SubAppsServiceRemoveResultPtr>(
-          unhashed_app_id_paths.size(), std::move(result_callback));
+          manifest_id_paths.size(), std::move(result_callback));
 
-  for (const std::string& unhashed_app_id_path : unhashed_app_id_paths) {
-    RemoveSubApp(unhashed_app_id_path, remove_barrier_callback, calling_app_id);
+  for (const std::string& manifest_id_path : manifest_id_paths) {
+    RemoveSubApp(manifest_id_path, remove_barrier_callback, calling_app_id);
   }
 }
 
 void SubAppsServiceImpl::RemoveSubApp(
-    const std::string& unhashed_app_id_path,
+    const std::string& manifest_id_path,
     base::OnceCallback<void(SubAppsServiceRemoveResultPtr)> callback,
     const AppId* calling_app_id) {
-  // Convert `unhashed_app_id_path` from path form to full URL form.
-  base::expected<std::string, std::string> unhashed_app_id_with_error =
-      ConvertPathToUrl(unhashed_app_id_path,
-                       render_frame_host().GetLastCommittedOrigin());
-  if (!unhashed_app_id_with_error.has_value()) {
+  // Convert `manifest_id_path` from path form to full URL form.
+  base::expected<GURL, std::string> manifest_id_with_error = ConvertPathToUrl(
+      manifest_id_path, render_frame_host().GetLastCommittedOrigin());
+  if (!manifest_id_with_error.has_value()) {
     // Compromised renderer, bail immediately (this call deletes *this).
-    return ReportBadMessageAndDeleteThis(unhashed_app_id_with_error.error());
+    return ReportBadMessageAndDeleteThis(manifest_id_with_error.error());
   }
 
-  const UnhashedAppId unhashed_app_id = unhashed_app_id_with_error.value();
-  AppId sub_app_id = GenerateAppIdFromUnhashed(unhashed_app_id);
+  const ManifestId manifest_id = GURL(manifest_id_with_error.value());
+  AppId sub_app_id = GenerateAppIdFromManifestId(manifest_id);
   WebAppProvider* provider = GetWebAppProvider(render_frame_host());
   const WebApp* app = provider->registrar_unsafe().GetAppById(sub_app_id);
 
@@ -284,23 +404,22 @@ void SubAppsServiceImpl::RemoveSubApp(
       *calling_app_id != *app->parent_app_id() ||
       !provider->registrar_unsafe().IsInstalled(sub_app_id)) {
     return std::move(callback).Run(SubAppsServiceRemoveResult::New(
-        unhashed_app_id_path, SubAppsServiceResultCode::kFailure));
+        manifest_id_path, SubAppsServiceResultCode::kFailure));
   }
 
   provider->install_finalizer().UninstallExternalWebApp(
       sub_app_id, WebAppManagement::Type::kSubApp,
       webapps::WebappUninstallSource::kSubApp,
       base::BindOnce(
-          [](std::string unhashed_app_id_path,
+          [](std::string manifest_id_path,
              webapps::UninstallResultCode result_code) {
             SubAppsServiceResultCode result =
                 result_code == webapps::UninstallResultCode::kSuccess
                     ? SubAppsServiceResultCode::kSuccess
                     : SubAppsServiceResultCode::kFailure;
-            return SubAppsServiceRemoveResult::New(unhashed_app_id_path,
-                                                   result);
+            return SubAppsServiceRemoveResult::New(manifest_id_path, result);
           },
-          unhashed_app_id_path)
+          manifest_id_path)
           .Then(std::move(callback)));
 }
 

@@ -230,7 +230,10 @@ void CaptureLabelView::UpdateIconAndText() {
                      : IDS_ASH_SCREEN_CAPTURE_LABEL_FULLSCREEN_VIDEO_RECORD_CLAMSHELL));
       break;
     case CaptureModeSource::kWindow: {
-      if (in_tablet_mode) {
+      // If the bar is anchored to the window, then we already have a pre-
+      // selected game window for the game dashboard, and there is no need to
+      // show the label.
+      if (in_tablet_mode && !capture_mode_session_->IsBarAnchoredToWindow()) {
         text = l10n_util::GetStringUTF16(
             is_capturing_image
                 ? IDS_ASH_SCREEN_CAPTURE_LABEL_WINDOW_IMAGE_CAPTURE
@@ -312,6 +315,12 @@ void CaptureLabelView::AddedToWidget() {
   parent->StackAtBottom(shadow_->GetLayer());
 }
 
+void CaptureLabelView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
+  // The shadow layer is a sibling of this view's layer, and should have the
+  // same bounds.
+  shadow_->SetContentBounds(layer()->bounds());
+}
+
 void CaptureLabelView::Layout() {
   gfx::Rect label_bounds = GetLocalBounds();
   capture_button_container_->SetBoundsRect(label_bounds);
@@ -322,10 +331,6 @@ void CaptureLabelView::Layout() {
   // This is necessary to update the focus ring, which is a child view of
   // `this`.
   views::View::Layout();
-
-  // The shadow layer is a sibling of this view's layer, and should have the
-  // same bounds.
-  shadow_->SetContentBounds(layer()->bounds());
 }
 
 gfx::Size CaptureLabelView::CalculatePreferredSize() const {

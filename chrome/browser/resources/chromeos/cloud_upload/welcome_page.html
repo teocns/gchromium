@@ -7,6 +7,11 @@
     padding-inline-start: 20px;
   }
 
+  [slot='title'] {
+    /* override the default margin for H1. */
+    margin: 0;
+  }
+
   :host-context([theme='legacy']) cr-button {
     border-radius: 16px;
   }
@@ -69,15 +74,14 @@
 <svg slot="header-image" viewBox="0 0 448 200">
   <use href="images/welcome.svg#EXPORT_image"></use>
 </svg>
-<div slot="title">
+<h1 slot="title">
   Set up Microsoft 365 to open files
-</div>
+</h1>
 <div slot="body">
   <div id="description"></div>
   <p>
-    <a href="#" target="_blank">Learn more</a> about Microsoft 365 on your
-    Chromebook. Read the <a href="#" target="_blank">Microsoft terms and
-    conditions.</a>
+    <a href="#" onclick="e => e.preventDefault()">Learn more</a> about
+    Microsoft 365 on your Chromebook.
   </p>
 </div>
 <div slot="button-container">

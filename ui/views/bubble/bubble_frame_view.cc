@@ -103,6 +103,17 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
   main_image_->SetVisible(false);
   subtitle_->SetVisible(false);
 
+  auto minimize = CreateMinimizeButton(base::BindRepeating(
+      [](BubbleFrameView* view, const ui::Event& event) {
+        if (view->input_protector_.IsPossiblyUnintendedInteraction(event))
+          return;
+        view->GetWidget()->Minimize();
+      },
+      this));
+  minimize->SetProperty(views::kElementIdentifierKey, kMinimizeButtonElementId);
+  minimize->SetVisible(false);
+  minimize_ = AddChildView(std::move(minimize));
+
   auto close = CreateCloseButton(base::BindRepeating(
       [](BubbleFrameView* view, const ui::Event& event) {
         if (view->input_protector_.IsPossiblyUnintendedInteraction(event))
@@ -111,18 +122,9 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
             Widget::ClosedReason::kCloseButtonClicked);
       },
       this));
+  close->SetProperty(views::kElementIdentifierKey, kCloseButtonElementId);
   close->SetVisible(false);
   close_ = AddChildView(std::move(close));
-
-  auto minimize = CreateMinimizeButton(base::BindRepeating(
-      [](BubbleFrameView* view, const ui::Event& event) {
-        if (view->input_protector_.IsPossiblyUnintendedInteraction(event))
-          return;
-        view->GetWidget()->Minimize();
-      },
-      this));
-  minimize->SetVisible(false);
-  minimize_ = AddChildView(std::move(minimize));
 
   auto progress_indicator = std::make_unique<ProgressBar>(
       kProgressIndicatorHeight, /*allow_round_corner=*/false);
@@ -494,7 +496,7 @@ void BubbleFrameView::Layout() {
                              0, 0));
     }
     button->SetPosition(
-        gfx::Point(buttons_rect.right() - button->width(), buttons_rect.y()));
+        gfx::Point(buttons_rect.x() - button->width(), buttons_rect.y()));
     buttons_rect.Union(button->bounds());
   }
   // Add a left margin that equals the right margin.
@@ -749,6 +751,11 @@ gfx::Rect BubbleFrameView::GetUpdatedWindowBounds(
     bool adjust_to_fit_available_bounds) {
   gfx::Size size(GetFrameSizeForClientSize(client_size));
 
+  // Save these values; if the arrow changes as a result of mirroring (or
+  // un-mirroring) the border will need to be repainted.
+  const auto old_arrow = bubble_border_->arrow();
+  const auto old_offset = bubble_border_->arrow_offset();
+
   if (adjust_to_fit_available_bounds &&
       BubbleBorder::has_arrow(delegate_arrow)) {
     // Get the desired bubble bounds without adjustment.
@@ -788,11 +795,18 @@ gfx::Rect BubbleFrameView::GetUpdatedWindowBounds(
     }
   }
 
+  // Check to see if any of the positioning values have changed.
+  if (bubble_border_->arrow() != old_arrow ||
+      bubble_border_->arrow_offset() != old_offset) {
+    InvalidateLayout();
+    SchedulePaint();
+  }
+
   return bubble_border_->GetBounds(anchor_rect, size);
 }
 
 void BubbleFrameView::UpdateInputProtectorTimeStamp() {
-  input_protector_.UpdateViewShownTimeStamp();
+  input_protector_.MaybeUpdateViewProtectedTimeStamp();
 }
 
 void BubbleFrameView::ResetViewShownTimeStampForTesting() {
@@ -881,9 +895,6 @@ void BubbleFrameView::MirrorArrowIfOutOfBounds(
     if (GetOverflowLength(available_bounds, mirror_bounds, vertical) >=
         GetOverflowLength(available_bounds, window_bounds, vertical)) {
       bubble_border_->set_arrow(arrow);
-    } else {
-      InvalidateLayout();
-      SchedulePaint();
     }
   }
 }
@@ -936,8 +947,6 @@ void BubbleFrameView::OffsetArrowIfOutOfBounds(
   // to the left, and that means negative offset.
   bubble_border_->set_arrow_offset(bubble_border_->arrow_offset() -
                                    offscreen_adjust);
-  if (offscreen_adjust)
-    SchedulePaint();
 }
 
 int BubbleFrameView::GetFrameWidthForClientWidth(int client_width) const {
@@ -1126,5 +1135,9 @@ ADD_PROPERTY_METADATA(BubbleBorder::Arrow, Arrow)
 ADD_PROPERTY_METADATA(bool, DisplayVisibleArrow)
 ADD_PROPERTY_METADATA(SkColor, BackgroundColor, ui::metadata::SkColorConverter)
 END_METADATA
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(BubbleFrameView,
+                                      kMinimizeButtonElementId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(BubbleFrameView, kCloseButtonElementId);
 
 }  // namespace views

@@ -31,11 +31,13 @@
 
 #import "base/files/file_path.h"
 #import "base/files/file_util.h"
+#import "base/mac/foundation_util.h"
 #import "base/strings/string_piece.h"
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/tools/strings/grit_header_parsing.h"
 #import "ui/base/resource/data_pack.h"
 #import "ui/base/resource/resource_handle.h"
+#import "ui/base/resource/resource_scale_factor.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -144,8 +146,8 @@ NSDictionary* LoadResourcesListFromHeaders(NSArray* header_list,
 
   std::vector<base::FilePath> headers;
   for (NSString* header in header_list) {
-    headers.push_back(base::FilePath(base::SysNSStringToUTF8(
-        [root_header_dir stringByAppendingPathComponent:header])));
+    headers.push_back(base::mac::NSStringToFilePath(
+        [root_header_dir stringByAppendingPathComponent:header]));
   }
 
   absl::optional<ResourceMap> resource_map =

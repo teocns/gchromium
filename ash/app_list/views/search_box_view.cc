@@ -32,6 +32,8 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/typography.h"
+#include "ash/user_education/user_education_class_properties.h"
+#include "ash/user_education/user_education_constants.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -94,10 +96,11 @@ constexpr auto kTextFieldMarginsForAppListBubble =
 
 // The default PlaceholderTextTypes used for productivity launcher. Randomly
 // selected when placeholder text would be shown.
-constexpr SearchBoxView::PlaceholderTextType kDefaultPlaceholders[3] = {
+constexpr SearchBoxView::PlaceholderTextType kDefaultPlaceholders[] = {
     SearchBoxView::PlaceholderTextType::kShortcuts,
     SearchBoxView::PlaceholderTextType::kTabs,
     SearchBoxView::PlaceholderTextType::kSettings,
+    SearchBoxView::PlaceholderTextType::kImages,
 };
 
 // PlaceholderTextTypes used for productivity launcher for cloud gaming devices.
@@ -185,36 +188,37 @@ ui::ColorId GetFocusColorId(bool use_jelly_colors) {
 
 }  // namespace
 
-class SearchBoxView::FocusRingLayer : public ui::Layer, ui::LayerDelegate {
+class SearchBoxView::FocusRingLayer : public ui::LayerOwner, ui::LayerDelegate {
  public:
-  FocusRingLayer() : Layer(ui::LAYER_TEXTURED) {
-    SetName("search_box/FocusRing");
-    SetFillsBoundsOpaquely(false);
-    set_delegate(this);
+  FocusRingLayer()
+      : LayerOwner(std::make_unique<ui::Layer>(ui::LAYER_TEXTURED)) {
+    layer()->SetName("search_box/FocusRing");
+    layer()->SetFillsBoundsOpaquely(false);
+    layer()->set_delegate(this);
   }
   FocusRingLayer(const FocusRingLayer&) = delete;
   FocusRingLayer& operator=(const FocusRingLayer&) = delete;
-  ~FocusRingLayer() override {}
+  ~FocusRingLayer() override = default;
 
   void SetColor(SkColor color) {
     if (color == color_) {
       return;
     }
     color_ = color;
-    SchedulePaint(gfx::Rect(size()));
+    layer()->SchedulePaint(gfx::Rect(layer()->size()));
   }
 
  private:
   // views::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override {
-    ui::PaintRecorder recorder(context, bounds().size());
+    ui::PaintRecorder recorder(context, layer()->size());
     gfx::Canvas* canvas = recorder.canvas();
 
     // When using strokes to draw a rect, the bounds set is the center of the
     // rect, which means that setting draw bounds to `bounds()` will leave half
     // of the border outside the layer that may not be painted. Shrink the draw
     // bounds by half of the width to solve this problem.
-    gfx::Rect draw_bounds(bounds().size());
+    gfx::Rect draw_bounds(layer()->size());
     draw_bounds.Inset(kSearchBoxFocusRingWidth / 2);
 
     cc::PaintFlags flags;
@@ -226,7 +230,7 @@ class SearchBoxView::FocusRingLayer : public ui::Layer, ui::LayerDelegate {
   }
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                   float new_device_scale_factor) override {
-    SchedulePaint(gfx::Rect(size()));
+    layer()->SchedulePaint(gfx::Rect(layer()->size()));
   }
 
   SkColor color_ = gfx::kPlaceholderColor;
@@ -244,6 +248,13 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
   SearchBoxModel* const search_box_model =
       model_provider->search_model()->search_box();
   search_box_model_observer_.Observe(search_box_model);
+
+  if (features::IsUserEducationEnabled()) {
+    // NOTE: Set `kHelpBubbleContextKey` before `views::kElementIdentifierKey`
+    // in case registration causes a help bubble to be created synchronously.
+    SetProperty(kHelpBubbleContextKey, HelpBubbleContext::kAsh);
+    SetProperty(views::kElementIdentifierKey, kSearchBoxViewElementId);
+  }
 
   if (is_jelly_enabled_) {
     auto font_list = TypographyProvider::Get()->ResolveTypographyToken(
@@ -524,7 +535,7 @@ void SearchBoxView::OnThemeChanged() {
 
 void SearchBoxView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   if (focus_ring_layer_)
-    focus_ring_layer_->SetBounds(bounds());
+    focus_ring_layer_->layer()->SetBounds(bounds());
 }
 
 void SearchBoxView::AddedToWidget() {
@@ -534,8 +545,8 @@ void SearchBoxView::AddedToWidget() {
     focus_ring_layer_ = std::make_unique<FocusRingLayer>();
     focus_ring_layer_->SetColor(
         GetColorProvider()->GetColor(GetFocusColorId(is_jelly_enabled_)));
-    layer()->parent()->Add(focus_ring_layer_.get());
-    layer()->parent()->StackAtBottom(focus_ring_layer_.get());
+    layer()->parent()->Add(focus_ring_layer_->layer());
+    layer()->parent()->StackAtBottom(focus_ring_layer_->layer());
     UpdateSearchBoxFocusPaint();
   }
 }
@@ -580,9 +591,9 @@ void SearchBoxView::UpdateSearchBoxFocusPaint() {
   // Paints the focus ring if the search box is focused.
   if (search_box()->HasFocus() && !is_search_box_active() &&
       view_delegate_->KeyboardTraversalEngaged()) {
-    focus_ring_layer_->SetVisible(true);
+    focus_ring_layer_->layer()->SetVisible(true);
   } else {
-    focus_ring_layer_->SetVisible(false);
+    focus_ring_layer_->layer()->SetVisible(false);
   }
 }
 
@@ -935,6 +946,15 @@ void SearchBoxView::UpdatePlaceholderTextAndAccessibleName() {
       search_box()->SetAccessibleName(l10n_util::GetStringFUTF16(
           a11y_name_template, l10n_util::GetStringUTF16(
                                   IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_GAMES)));
+      break;
+    case PlaceholderTextType::kImages:
+      search_box()->SetPlaceholderText(l10n_util::GetStringFUTF16(
+          IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE,
+          l10n_util::GetStringUTF16(
+              IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_IMAGES)));
+      search_box()->SetAccessibleName(l10n_util::GetStringFUTF16(
+          a11y_name_template, l10n_util::GetStringUTF16(
+                                  IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_IMAGES)));
       break;
   }
 }

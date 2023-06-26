@@ -27,6 +27,7 @@
 #include "net/base/load_states.h"
 #include "net/base/network_delegate.h"
 #include "net/base/transport_info.h"
+#include "net/base/upload_progress.h"
 #include "net/cookies/cookie_setting_override.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
@@ -124,6 +125,24 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
    private:
     mojo::Remote<mojom::URLLoaderClient> mojo_client_;
     base::WeakPtr<mojom::URLLoaderClient> sync_client_;
+  };
+
+  // A subset of the fields in mojom::LoadInfo.
+  struct PartialLoadInfo final {
+    PartialLoadInfo() = default;
+    PartialLoadInfo(net::LoadStateWithParam load_state,
+                    net::UploadProgress upload_progress);
+
+    // Avoid accidentally copying this object as `load_state` contains a string.
+    PartialLoadInfo(const PartialLoadInfo&) = delete;
+    PartialLoadInfo& operator=(const PartialLoadInfo&) = delete;
+
+    // Moving it is good.
+    PartialLoadInfo(PartialLoadInfo&&) = default;
+    PartialLoadInfo& operator=(PartialLoadInfo&&) = default;
+
+    net::LoadStateWithParam load_state;
+    net::UploadProgress upload_progress;
   };
 
   // |delete_callback| tells the URLLoader's owner to destroy the URLLoader.
@@ -269,7 +288,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   void SetEnableReportingRawHeaders(bool enable);
 
-  mojom::LoadInfoPtr CreateLoadInfo();
+  // Returns a subset of the info in mojom::LoadInfo. This is sufficient to make
+  // a decision on whether to call CreateLoadInfo() for this loader.
+  PartialLoadInfo GetPartialLoadInfo() const;
+
+  // Returns a mojom::LoadInfo, reusing the data returned by
+  // GetPartialLoadInfo().
+  mojom::LoadInfoPtr CreateLoadInfo(const PartialLoadInfo& partial_load_info);
 
   // Gets the URLLoader associated with this request.
   static URLLoader* ForRequest(const net::URLRequest& request);
@@ -495,7 +520,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   raw_ptr<net::URLRequestContext> url_request_context_;
 
-  raw_ptr<mojom::NetworkContextClient> network_context_client_;
+  raw_ptr<mojom::NetworkContextClient, DanglingUntriaged>
+      network_context_client_;
   DeleteCallback delete_callback_;
 
   int32_t options_;
@@ -545,10 +571,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   mojo::ScopedDataPipeConsumerHandle consumer_handle_;
 
   // Sniffing state and CORB state.
-  std::unique_ptr<corb::ResponseAnalyzer> corb_analyzer_;
   bool is_more_corb_sniffing_needed_ = false;
   bool is_more_mime_sniffing_needed_ = false;
   const raw_ref<corb::PerFactoryState> per_factory_corb_state_;
+  // `corb_analyzer_` must be destructed before `per_factory_corb_state_`.
+  std::unique_ptr<corb::ResponseAnalyzer> corb_analyzer_;
 
   std::unique_ptr<ResourceScheduler::ScheduledResourceRequest>
       resource_scheduler_request_handle_;

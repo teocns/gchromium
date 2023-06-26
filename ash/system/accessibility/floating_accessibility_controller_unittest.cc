@@ -254,6 +254,23 @@ TEST_F(FloatingAccessibilityControllerTest, KioskImeTrayBottomButtons) {
   EXPECT_FALSE(GetImeTray()->ShouldShowBottomButtons());
 }
 
+TEST_F(FloatingAccessibilityControllerTest,
+       ImeTrayNotOverlapWithFloatingBubble) {
+  features_.InitAndEnableFeature(features::kKioskEnableImeButton);
+
+  SetUpVisibleMenu();
+
+  // Tray bubble is visible when  a user taps on the IME icon.
+  GetImeTray()->PerformAction(CreateTapEvent());
+
+  auto* ime_tray = GetImeTray()->GetBubbleView();
+  ASSERT_TRUE(ime_tray);
+
+  // The IME tray should not overlap with the floating accessibility bubble.
+  EXPECT_FALSE(controller()->bubble_view()->GetBoundsInScreen().Intersects(
+      ime_tray->GetBoundsInScreen()));
+}
+
 TEST_F(FloatingAccessibilityControllerTest, MenuIsNotShownWhenNotEnabled) {
   accessibility_controller()->ShowFloatingMenuIfEnabled();
   EXPECT_EQ(controller(), nullptr);
@@ -337,8 +354,8 @@ TEST_F(FloatingAccessibilityControllerTest, CanChangePosition) {
   // Loop through all positions twice.
   for (int i = 0; i < 2; i++) {
     for (const auto& test : kTestCases) {
-      SCOPED_TRACE(
-          base::StringPrintf("Testing position #[%d]", test.expected_position));
+      SCOPED_TRACE(base::StringPrintf(
+          "Testing position #[%d]", static_cast<int>(test.expected_position)));
       // Tap the position button.
       ui::GestureEvent event = CreateTapEvent();
       button->OnGestureEvent(&event);
@@ -503,8 +520,8 @@ TEST_F(FloatingAccessibilityControllerTest, CollisionWithAutoclicksMenu) {
   // Loop through all positions twice.
   for (int i = 0; i < 2; i++) {
     for (const auto& test : kTestCases) {
-      SCOPED_TRACE(
-          base::StringPrintf("Testing position #[%d]", test.expected_position));
+      SCOPED_TRACE(base::StringPrintf(
+          "Testing position #[%d]", static_cast<int>(test.expected_position)));
       // Tap the position button.
       {
         ui::GestureEvent event = CreateTapEvent();
@@ -620,7 +637,7 @@ TEST_F(FloatingAccessibilityControllerTest, AccelatorFocusMenu) {
   views::FocusManager* focus_manager = widget()->GetFocusManager();
 
   Shell::Get()->accelerator_controller()->PerformActionIfEnabled(
-      AcceleratorAction::FOCUS_SHELF, {});
+      AcceleratorAction::kFocusShelf, {});
   // If nothing else is enabled, it should focus on the detailed view button.
   EXPECT_EQ(focus_manager->GetFocusedView(),
             GetMenuButton(FloatingAccessibilityView::ButtonId::kSettingsList));
@@ -631,7 +648,7 @@ TEST_F(FloatingAccessibilityControllerTest, AccelatorFocusMenu) {
             GetMenuButton(FloatingAccessibilityView::ButtonId::kSettingsList));
 
   Shell::Get()->accelerator_controller()->PerformActionIfEnabled(
-      AcceleratorAction::FOCUS_SHELF, {});
+      AcceleratorAction::kFocusShelf, {});
   // It should get back to the settings list button.
   EXPECT_EQ(focus_manager->GetFocusedView(),
             GetMenuButton(FloatingAccessibilityView::ButtonId::kSettingsList));
@@ -643,7 +660,7 @@ TEST_F(FloatingAccessibilityControllerTest, AccelatorFocusMenu) {
   // We should be focused on the first button in the menu.
   // Order: select to speak, virtual keyboard, settings menu, position.
   Shell::Get()->accelerator_controller()->PerformActionIfEnabled(
-      AcceleratorAction::FOCUS_SHELF, {});
+      AcceleratorAction::kFocusShelf, {});
   EXPECT_EQ(focus_manager->GetFocusedView(),
             GetMenuButton(FloatingAccessibilityView::ButtonId::kSelectToSpeak));
 }

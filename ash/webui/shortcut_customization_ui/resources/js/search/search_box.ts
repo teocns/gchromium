@@ -13,6 +13,7 @@ import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_element
 import {CrToolbarSearchFieldElement} from 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar_search_field.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
+import {IronDropdownElement} from 'chrome://resources/polymer/v3_0/iron-dropdown/iron-dropdown.js';
 import {IronListElement} from 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -31,8 +32,6 @@ import {getShortcutSearchHandler} from './shortcut_search_handler.js';
  * results.
  */
 
-// TODO(longbowei): This value is temporary. Update it once more information is
-// provided.
 const MAX_NUM_RESULTS = 5;
 // This number was chosen arbitrarily to be a reasonable limit. Most
 // searches will not be anywhere close to this.
@@ -143,9 +142,12 @@ export class SearchBoxElement extends SearchBoxElementBase implements
   override connectedCallback(): void {
     super.connectedCallback();
 
-    this.searchInputElement =
-        strictQuery('#search', this.shadowRoot, CrToolbarSearchFieldElement)
-            .getSearchInput();
+    const searchFieldElement =
+        strictQuery('#search', this.shadowRoot, CrToolbarSearchFieldElement);
+    searchFieldElement.addEventListener(
+        'transitionend', this.onSearchFieldTransitionEnd.bind(this));
+
+    this.searchInputElement = searchFieldElement.getSearchInput();
 
     // Focus the search bar when the app opens.
     afterNextRender(this, () => {
@@ -254,6 +256,18 @@ export class SearchBoxElement extends SearchBoxElementBase implements
       // Select all search input text once the initial state is set.
       afterNextRender(this, () => this.searchInputElement.select());
     }
+  }
+
+  private onSearchFieldTransitionEnd(): void {
+    // Cast to IronDropdownElement since the interface cannot be used as a
+    // value.
+    const ironDropdown =
+        (strictQuery('iron-dropdown', this.shadowRoot, HTMLElement) as
+         IronDropdownElement);
+
+    // Resize the dropdown once the search bar has finishing resizing to avoid
+    // misalignment when the window resizes.
+    ironDropdown.notifyResize();
   }
 
   private onKeyDown(e: KeyboardEvent): void {
@@ -372,8 +386,15 @@ export class SearchBoxElement extends SearchBoxElementBase implements
 
     this.spinnerActive = true;
 
+    // In some cases, the backend will return search results that are later
+    // filtered out by `this.filterSearchResults`. When that happens, the UI
+    // should still show MAX_NUM_RESULTS results if there are other matching
+    // results. To achieve this, we request more results than we need, and then
+    // cap the number of search results to MAX_NUM_RESULTS.
+    const maxNumberOfSearchResults = MAX_NUM_RESULTS * 3;
+
     this.shortcutSearchHandler
-        .search(stringToMojoString16(query), MAX_NUM_RESULTS)
+        .search(stringToMojoString16(query), maxNumberOfSearchResults)
         .then((response) => {
           this.onSearchResultsReceived(query, response.results);
           this.dispatchEvent(new CustomEvent(
@@ -390,6 +411,10 @@ export class SearchBoxElement extends SearchBoxElementBase implements
 
     this.spinnerActive = false;
     this.searchResults = this.filterSearchResults(results);
+
+    // In `this.fetchSearchResults`, we queried for a multiple of
+    // MAX_NUM_RESULTS, so cap the size of the results here after filtering.
+    this.searchResults = this.searchResults.slice(0, MAX_NUM_RESULTS);
 
     // This invalidates whatever SearchResultRow element was previously focused,
     // since it's likely that the element has been removed after the search.

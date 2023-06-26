@@ -25,7 +25,6 @@
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/color_utils.h"
-#include "ui/native_theme/native_theme.h"
 
 namespace content {
 
@@ -270,13 +269,6 @@ void BrowserAccessibilityStateImpl::UpdateHistogramsOnUIThread() {
 
   UMA_HISTOGRAM_BOOLEAN("Accessibility.ManuallyEnabled",
                         force_renderer_accessibility_);
-#if BUILDFLAG(IS_WIN)
-  UMA_HISTOGRAM_ENUMERATION(
-      "Accessibility.WinHighContrastTheme",
-      ui::NativeTheme::GetInstanceForNativeUi()
-          ->GetPlatformHighContrastColorScheme(),
-      ui::NativeTheme::PlatformHighContrastColorScheme::kMaxValue);
-#endif
 
   ui_thread_done_ = true;
   if (other_thread_done_ && background_thread_done_callback_)
@@ -323,7 +315,7 @@ ui::AXMode BrowserAccessibilityStateImpl::GetAccessibilityMode() {
   // TODO(accessibility) Combine this with the AXMode we store in AXPlatformNode
   // into a single global AXMode tracker in ui/accessibility. The current
   // situation of storing in two places could lead to misalignment.
-  DCHECK_EQ(accessibility_mode_, ui::AXPlatformNode::GetAccessibilityMode())
+  CHECK_EQ(accessibility_mode_, ui::AXPlatformNode::GetAccessibilityMode())
       << "Accessibility modes in content and UI are misaligned.";
   return accessibility_mode_;
 }
@@ -407,7 +399,7 @@ void BrowserAccessibilityStateImpl::AddAccessibilityModeFlags(ui::AXMode mode) {
     return;
   }
 
-  bool disallow_changes;
+  bool disallow_changes = false;
 
   // If the --force-renderer-accessibility command line flag is present and an
   // AXMode bundle has been provided as an argument, then the AXMode bundle

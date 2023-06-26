@@ -24,6 +24,7 @@
 #include "base/timer/timer.h"
 #include "base/types/variant_util.h"
 #include "build/build_config.h"
+#include "clipboard_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -31,6 +32,7 @@
 #include "ui/base/clipboard/clipboard_constants.h"
 #include "ui/base/clipboard/clipboard_metrics.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
+#include "ui/base/clipboard/clipboard_util.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/base/data_transfer_policy/data_transfer_endpoint_serializer.h"
@@ -556,7 +558,9 @@ void ClipboardOzone::ReadRTF(ClipboardBuffer buffer,
 void ClipboardOzone::ReadPng(ClipboardBuffer buffer,
                              const DataTransferEndpoint* data_dst,
                              ReadPngCallback callback) const {
-  auto clipboard_data = ReadPngInternal(buffer);
+  auto clipboard_data =
+      async_clipboard_ozone_->ReadClipboardDataSetSourceAndWait(buffer,
+                                                                kMimeTypePNG);
 
   if (!IsReadAllowed(GetSource(buffer), data_dst, clipboard_data)) {
     std::move(callback).Run(std::vector<uint8_t>());
@@ -677,30 +681,31 @@ void ClipboardOzone::WritePortableAndPlatformRepresentations(
   WritePortableTextRepresentation(buffer, objects);
 }
 
-void ClipboardOzone::WriteText(const std::string& text) {
+void ClipboardOzone::WriteText(base::StringPiece text) {
   std::vector<uint8_t> data(text.begin(), text.end());
   async_clipboard_ozone_->InsertData(
       std::move(data), {kMimeTypeText, kMimeTypeLinuxText, kMimeTypeLinuxString,
                         kMimeTypeTextUtf8, kMimeTypeLinuxUtf8String});
 }
 
-void ClipboardOzone::WriteHTML(const std::string& markup,
-                               const std::string* source_url) {
+void ClipboardOzone::WriteHTML(base::StringPiece markup,
+                               absl::optional<base::StringPiece> source_url) {
   std::vector<uint8_t> data(markup.begin(), markup.end());
   async_clipboard_ozone_->InsertData(std::move(data), {kMimeTypeHTML});
 }
 
-void ClipboardOzone::WriteUnsanitizedHTML(const std::string& markup,
-                                          const std::string* source_url) {
+void ClipboardOzone::WriteUnsanitizedHTML(
+    base::StringPiece markup,
+    absl::optional<base::StringPiece> source_url) {
   WriteHTML(markup, source_url);
 }
 
-void ClipboardOzone::WriteSvg(const std::string& markup) {
+void ClipboardOzone::WriteSvg(base::StringPiece markup) {
   std::vector<uint8_t> data(markup.begin(), markup.end());
   async_clipboard_ozone_->InsertData(std::move(data), {kMimeTypeSvg});
 }
 
-void ClipboardOzone::WriteRTF(const std::string& rtf) {
+void ClipboardOzone::WriteRTF(base::StringPiece rtf) {
   std::vector<uint8_t> data(rtf.begin(), rtf.end());
   async_clipboard_ozone_->InsertData(std::move(data), {kMimeTypeRTF});
 }
@@ -711,8 +716,8 @@ void ClipboardOzone::WriteFilenames(std::vector<ui::FileInfo> filenames) {
   async_clipboard_ozone_->InsertData(std::move(data), {kMimeTypeURIList});
 }
 
-void ClipboardOzone::WriteBookmark(const std::string& title,
-                                   const std::string& url) {
+void ClipboardOzone::WriteBookmark(base::StringPiece title,
+                                   base::StringPiece url) {
   // Writes a Mozilla url (UTF16: URL, newline, title)
   std::u16string bookmark =
       base::StrCat({base::UTF8ToUTF16(url) + u"\n" + base::UTF8ToUTF16(title)});
@@ -729,9 +734,17 @@ void ClipboardOzone::WriteWebSmartPaste() {
 }
 
 void ClipboardOzone::WriteBitmap(const SkBitmap& bitmap) {
-  std::vector<unsigned char> output;
-  if (gfx::PNGCodec::FastEncodeBGRASkBitmap(bitmap, false, &output))
-    async_clipboard_ozone_->InsertData(std::move(output), {kMimeTypePNG});
+  // Encode the bitmap to a PNG from the UI thread. Unfortunately we can't hop
+  // to a background thread to perform the encoding because clipboard writes are
+  // (unfortunately) currently synchronous. We could consider making writes
+  // async, then encode the image on a background sequence. We could also
+  // consider storing the image as a bitmap and only encoding to a PNG on paste
+  // (e.g. see https://crrev.com/c/3260985).
+  std::vector<uint8_t> png_bytes =
+      clipboard_util::EncodeBitmapToPngAcceptJank(bitmap);
+  if (!png_bytes.empty()) {
+    async_clipboard_ozone_->InsertData(std::move(png_bytes), {kMimeTypePNG});
+  }
 }
 
 void ClipboardOzone::WriteData(const ClipboardFormatType& format,
@@ -762,13 +775,5 @@ void ClipboardOzone::SetSource(ClipboardBuffer buffer,
   data_src_[buffer] = std::move(data_src);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
-base::span<uint8_t> ClipboardOzone::ReadPngInternal(
-    const ClipboardBuffer buffer) const {
-  DCHECK(CalledOnValidThread());
-
-  return async_clipboard_ozone_->ReadClipboardDataSetSourceAndWait(
-      buffer, kMimeTypePNG);
-}
 
 }  // namespace ui

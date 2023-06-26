@@ -7,6 +7,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/quick_settings_catalogs.h"
 #include "ash/public/cpp/ash_view_ids.h"
+#include "ash/public/cpp/system_tray_client.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -43,9 +44,8 @@ namespace ash {
 namespace {
 
 // Constants used with QsRevamp.
-constexpr int kManagedStateHighlightRadius = 16;
-constexpr SkScalar kManagedStateCornerRadii[] = {16, 16, 16, 16,
-                                                 16, 16, 16, 16};
+constexpr int kManagedStateCornerRadius = 16;
+constexpr float kManagedStateStrokeWidth = 1.0f;
 constexpr auto kManagedStateBorderInsets = gfx::Insets::TLBR(0, 12, 0, 12);
 constexpr gfx::Size kManagedStateImageSize(20, 20);
 
@@ -60,6 +60,14 @@ void ShowEnterpriseInfo(UnifiedSystemTrayController* controller,
   quick_settings_metrics_util::RecordQsButtonActivated(
       QsButtonCatalogName::kManagedButton);
   controller->HandleEnterpriseInfoAction();
+}
+
+// Shows account settings in OS settings, which includes a link to install or
+// open the Family Link app to see supervision settings.
+void ShowAccountSettings() {
+  quick_settings_metrics_util::RecordQsButtonActivated(
+      QsButtonCatalogName::kSupervisedButton);
+  Shell::Get()->system_tray_model()->client()->ShowAccountSettings();
 }
 
 }  // namespace
@@ -111,7 +119,7 @@ ManagedStateView::ManagedStateView(PressedCallback callback,
   if (features::IsQsRevampEnabled()) {
     views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::ON);
     views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
-                                                  kManagedStateHighlightRadius);
+                                                  kManagedStateCornerRadius);
   } else {
     views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::OFF);
   }
@@ -150,11 +158,12 @@ void ManagedStateView::PaintButtonContents(gfx::Canvas* canvas) {
   cc::PaintFlags flags;
   flags.setColor(GetColorProvider()->GetColor(cros_tokens::kCrosSysSeparator));
   flags.setStyle(cc::PaintFlags::kStroke_Style);
+  flags.setStrokeWidth(kManagedStateStrokeWidth);
   flags.setAntiAlias(true);
-  canvas->DrawPath(
-      SkPath().addRoundRect(gfx::RectToSkRect(GetLocalBounds()),
-                            kManagedStateCornerRadii, SkPathDirection::kCW),
-      flags);
+  const float half_stroke_width = kManagedStateStrokeWidth / 2.0f;
+  gfx::RectF bounds(GetLocalBounds());
+  bounds.Inset(half_stroke_width);
+  canvas->DrawRoundRect(bounds, kManagedStateCornerRadius, flags);
 }
 
 BEGIN_METADATA(ManagedStateView, views::Button)
@@ -254,7 +263,7 @@ END_METADATA
 ////////////////////////////////////////////////////////////////////////////////
 
 SupervisedUserView::SupervisedUserView()
-    : ManagedStateView(PressedCallback(),
+    : ManagedStateView(base::BindRepeating(&ShowAccountSettings),
                        IDS_ASH_STATUS_TRAY_SUPERVISED_LABEL,
                        GetSupervisedUserIcon()) {
   SetID(VIEW_ID_QS_SUPERVISED_BUTTON);
@@ -264,9 +273,11 @@ SupervisedUserView::SupervisedUserView()
     SetTooltipText(GetSupervisedUserMessage());
   }
 
-  // TODO(crbug/1026821) Add SupervisedUserView::ButtonPress() overload
-  // to show a similar ui to enterprise managed accounts. Disable button
-  // state for now.
+  if (features::IsQsRevampEnabled()) {
+    return;
+  }
+  // Pre-QsRevamp clicking the button does nothing.
+  SetCallback(PressedCallback());
   SetState(ButtonState::STATE_DISABLED);
   views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::OFF);
 }

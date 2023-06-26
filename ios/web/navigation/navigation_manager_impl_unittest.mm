@@ -73,14 +73,6 @@ bool AppendingUrlRewriter(GURL* url, BrowserState* browser_state) {
   return false;
 }
 
-// Class that exposes GetVisibleWebViewURL.
-class NavigationManagerImplWithVisibleURL : public NavigationManagerImpl {
- public:
-  const GURL& GetVisibleWebViewOriginURL() const {
-    return web_view_cache_.GetVisibleWebViewOriginURL();
-  }
-};
-
 // Mock class for NavigationManagerDelegate.
 class MockNavigationManagerDelegate : public NavigationManagerDelegate {
  public:
@@ -105,6 +97,7 @@ class MockNavigationManagerDelegate : public NavigationManagerDelegate {
                     NavigationInitiationType,
                     bool));
   MOCK_METHOD0(GetPendingItem, NavigationItemImpl*());
+  MOCK_CONST_METHOD0(GetCurrentURL, GURL());
 
  private:
   WebState* GetWebState() override { return web_state_; }
@@ -130,7 +123,6 @@ struct ItemInfoToBeRestored {
 class NavigationManagerTest : public PlatformTest {
  protected:
   NavigationManagerTest() {
-    manager_.reset(new NavigationManagerImpl);
     mock_web_view_ = OCMClassMock([WKWebView class]);
     mock_wk_list_ = [[CRWFakeBackForwardList alloc] init];
     OCMStub([mock_web_view_ backForwardList]).andReturn(mock_wk_list_);
@@ -140,8 +132,8 @@ class NavigationManagerTest : public PlatformTest {
     BrowserURLRewriter::GetInstance()->AddURLRewriter(UrlRewriter);
     url::AddStandardScheme(kSchemeToRewrite, url::SCHEME_WITH_HOST);
 
-    manager_->SetDelegate(&delegate_);
-    manager_->SetBrowserState(&browser_state_);
+    manager_ =
+        std::make_unique<NavigationManagerImpl>(&browser_state_, &delegate_);
   }
 
   // Returns the value of the "#session=" URL hash component from `url`.
@@ -2894,22 +2886,21 @@ TEST_F(NavigationManagerDetachedModeTest, NotSerializable) {
 
 // Tests that GetVisibleWebViewURL() returns a cached GURL.
 TEST_F(NavigationManagerTest, TestGetVisibleWebViewOriginURLCache) {
-  NavigationManagerImplWithVisibleURL manager;
-  manager.SetDelegate(&delegate_);
-  manager.SetBrowserState(&browser_state_);
+  NavigationManagerImpl manager(&browser_state_, &delegate_);
+  NavigationManagerImpl::WKWebViewCache& cache = manager.web_view_cache_;
 
   GURL gurl("http://www.existing.com");
   __block NSURL* nsurl = [NSURL URLWithString:@"http://www.existing.com"];
   OCMStub([mock_web_view_ URL]).andDo(^(NSInvocation* invocation) {
     [invocation setReturnValue:&nsurl];
   });
-  EXPECT_EQ(gurl, manager.GetVisibleWebViewOriginURL());
+  EXPECT_EQ(gurl, cache.GetVisibleWebViewOriginURL());
 
   // Change mock_web_view_'s URL.
   nsurl = [NSURL URLWithString:@"http://www.anotherexisting.com"];
-  EXPECT_NE(gurl, manager.GetVisibleWebViewOriginURL());
+  EXPECT_NE(gurl, cache.GetVisibleWebViewOriginURL());
   EXPECT_EQ(GURL("http://www.anotherexisting.com"),
-            manager.GetVisibleWebViewOriginURL());
+            cache.GetVisibleWebViewOriginURL());
 }
 
 }  // namespace web

@@ -8,10 +8,10 @@ namespace ash {
 
 // Element IDs -----------------------------------------------------------------
 
-DEFINE_ELEMENT_IDENTIFIER_VALUE(kExploreAppListItemViewElementId);
-DEFINE_ELEMENT_IDENTIFIER_VALUE(kHomeButtonElementId);
+DEFINE_ELEMENT_IDENTIFIER_VALUE(kExploreAppElementId);
+DEFINE_ELEMENT_IDENTIFIER_VALUE(kHoldingSpaceTrayElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kSearchBoxViewElementId);
-DEFINE_ELEMENT_IDENTIFIER_VALUE(kSettingsAppListItemViewElementId);
+DEFINE_ELEMENT_IDENTIFIER_VALUE(kSettingsAppElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kShelfViewElementId);
 DEFINE_ELEMENT_IDENTIFIER_VALUE(kUnifiedSystemTrayElementId);
 

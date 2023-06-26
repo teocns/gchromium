@@ -75,7 +75,7 @@ enum ExtractMask {
 
 // Autofill supports assigning <label for=x> tags to inputs if x its id/name,
 // or the id/name of a shadow host element containing the input.
-// This enum is used to track how often each case occurs in practise.
+// This enum is used to track how often each case occurs in practice.
 enum class AssignedLabelSource {
   kId = 0,
   kName = 1,
@@ -103,7 +103,7 @@ inline constexpr char kAssignedLabelSourceHistogram[] =
 // * Detect potential visibility of elements with "overflow: visible".
 //   (See WebElement::GetScrollSize().)
 // * Detect invisibility of elements with
-//   - "position: absolute; {left,top,right,bottol}: -100px"
+//   - "position: absolute; {left,top,right,bottom}: -100px"
 //   - "opacity: 0.0"
 //   - "clip: rect(0,0,0,0)"
 //
@@ -114,7 +114,7 @@ bool IsVisibleIframe(const blink::WebElement& iframe_element);
 //
 // Generally, WebFormElements must not be nested [1]. When parsing HTML, Blink
 // ignores nested form tags; the inner forms therefore never make it into the
-// DOM. Howevery, nested forms can be created and added to the DOM dynamically,
+// DOM. However, nested forms can be created and added to the DOM dynamically,
 // in which case Blink associates each field with its closest ancestor.
 //
 // For some elements, Autofill determines the associated form without Blink's
@@ -130,7 +130,7 @@ blink::WebFormElement GetClosestAncestorFormElement(blink::WebNode node);
 // As a performance improvement, `ancestor_hint` can be set to a suspected
 // ancestor of `x` and `y`. Otherwise, `ancestor_hint` can be arbitrary.
 //
-// This function is a simplified/specialised version of Blink's private
+// This function is a simplified/specialized version of Blink's private
 // Node::compareDocumentPosition().
 //
 // Exposed for testing purposes.
@@ -150,13 +150,14 @@ bool ExtractFormData(const blink::WebFormElement& form_element,
                      const FieldDataManager& field_data_manager,
                      FormData* data);
 
-// Returns true if at least one element from |control_elements| is visible.
+// Returns true if at least one element from |control_elements| is visible in
+// |document|.
 bool IsSomeControlElementVisible(
-    blink::WebLocalFrame* frame,
+    const blink::WebDocument& document,
     const std::set<FieldRendererId>& control_elements);
 
 // Helper functions to assist in getting the canonical form of the action and
-// origin. The action will proplerly take into account <BASE>, and both will
+// origin. The action will properly take into account <BASE>, and both will
 // strip unnecessary data (e.g. query params and HTTP credentials).
 GURL GetCanonicalActionForForm(const blink::WebFormElement& form);
 GURL GetDocumentUrlWithoutAuth(const blink::WebDocument& document);
@@ -192,6 +193,9 @@ bool IsAutofillableInputElement(const blink::WebInputElement& element);
 // Returns true if |element| is one of the element types that can be autofilled.
 // {Text, Radiobutton, Checkbox, Select, TextArea}.
 bool IsAutofillableElement(const blink::WebFormControlElement& element);
+
+// Returns true iff `element` has a "webauthn" autocomplete attribute.
+bool IsWebauthnTaggedElement(const blink::WebFormControlElement& element);
 
 // Returns true if |element| can be edited (enabled and not read only).
 bool IsElementEditable(const blink::WebInputElement& element);
@@ -301,7 +305,7 @@ std::vector<blink::WebElement> GetUnownedIframeElements(
     const blink::WebDocument& document);
 
 // Returns false iff the extraction fails because the number of fields exceeds
-// |kMaxParseableFields|, or |field| and |element| are not nullptr but
+// |kMaxExtractableFields|, or |field| and |element| are not nullptr but
 // |element| is not among |control_elements|.
 bool UnownedFormElementsToFormData(
     const std::vector<blink::WebFormControlElement>& control_elements,
@@ -338,6 +342,11 @@ std::vector<blink::WebFormControlElement> FillOrPreviewForm(
     const FormData& form,
     const blink::WebFormControlElement& element,
     mojom::RendererFormDataAction action);
+
+// Applies undo to the form represented by `form`. `element` is the input
+// element that initiated the autofill undo process. Returns the filled fields.
+void UndoForm(const FormData& form,
+              const blink::WebFormControlElement& form_control_element);
 
 // Clears the suggested values in |control_elements|. The state of
 // |initiating_element| is set to |old_autofill_state|; all other fields are set
@@ -448,6 +457,17 @@ std::u16string GetAriaLabel(const blink::WebDocument& document,
 // attribute of |element|.
 std::u16string GetAriaDescription(const blink::WebDocument& document,
                                   const blink::WebElement& element);
+
+// Helper function to return the next web node of `current_node` in the DOM.
+// `forward` determines the direction to traverse in.
+blink::WebNode NextWebNode(const blink::WebNode& current_node, bool forward);
+
+// Iterates through the node neighbors of form and form control elements in
+// `document` in search of four digit combinations.
+void TraverseDomForFourDigitCombinations(
+    const blink::WebDocument& document,
+    base::OnceCallback<void(const std::vector<std::string>&)>
+        potential_matches);
 
 }  // namespace form_util
 }  // namespace autofill

@@ -17,6 +17,7 @@
 #include "ui/color/color_id.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/focus_ring.h"
 
@@ -307,7 +308,8 @@ void TouchPoint::OnMouseExited(const ui::MouseEvent& event) {
 }
 
 bool TouchPoint::OnMousePressed(const ui::MouseEvent& event) {
-  return static_cast<ActionView*>(parent())->ApplyMousePressed(event);
+  static_cast<ActionView*>(parent())->ApplyMousePressed(event);
+  return true;
 }
 
 bool TouchPoint::OnMouseDragged(const ui::MouseEvent& event) {
@@ -317,7 +319,8 @@ bool TouchPoint::OnMouseDragged(const ui::MouseEvent& event) {
     widget->SetCursor(ui::mojom::CursorType::kGrabbing);
   }
   SetToDrag();
-  return static_cast<ActionView*>(parent())->ApplyMouseDragged(event);
+  static_cast<ActionView*>(parent())->ApplyMouseDragged(event);
+  return true;
 }
 
 void TouchPoint::OnMouseReleased(const ui::MouseEvent& event) {

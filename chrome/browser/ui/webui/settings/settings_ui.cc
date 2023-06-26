@@ -52,7 +52,9 @@
 #include "chrome/browser/ui/webui/settings/profile_info_handler.h"
 #include "chrome/browser/ui/webui/settings/protocol_handlers_handler.h"
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
+#include "chrome/browser/ui/webui/settings/safety_check_extensions_handler.h"
 #include "chrome/browser/ui/webui/settings/safety_check_handler.h"
+#include "chrome/browser/ui/webui/settings/safety_hub_handler.h"
 #include "chrome/browser/ui/webui/settings/search_engines_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_localized_strings_provider.h"
@@ -63,7 +65,6 @@
 #include "chrome/browser/ui/webui/settings/settings_startup_pages_handler.h"
 #include "chrome/browser/ui/webui/settings/shared_settings_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/settings/site_settings_handler.h"
-#include "chrome/browser/ui/webui/settings/site_settings_permissions_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -79,6 +80,7 @@
 #include "components/favicon_base/favicon_url_parser.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/performance_manager/public/features.h"
+#include "components/permissions/features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
@@ -208,8 +210,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(
       std::make_unique<ClearBrowsingDataHandler>(web_ui, profile));
   AddSettingsPageUIHandler(std::make_unique<SafetyCheckHandler>());
+  AddSettingsPageUIHandler(std::make_unique<SafetyHubHandler>(profile));
   AddSettingsPageUIHandler(
-      std::make_unique<SiteSettingsPermissionsHandler>(profile));
+      std::make_unique<SafetyCheckExtensionsHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<DownloadsHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<ExtensionControlHandler>());
   AddSettingsPageUIHandler(std::make_unique<FontHandler>(profile));
@@ -302,11 +305,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       !enable_new_password_manager_page &&
           base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup));
 
-  html_source->AddBoolean(
-      "enablePasswordNotes",
-      !enable_new_password_manager_page &&
-          base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup));
-
   html_source->AddBoolean("enableSendPasswords",
                           !enable_new_password_manager_page &&
                               base::FeatureList::IsEnabled(
@@ -353,6 +351,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   bool show_privacy_guide =
       !chrome::ShouldDisplayManagedUi(profile) && !profile->IsChild();
   html_source->AddBoolean("showPrivacyGuide", show_privacy_guide);
+
+  html_source->AddBoolean(
+      "enableExtendedSettingsDescriptions",
+      base::FeatureList::IsEnabled(features::kExtendedSettingsDescriptions));
 
   html_source->AddBoolean("esbSettingsImprovementsEnabled",
                           base::FeatureList::IsEnabled(
@@ -415,6 +417,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   plural_string_handler->AddLocalizedString(
       "importPasswordsFailuresSummary",
       IDS_SETTINGS_PASSWORDS_IMPORT_FAILURES_SUMMARY);
+  plural_string_handler->AddLocalizedString(
+      "safetyCheckExtensionsReviewLabel",
+      IDS_SETTINGS_SAFETY_CHECK_REVIEW_EXTENSIONS);
   plural_string_handler->AddLocalizedString(
       "safetyCheckNotificationPermissionReviewHeaderLabel",
       IDS_SETTINGS_SAFETY_CHECK_REVIEW_NOTIFICATION_PERMISSIONS_HEADER_LABEL);
@@ -495,8 +500,28 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       base::FeatureList::IsEnabled(
           content_settings::features::kSafetyCheckUnusedSitePermissions));
 
+  html_source->AddBoolean(
+      "safetyCheckExtensionsReviewEnabled",
+      base::FeatureList::IsEnabled(features::kSafetyCheckExtensions));
+
+  html_source->AddBoolean("enableSafetyHub",
+                          base::FeatureList::IsEnabled(features::kSafetyHub));
+
   // Performance
   AddSettingsPageUIHandler(std::make_unique<PerformanceHandler>());
+  html_source->AddBoolean(
+      "isHighEfficiencyMultistateModeEnabled",
+      base::FeatureList::IsEnabled(
+          performance_manager::features::kHighEfficiencyMultistateMode));
+  html_source->AddBoolean(
+      "isDiscardExceptionsImprovementsEnabled",
+      base::FeatureList::IsEnabled(
+          performance_manager::features::kDiscardExceptionsImprovements));
+
+  html_source->AddBoolean(
+      "enablePermissionStorageAccessApi",
+      base::FeatureList::IsEnabled(
+          permissions::features::kPermissionStorageAccessAPI));
 
   TryShowHatsSurveyWithTimeout();
 }

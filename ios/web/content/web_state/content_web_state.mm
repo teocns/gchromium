@@ -4,6 +4,7 @@
 
 #import "ios/web/content/web_state/content_web_state.h"
 
+#import "base/mac/foundation_util.h"
 #import "base/strings/utf_string_conversions.h"
 #import "content/public/browser/navigation_entry.h"
 #import "content/public/browser/web_contents.h"
@@ -11,6 +12,7 @@
 #import "ios/web/content/navigation/content_navigation_context.h"
 #import "ios/web/content/web_state/content_web_state_builder.h"
 #import "ios/web/content/web_state/crc_web_view_proxy_impl.h"
+#import "ios/web/content/web_state/crc_web_viewport_container_view.h"
 #import "ios/web/find_in_page/java_script_find_in_page_manager_impl.h"
 #import "ios/web/public/favicon/favicon_url.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -23,7 +25,10 @@
 #import "net/cert/x509_util.h"
 #import "net/cert/x509_util_apple.h"
 #import "services/network/public/mojom/referrer_policy.mojom-shared.h"
+#import "skia/ext/skia_utils_ios.h"
 #import "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
+#import "ui/display/display.h"
+#import "ui/display/screen.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -41,11 +46,10 @@ class DummySessionCertificatePolicyCache
   explicit DummySessionCertificatePolicyCache(BrowserState* browser_state)
       : SessionCertificatePolicyCache(browser_state) {}
 
-  void UpdateCertificatePolicyCache(
-      const scoped_refptr<web::CertificatePolicyCache>& cache) const override {}
+  void UpdateCertificatePolicyCache() const override {}
 
   void RegisterAllowedCertificate(
-      const scoped_refptr<net::X509Certificate> certificate,
+      const scoped_refptr<net::X509Certificate>& certificate,
       const std::string& host,
       net::CertStatus status) override {}
 };
@@ -97,17 +101,18 @@ ContentWebState::ContentWebState(const CreateParams& params,
       this, params.browser_state, web_contents_->GetController());
   web_frames_manager_ = std::make_unique<ContentWebFramesManager>(this);
 
-  UIView* web_contents_view = web_contents_->GetNativeView();
-  web_contents_view.translatesAutoresizingMaskIntoConstraints = NO;
-  web_contents_view.layer.backgroundColor = UIColor.grayColor.CGColor;
+  UIScrollView* web_contents_view = base::mac::ObjCCastStrict<UIScrollView>(
+      web_contents_->GetNativeView().Get());
 
-  web_view_ = [[UIScrollView alloc] init];
-  web_view_.translatesAutoresizingMaskIntoConstraints = NO;
-  web_view_.backgroundColor = UIColor.redColor;
+  web_view_ = [[CRCWebViewportContainerView alloc] init];
+  // Comment this back in to show visual glitches that might be present.
+  // web_view_.backgroundColor = UIColor.redColor;
 
   CRCWebViewProxyImpl* proxy = [[CRCWebViewProxyImpl alloc] init];
-  proxy.contentView = web_view_;
+  proxy.contentView = web_contents_view;
   web_view_proxy_ = proxy;
+
+  [web_view_ addSubview:web_contents_view];
 
   // These should be moved when the are removed from CRWWebController.
   web::JavaScriptFindInPageManagerImpl::CreateForWebState(this);
@@ -178,7 +183,7 @@ bool ContentWebState::IsWebUsageEnabled() const {
 void ContentWebState::SetWebUsageEnabled(bool enabled) {}
 
 UIView* ContentWebState::GetView() {
-  return session_storage_ ? nil : web_contents_->GetNativeView();
+  return web_view_;
 }
 
 void ContentWebState::DidCoverWebContent() {}
@@ -348,12 +353,8 @@ const GURL& ContentWebState::GetLastCommittedURL() const {
   return item ? item->GetURL() : GURL::EmptyGURL();
 }
 
-GURL ContentWebState::GetCurrentURL(
-    URLVerificationTrustLevel* trust_level) const {
-  // TODO(crbug.com/1419001): Make sure that callers are using this correctly
-  // and that unexpected URLs are not displayed.
-  auto* item = navigation_manager_->GetLastCommittedItem();
-  return item ? item->GetURL() : GURL::EmptyGURL();
+absl::optional<GURL> ContentWebState::GetLastCommittedURLIfTrusted() const {
+  return GetLastCommittedURL();
 }
 
 WebFramesManager* ContentWebState::GetWebFramesManager(ContentWorld world) {
@@ -415,6 +416,14 @@ id<CRWFindInteraction> ContentWebState::GetFindInteraction() {
 }
 
 id ContentWebState::GetActivityItem() {
+  return nil;
+}
+
+UIColor* ContentWebState::GetThemeColor() {
+  auto color = web_contents_->GetThemeColor();
+  if (color) {
+    return skia::UIColorFromSkColor(*color);
+  }
   return nil;
 }
 
@@ -569,6 +578,61 @@ void ContentWebState::AddNewContents(
   delegate_->CreateNewWebState(this, target_url, GetLastCommittedURL(),
                                user_gesture);
   DCHECK(!child_web_contents_);
+}
+
+int ContentWebState::GetTopControlsHeight() {
+  return ([web_view_ maxViewportInsets].top -
+          [web_view_ minViewportInsets].top) *
+         display::Screen::GetScreen()
+             ->GetDisplayNearestWindow(web_contents_->GetTopLevelNativeWindow())
+             .device_scale_factor();
+}
+
+int ContentWebState::GetTopControlsMinHeight() {
+  return 0;
+}
+
+int ContentWebState::GetBottomControlsHeight() {
+  return ([web_view_ maxViewportInsets].bottom -
+          [web_view_ minViewportInsets].bottom) *
+         display::Screen::GetScreen()
+             ->GetDisplayNearestWindow(web_contents_->GetTopLevelNativeWindow())
+             .device_scale_factor();
+}
+
+int ContentWebState::GetBottomControlsMinHeight() {
+  return 0;
+}
+
+bool ContentWebState::ShouldAnimateBrowserControlsHeightChanges() {
+  return true;
+}
+
+bool ContentWebState::DoBrowserControlsShrinkRendererSize(
+    content::WebContents* web_contents) {
+  // We want to remain consistent while scroll is in progress because
+  // we only resize the WebContents at the end of a gesture.
+  if (top_control_scroll_in_progress_) {
+    return cached_shrink_controls_;
+  }
+  UIScrollView* web_contents_view = base::mac::ObjCCastStrict<UIScrollView>(
+      web_contents->GetNativeView().Get());
+  if (web_contents_view.contentInset.top > [web_view_ minViewportInsets].top) {
+    return true;
+  }
+  return false;
+}
+
+bool ContentWebState::OnlyExpandTopControlsAtPageTop() {
+  return false;
+}
+
+void ContentWebState::SetTopControlsGestureScrollInProgress(bool in_progress) {
+  if (in_progress) {
+    cached_shrink_controls_ =
+        DoBrowserControlsShrinkRendererSize(web_contents_.get());
+  }
+  top_control_scroll_in_progress_ = in_progress;
 }
 
 }  // namespace web

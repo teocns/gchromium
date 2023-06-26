@@ -178,6 +178,13 @@ bool XDGToplevelWrapperImpl::SupportsTopLevelImmersiveStatus() const {
   return aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
                                ZAURA_TOPLEVEL_SET_FULLSCREEN_MODE_SINCE_VERSION;
 }
+
+void XDGToplevelWrapperImpl::SetTopInset(int height) {
+  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
+                            ZAURA_TOPLEVEL_SET_TOP_INSET_SINCE_VERSION) {
+    zaura_toplevel_set_top_inset(aura_toplevel_.get(), height);
+  }
+}
 #endif
 
 void XDGToplevelWrapperImpl::UnSetFullscreen() {
@@ -354,6 +361,20 @@ void XDGToplevelWrapperImpl::ConfigureRasterScale(
 }
 
 // static
+void XDGToplevelWrapperImpl::OnRotateFocus(
+    void* data,
+    struct zaura_toplevel* zaura_toplevel,
+    uint32_t serial,
+    uint32_t direction,
+    uint32_t restart) {
+  auto* surface = static_cast<XDGToplevelWrapperImpl*>(data);
+  DCHECK(surface);
+  auto* wayland_toplevel_window =
+      static_cast<WaylandToplevelWindow*>(surface->wayland_window_);
+  wayland_toplevel_window->OnRotateFocus(serial, direction, restart);
+}
+
+// static
 void XDGToplevelWrapperImpl::CloseTopLevel(void* data,
                                            struct xdg_toplevel* xdg_toplevel) {
   auto* surface = static_cast<XDGToplevelWrapperImpl*>(data);
@@ -408,6 +429,19 @@ void XDGToplevelWrapperImpl::InitializeXdgDecoration() {
     zxdg_toplevel_decoration_v1_add_listener(zxdg_toplevel_decoration_.get(),
                                              &decoration_listener, this);
   }
+}
+
+wl::Object<wl_region> XDGToplevelWrapperImpl::CreateAndAddRegion(
+    const std::vector<gfx::Rect>& shape) {
+  wl::Object<wl_region> region(
+      wl_compositor_create_region(connection_->compositor()));
+
+  for (const auto& rect : shape) {
+    wl_region_add(region.get(), rect.x(), rect.y(), rect.width(),
+                  rect.height());
+  }
+
+  return region;
 }
 
 XDGSurfaceWrapperImpl* XDGToplevelWrapperImpl::xdg_surface_wrapper() const {
@@ -498,9 +532,8 @@ bool XDGToplevelWrapperImpl::SupportsScreenCoordinates() const {
              ZAURA_TOPLEVEL_SET_SUPPORTS_SCREEN_COORDINATES_SINCE_VERSION;
 }
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
 void XDGToplevelWrapperImpl::EnableScreenCoordinates() {
-  if (!features::IsWaylandScreenCoordinatesEnabled())
-    return;
   if (!SupportsScreenCoordinates()) {
     LOG(WARNING) << "Server implementation of wayland is incompatible, "
                     "WaylandScreenCoordinatesEnabled has no effect.";
@@ -509,11 +542,13 @@ void XDGToplevelWrapperImpl::EnableScreenCoordinates() {
   zaura_toplevel_set_supports_screen_coordinates(aura_toplevel_.get());
 
   static constexpr zaura_toplevel_listener aura_toplevel_listener = {
-      &ConfigureAuraTopLevel, &OnOriginChange, &ConfigureRasterScale};
+      &ConfigureAuraTopLevel, &OnOriginChange, &ConfigureRasterScale,
+      &OnRotateFocus};
 
   zaura_toplevel_add_listener(aura_toplevel_.get(), &aura_toplevel_listener,
                               this);
 }
+#endif
 
 void XDGToplevelWrapperImpl::SetZOrder(ZOrderLevel z_order) {
   if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
@@ -629,6 +664,15 @@ void XDGToplevelWrapperImpl::SetPersistable(bool persistable) const {
   }
 }
 
+void XDGToplevelWrapperImpl::SetShape(std::unique_ptr<ShapeRects> shape_rects) {
+  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
+                            ZAURA_TOPLEVEL_SET_SHAPE_SINCE_VERSION) {
+    zaura_toplevel_set_shape(
+        aura_toplevel_.get(),
+        shape_rects ? CreateAndAddRegion(*shape_rects).get() : nullptr);
+  }
+}
+
 void XDGToplevelWrapperImpl::ShowSnapPreview(
     WaylandWindowSnapDirection snap_direction,
     bool allow_haptic_feedback) {
@@ -649,6 +693,11 @@ void XDGToplevelWrapperImpl::ShowSnapPreview(
                                   zaura_shell_snap_direction);
     return;
   }
+}
+
+void XDGToplevelWrapperImpl::AckRotateFocus(uint32_t serial, uint32_t handled) {
+  zaura_toplevel_ack_rotate_focus(aura_toplevel_.get(), serial, handled);
+  connection_->Flush();
 }
 
 XDGToplevelWrapperImpl* XDGToplevelWrapperImpl::AsXDGToplevelWrapper() {

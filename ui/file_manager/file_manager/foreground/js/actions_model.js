@@ -100,7 +100,7 @@ class DriveShareAction {
   execute() {
     // Open the Sharing dialog in a new window.
     chrome.fileManagerPrivate.getEntryProperties(
-        [this.entry_], ['shareUrl'], results => {
+        [util.unwrapEntry(this.entry_)], ['shareUrl'], results => {
           if (chrome.runtime.lastError) {
             console.error(chrome.runtime.lastError.message);
             return;
@@ -530,7 +530,7 @@ class DriveManageAction {
    */
   execute() {
     chrome.fileManagerPrivate.getEntryProperties(
-        [this.entry_], ['alternateUrl'], results => {
+        [util.unwrapEntry(this.entry_)], ['alternateUrl'], results => {
           if (chrome.runtime.lastError) {
             console.error(chrome.runtime.lastError.message);
             return;
@@ -826,6 +826,11 @@ export class ActionsModel extends EventTarget {
                         }
                         if (action.id ===
                             constants.FSP_ACTION_HIDDEN_ONEDRIVE_USER_EMAIL) {
+                          return;
+                        }
+                        if (action.id ===
+                            constants
+                                .FSP_ACTION_HIDDEN_ONEDRIVE_REAUTHENTICATION_REQUIRED) {
                           return;
                         }
                         actions[action.id] = new CustomAction(

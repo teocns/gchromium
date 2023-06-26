@@ -54,7 +54,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/sync/driver/sync_service.h"
+#include "components/sync/service/sync_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/zoom/page_zoom.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -357,6 +357,10 @@ std::string SanitizeFrontendQueryParam(
     return value;
 
   if (key == "consolePaste" && value == "blockwebui") {
+    return value;
+  }
+
+  if (key == "noJavaScriptCompletion" && value == "true") {
     return value;
   }
 
@@ -1322,6 +1326,23 @@ void DevToolsUIBindings::DispatchProtocolMessageFromDevToolsFrontend(
     return;
   agent_host_->DispatchProtocolMessage(
       this, base::as_bytes(base::make_span(message)));
+}
+
+void DevToolsUIBindings::RecordCountHistogram(const std::string& name,
+                                              int sample,
+                                              int min,
+                                              int exclusive_max,
+                                              int buckets) {
+  if (!frontend_host_) {
+    return;
+  }
+
+  if (!(min <= sample && sample < exclusive_max && buckets >= 3)) {
+    frontend_host_->BadMessageReceived();
+    return;
+  }
+
+  base::UmaHistogramCustomCounts(name, sample, min, exclusive_max, buckets);
 }
 
 void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,

@@ -49,8 +49,8 @@ def executor_kwargs(logger, test_type, test_environment, run_info_data,
     executor_kwargs = base_executor_kwargs(test_type, test_environment, run_info_data,
                                            **kwargs)
     executor_kwargs["close_after_done"] = True
-    executor_kwargs["supports_eager_pageload"] = False
     executor_kwargs["sanitizer_enabled"] = sanitizer_enabled
+    executor_kwargs["reuse_window"] = kwargs.get("reuse_window", False)
 
     capabilities = {
         "goog:chromeOptions": {
@@ -65,9 +65,6 @@ def executor_kwargs(logger, test_type, test_environment, run_info_data,
             "w3c": True
         }
     }
-
-    if test_type == "testharness":
-        capabilities["pageLoadStrategy"] = "none"
 
     chrome_options = capabilities["goog:chromeOptions"]
     if kwargs["binary"] is not None:
@@ -138,6 +135,9 @@ def executor_kwargs(logger, test_type, test_environment, run_info_data,
     if webtranport_h3_port is not None:
         chrome_options["args"].append(
             f"--origin-to-force-quic-on=web-platform.test:{webtranport_h3_port[0]}")
+
+    if test_type == "wdspec":
+        executor_kwargs["binary_args"] = chrome_options["args"]
 
     executor_kwargs["capabilities"] = capabilities
 

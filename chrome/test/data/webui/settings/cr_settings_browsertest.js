@@ -10,6 +10,7 @@ GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 GEN('#include "build/branding_buildflags.h"');
 GEN('#include "build/build_config.h"');
 GEN('#include "build/chromeos_buildflags.h"');
+GEN('#include "build/config/coverage/buildflags.h"');
 GEN('#include "chrome/browser/preloading/preloading_features.h"');
 GEN('#include "chrome/browser/ui/ui_features.h"');
 GEN('#include "chrome/common/chrome_features.h"');
@@ -21,6 +22,7 @@ GEN('#include "components/autofill/core/common/autofill_features.h"');
 GEN('#include "components/privacy_sandbox/privacy_sandbox_features.h"');
 GEN('#include "content/public/common/content_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
+GEN('#include "components/permissions/features.h"');
 
 GEN('#if !BUILDFLAG(IS_CHROMEOS)');
 GEN('#include "components/language/core/common/language_experiments.h"');
@@ -252,7 +254,11 @@ TEST_F(
       runMochaSuite('ClearBrowsingDataDesktop');
     });
 GEN('#endif');
-
+TEST_F(
+    'CrSettingsClearBrowsingDataTest', 'ClearBrowsingDataForSupervisedUsers',
+    function() {
+      runMochaSuite('ClearBrowsingDataDesktop');
+    });
 
 var CrSettingsMainPageTest = class extends CrSettingsBrowserTest {
   /** @override */
@@ -522,9 +528,67 @@ var CrSettingsPerformancePageTest = class extends CrSettingsBrowserTest {
   }
 };
 
-TEST_F('CrSettingsPerformancePageTest', 'All', function() {
-  mocha.run();
+TEST_F('CrSettingsPerformancePageTest', 'Controls', function() {
+  runMochaSuite('PerformancePage');
 });
+
+TEST_F('CrSettingsPerformancePageTest', 'ExceptionList', function() {
+  runMochaSuite('TabDiscardExceptionList');
+});
+
+var CrSettingsPerformancePageMultistateTest =
+    class extends CrSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/performance_page_test.js';
+  }
+
+  /** @override */
+  get featureListInternal() {
+    return {
+      enabled: [
+        'performance_manager::features::kHighEfficiencyMultistateMode',
+      ],
+    };
+  }
+};
+
+TEST_F('CrSettingsPerformancePageMultistateTest', 'Controls', function() {
+  runMochaSuite('PerformancePageMultistate');
+});
+
+TEST_F('CrSettingsPerformancePageMultistateTest', 'ExceptionList', function() {
+  runMochaSuite('TabDiscardExceptionList');
+});
+
+var CrSettingsPerformancePageDiscardExceptionImprovementsTest =
+    class extends CrSettingsBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://settings/test_loader.html?module=settings/performance_page_test.js';
+  }
+
+  /** @override */
+  get featureListInternal() {
+    return {
+      enabled: [
+        'performance_manager::features::kDiscardExceptionsImprovements',
+      ],
+    };
+  }
+};
+
+TEST_F(
+    'CrSettingsPerformancePageDiscardExceptionImprovementsTest', 'Controls',
+    function() {
+      runMochaSuite('PerformancePage');
+    });
+
+TEST_F(
+    'CrSettingsPerformancePageDiscardExceptionImprovementsTest',
+    'ExceptionList', function() {
+      runMochaSuite('TabDiscardExceptionList');
+    });
 
 var CrSettingsBatteryPageTest = class extends CrSettingsBrowserTest {
   /** @override */
@@ -577,6 +641,7 @@ var CrSettingsPrivacyPageTest = class extends CrSettingsBrowserTest {
     return {
       enabled: [
         'privacy_sandbox::kPrivacySandboxSettings4',
+        'permissions::features::kPermissionStorageAccessAPI',
       ],
     };
   }
@@ -711,9 +776,9 @@ TEST_F(
     });
 
 TEST_F(
-    'CrSettingsPrivacySandboxPageTest',
-    'PrivacySandboxNoticeRestrictedEnabledTests', function() {
-      runMochaSuite('PrivacySandboxNoticeRestrictedEnabledTests');
+    'CrSettingsPrivacySandboxPageTest', 'PrivacySandboxRestrictedEnabledTests',
+    function() {
+      runMochaSuite('PrivacySandboxRestrictedEnabledTests');
     });
 
 TEST_F('CrSettingsPrivacySandboxPageTest', 'TopicsSubpageTests', function() {
@@ -764,12 +829,13 @@ var CrSettingsCookiesPageTest = class extends CrSettingsBrowserTest {
   }
 };
 
-GEN('#if BUILDFLAG(IS_LINUX) && !defined(NDEBUG)');
+GEN('#if ((BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && !defined(NDEBUG)) || BUILDFLAG(USE_JAVASCRIPT_COVERAGE)');
 GEN('#define MAYBE_CookiesPageTest DISABLED_CookiesPageTest');
 GEN('#else');
 GEN('#define MAYBE_CookiesPageTest CookiesPageTest');
 GEN('#endif');
-// TODO(crbug.com/1409653): fix flakiness on Linux debug builds and re-enable.
+// TODO(crbug.com/1409653): fix flakiness on Linux and ChromeOS debug and
+// Javascript code coverage builds and re-enable.
 TEST_F('CrSettingsCookiesPageTest', 'MAYBE_CookiesPageTest', function() {
   runMochaSuite('CrSettingsCookiesPageTest');
 });
@@ -784,12 +850,13 @@ TEST_F('CrSettingsCookiesPageTest', 'LacrosSecondaryProfile', function() {
 });
 GEN('#endif');
 
-GEN('#if BUILDFLAG(IS_LINUX) && !defined(NDEBUG)');
+GEN('#if (BUILDFLAG(IS_LINUX) && !defined(NDEBUG)) || BUILDFLAG(USE_JAVASCRIPT_COVERAGE)');
 GEN('#define MAYBE_PrivacySandboxSettings4Disabled2 DISABLED_PrivacySandboxSettings4Disabled');
 GEN('#else');
 GEN('#define MAYBE_PrivacySandboxSettings4Disabled2 PrivacySandboxSettings4Disabled');
 GEN('#endif');
-// TODO(crbug.com/1409653): fix flakiness on Linux debug builds and re-enable.
+// TODO(crbug.com/1409653): fix flakiness on Linux debug and Javascript code
+// coverage builds and re-enable.
 // The "MAYBE..." portion of the test has a 2 at the end because there is
 // already a macro with the same name defined in this file.
 TEST_F(
@@ -818,6 +885,14 @@ TEST_F('CrSettingsRouteTest', 'Basic', function() {
 
 TEST_F('CrSettingsRouteTest', 'DynamicParameters', function() {
   runMochaSuite('DynamicParameters');
+});
+
+TEST_F('CrSettingsRouteTest', 'SafetyHubReachableTests', function() {
+  runMochaSuite('SafetyHubReachableTests');
+});
+
+TEST_F('CrSettingsRouteTest', 'SafetyHubNotReachableTests', function() {
+  runMochaSuite('SafetyHubNotReachableTests');
 });
 
 // Copied from Polymer 2 test:
@@ -905,6 +980,7 @@ var CrSettingsSiteSettingsPageTest = class extends CrSettingsBrowserTest {
       enabled: [
         'privacy_sandbox::kPrivacySandboxSettings4',
         'content_settings::features::kSafetyCheckUnusedSitePermissions',
+        'permissions::features::kPermissionStorageAccessAPI',
       ],
     };
   }
@@ -954,6 +1030,12 @@ TEST_F(
     'CrSettingsSiteSettingsPageTest',
     'MAYBE_UnusedSitePermissionsReviewDisabled', function() {
       runMochaSuite('UnusedSitePermissionsReviewDisabled');
+    });
+
+TEST_F(
+    'CrSettingsSiteSettingsPageTest', 'PermissionStorageAccessApiDisabled',
+    function() {
+      runMochaSuite('PermissionStorageAccessApiDisabled');
     });
 
 var CrSettingsMenuTest = class extends CrSettingsBrowserTest {
@@ -1011,6 +1093,7 @@ TEST_F('CrSettingsMenuTest', 'All', function() {
  // Flaky on all OSes. TODO(crbug.com/1127733): Enable the test.
  ['ResetPage', 'reset_page_test.js', 'DISABLED_All'],
  ['ResetProfileBanner', 'reset_profile_banner_test.js'],
+ ['SafetyHub', 'safety_hub_test.js'],
  ['SearchEngines', 'search_engines_page_test.js'],
  ['SearchPage', 'search_page_test.js'],
  ['Search', 'search_settings_test.js'],

@@ -46,6 +46,7 @@ import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
 import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
 import "third_party/blink/public/mojom/navigation/navigation_params.mojom";
 import "third_party/blink/public/mojom/navigation/navigation_initiator_activation_and_ad_status.mojom";
+import "third_party/blink/public/mojom/page/browsing_context_group_info.mojom";
 import "third_party/blink/public/mojom/page/page.mojom";
 import "third_party/blink/public/mojom/picture_in_picture_window_options/picture_in_picture_window_options.mojom";
 import "third_party/blink/public/mojom/widget/platform_widget.mojom";
@@ -158,6 +159,9 @@ struct CreateViewParams {
 
   // Base background color of this view. Only used by a local main frame.
   skia.mojom.SkColor? base_background_color;
+
+  // Indicates which browsing context group the page in this view belongs to.
+  blink.mojom.BrowsingContextGroupInfo browsing_context_group_info;
 };
 
 // A union to distinguish between parameters specific to local main frame
@@ -209,6 +213,14 @@ struct CreateLocalMainFrameParams {
   // replace. Will only be set when RenderDocument is enabled, for main frame
   // LocalFrame <-> LocalFrame swap.
   blink.mojom.FrameToken? previous_frame_token;
+
+  // The initial empty document opened by a cross-origin iframe might inherit
+  // the COOP policies of the top-level document but it shouldn't have
+  // crossOriginIsolated capabilities if COOP was initially set by another
+  // origin. Hence, we pass down this boolean to tell the renderer to restrict
+  // those capabilities. For more detail, see
+  // https://github.com/hemeryar/coi-with-popups/blob/main/docs/cross_origin_iframe_popup.MD
+  bool coop_forbids_initial_empty_document_to_be_cross_origin_isolated = true;
 };
 
 // Parameters used for brower-initiated remote main frame creation.
@@ -660,6 +672,17 @@ struct CreateNewWindowReply {
   // The policy container for the new frame that will be created by Blink in
   // response.
   blink.mojom.PolicyContainer policy_container;
+
+  // Indicates which browsing context group the page in this view belongs to.
+  blink.mojom.BrowsingContextGroupInfo browsing_context_group_info;
+
+  // The initial empty document opened by a cross-origin iframe might inherit
+  // the COOP policies of the top-level frame but it shouldn't have
+  // crossOriginIsolated capabilities if COOP was initially set by another
+  // origin. Hence, we pass down this boolean to tell the renderer to restrict
+  // those capabilities. For more detail, see
+  // https://github.com/hemeryar/coi-with-popups/blob/main/docs/cross_origin_iframe_popup.MD
+  bool coop_forbids_initial_empty_document_to_be_cross_origin_isolated = true;
 };
 
 // A per-navigation interface passed along with the BeginNavigation call, used

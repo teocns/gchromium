@@ -8,8 +8,12 @@
 #include "base/functional/callback_helpers.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/crosapi/mojom/prefs.mojom-test-utils.h"
@@ -23,6 +27,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_system.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
@@ -51,36 +56,21 @@ class ExtensionPreferenceApiLacrosBrowserTest
     PrefService* prefs = profile_->GetPrefs();
     // From the lacros perspective, the pref should look extension controlled.
     const PrefService::Preference* pref =
-        prefs->FindPreference(prefs::kLacrosAccessibilityAutoclickEnabled);
+        prefs->FindPreference(prefs::kLacrosAccessibilitySpokenFeedbackEnabled);
     ASSERT_TRUE(pref);
     EXPECT_TRUE(pref->IsExtensionControlled());
-    EXPECT_TRUE(prefs->GetBoolean(prefs::kLacrosAccessibilityAutoclickEnabled));
+    EXPECT_TRUE(
+        prefs->GetBoolean(prefs::kLacrosAccessibilitySpokenFeedbackEnabled));
   }
 
   void CheckPreferencesCleared() {
     PrefService* prefs = profile_->GetPrefs();
     const PrefService::Preference* pref =
-        prefs->FindPreference(prefs::kLacrosAccessibilityAutoclickEnabled);
+        prefs->FindPreference(prefs::kLacrosAccessibilitySpokenFeedbackEnabled);
     ASSERT_TRUE(pref);
     EXPECT_FALSE(pref->IsExtensionControlled());
     EXPECT_FALSE(
-        prefs->GetBoolean(prefs::kLacrosAccessibilityAutoclickEnabled));
-  }
-
-  void SetUp() override {
-    // When the test changes the value of
-    // chrome.accessibilityFeatures.autoclick in Ash, the pref value change is
-    // observed by AccessibilityController and will trigger popping up a dialog
-    // in Ash with the prompt about confirmation of disabling autoclick. The
-    // dialog is not closed when the test is torn down in Lacros, and will
-    // affect other tests running after it if the test runs with shared Ash.
-    // Therefore, we start a unique Ash to run with this test suite to avoid
-    // the test isolation issue.
-    StartUniqueAshChrome(
-        {}, {}, {},
-        "crbug.com/1435317 Switch to shared ash when autoclick disable "
-        "confirmation dialog issue is fixed");
-    ExtensionApiTest::SetUp();
+        prefs->GetBoolean(prefs::kLacrosAccessibilitySpokenFeedbackEnabled));
   }
 
   void SetUpOnMainThread() override {
@@ -150,16 +140,23 @@ IN_PROC_BROWSER_TEST_P(ExtensionPreferenceApiLacrosBrowserTest, Lacros) {
       chromeos::LacrosService::Get()->GetRemote<crosapi::mojom::Prefs>().get());
 
   // At start, the value in ash should not be set.
-  async_waiter.GetPref(crosapi::mojom::PrefPath::kAccessibilityAutoclickEnabled,
-                       &out_value);
+  async_waiter.GetPref(
+      crosapi::mojom::PrefPath::kAccessibilitySpokenFeedbackEnabled,
+      &out_value);
   EXPECT_FALSE(out_value.value().GetBool());
 
+  extensions::ExtensionId test_extension_id;
   base::FilePath extension_path =
       test_data_dir_.AppendASCII("preference/lacros");
   {
     extensions::ResultCatcher catcher;
     ExtensionTestMessageListener listener("ready", ReplyBehavior::kWillReply);
-    EXPECT_TRUE(LoadExtension(extension_path)) << message_;
+    const extensions::Extension* extension = LoadExtension(extension_path);
+    EXPECT_TRUE(extension) << message_;
+    // Save the test extension ID rather than using last_loaded_extension_id as
+    // toggling ChromeVox will cause a ChromeVox helper extension to be
+    // installed in Lacros.
+    test_extension_id = extension->id();
     EXPECT_TRUE(listener.WaitUntilSatisfied());
     // Run the tests.
     listener.Reply("run test");
@@ -168,14 +165,15 @@ IN_PROC_BROWSER_TEST_P(ExtensionPreferenceApiLacrosBrowserTest, Lacros) {
   CheckPreferencesSet();
 
   // In ash, the value should now be set.
-  async_waiter.GetPref(crosapi::mojom::PrefPath::kAccessibilityAutoclickEnabled,
-                       &out_value);
+  async_waiter.GetPref(
+      crosapi::mojom::PrefPath::kAccessibilitySpokenFeedbackEnabled,
+      &out_value);
   EXPECT_TRUE(out_value.value().GetBool());
 
   // The settings should not be reset when the extension is reloaded.
   {
     ExtensionTestMessageListener listener("ready", ReplyBehavior::kWillReply);
-    ReloadExtension(last_loaded_extension_id());
+    ReloadExtension(test_extension_id);
     EXPECT_TRUE(listener.WaitUntilSatisfied());
     listener.Reply("");
   }
@@ -184,8 +182,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionPreferenceApiLacrosBrowserTest, Lacros) {
   // Uninstalling and installing the extension (without running the test that
   // calls the extension API) should clear the settings.
   extensions::TestExtensionRegistryObserver observer(
-      extensions::ExtensionRegistry::Get(profile_), last_loaded_extension_id());
-  UninstallExtension(last_loaded_extension_id());
+      extensions::ExtensionRegistry::Get(profile_), test_extension_id);
+  UninstallExtension(test_extension_id);
   observer.WaitForExtensionUninstalled();
   CheckPreferencesCleared();
 
@@ -194,7 +192,8 @@ IN_PROC_BROWSER_TEST_P(ExtensionPreferenceApiLacrosBrowserTest, Lacros) {
     // default value (false). This only works if Ash correctly implements
     // extension-controlled pref observers.
     async_waiter.GetPref(
-        crosapi::mojom::PrefPath::kAccessibilityAutoclickEnabled, &out_value);
+        crosapi::mojom::PrefPath::kAccessibilitySpokenFeedbackEnabled,
+        &out_value);
     EXPECT_FALSE(out_value.value().GetBool());
   }
 
@@ -205,6 +204,78 @@ IN_PROC_BROWSER_TEST_P(ExtensionPreferenceApiLacrosBrowserTest, Lacros) {
     listener.Reply("");
   }
   CheckPreferencesCleared();
+}
+
+IN_PROC_BROWSER_TEST_P(ExtensionPreferenceApiLacrosBrowserTest,
+                       LacrosSecondaryProfile) {
+  absl::optional<::base::Value> out_value;
+  crosapi::mojom::PrefsAsyncWaiter async_waiter(
+      chromeos::LacrosService::Get()->GetRemote<crosapi::mojom::Prefs>().get());
+
+  // At start, the value in ash should not be set.
+  async_waiter.GetPref(
+      crosapi::mojom::PrefPath::kAccessibilitySpokenFeedbackEnabled,
+      &out_value);
+  EXPECT_FALSE(out_value.value().GetBool());
+
+  // Create a secondary profile.
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  Profile& secondary_profile = profiles::testing::CreateProfileSync(
+      profile_manager, profile_manager->GenerateNextProfileDirectoryPath());
+  ASSERT_FALSE(secondary_profile.IsMainProfile());
+
+  // Load the testing extension in secondary profile.
+  extensions::ResultCatcher catcher;
+  ExtensionTestMessageListener listener_1("ready", ReplyBehavior::kWillReply);
+  extensions::ChromeTestExtensionLoader loader(&secondary_profile);
+  base::FilePath extension_path =
+      test_data_dir_.AppendASCII("preference/lacros_secondary_profile_read");
+  scoped_refptr<const extensions::Extension> extension =
+      loader.LoadExtension(extension_path);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(listener_1.WaitUntilSatisfied());
+
+  // Run the test to verify that testing extension running in secondary
+  // profile reads the default values of the Prefs correctly.
+  listener_1.Reply("run test default value");
+  EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
+
+  // Set the pref value in ash.
+  async_waiter.SetPref(
+      crosapi::mojom::PrefPath::kAccessibilitySpokenFeedbackEnabled,
+      base::Value(true));
+
+  // Verify the value is set in ash side.
+  async_waiter.GetPref(
+      crosapi::mojom::PrefPath::kAccessibilitySpokenFeedbackEnabled,
+      &out_value);
+  EXPECT_TRUE(out_value.value().GetBool());
+
+  // Reload the testing extension in the secondary profile.
+  ExtensionTestMessageListener listener_2("ready", ReplyBehavior::kWillReply);
+  extensions::TestExtensionRegistryObserver observer(
+      extensions::ExtensionRegistry::Get(&secondary_profile), extension->id());
+  extensions::ExtensionService* extension_service =
+      extensions::ExtensionSystem::Get(&secondary_profile)->extension_service();
+  extension_service->ReloadExtension(extension->id());
+  observer.WaitForExtensionLoaded();
+  EXPECT_TRUE(listener_2.WaitUntilSatisfied());
+
+  // Run the test to verify that testing extension running in secondary
+  // profile reads the changed value of the accessibilityFeatures correctly.
+  listener_2.Reply("run test changed value");
+  EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
+
+  // Since lacros browser tests shared the same ash instance, we need to restore
+  // the modified pref in ash to default before exiting the test, so that
+  // it won't affect other lacros browser tests.
+  async_waiter.SetPref(
+      crosapi::mojom::PrefPath::kAccessibilitySpokenFeedbackEnabled,
+      base::Value(false));
+  async_waiter.GetPref(
+      crosapi::mojom::PrefPath::kAccessibilitySpokenFeedbackEnabled,
+      &out_value);
+  EXPECT_FALSE(out_value.value().GetBool());
 }
 
 IN_PROC_BROWSER_TEST_P(ExtensionPreferenceApiLacrosBrowserTest, OnChange) {

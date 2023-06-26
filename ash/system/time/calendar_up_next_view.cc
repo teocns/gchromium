@@ -159,7 +159,7 @@ bool SameEvents(const std::list<google_apis::calendar::CalendarEvent>& a,
   return base::ranges::equal(a, b, [](const auto& a, const auto& b) {
     return a.id() == b.id() &&
            a.start_time().date_time() == b.start_time().date_time() &&
-           a.end_time().date_time() == b.start_time().date_time();
+           a.end_time().date_time() == b.end_time().date_time();
   });
 }
 
@@ -272,7 +272,8 @@ void CalendarUpNextView::Layout() {
   // scrollable, we need to set it's preferred size here so it's bigger
   // than the `scroll_view_` and therefore scrolls. See
   // https://crbug.com/1384131.
-  if (content_view_) {
+  // For single events we want it to be constrained to the scroll view width.
+  if (content_view_ && displayed_events_.size() > 1) {
     content_view_->SizeToPreferredSize();
   }
 

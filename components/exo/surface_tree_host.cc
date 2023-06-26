@@ -45,6 +45,7 @@
 #include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/presentation_feedback.h"
@@ -103,17 +104,11 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 SurfaceTreeHost::SurfaceTreeHost(const std::string& window_name)
     : host_window_(
           std::make_unique<aura::Window>(nullptr,
-                                         aura::client::WINDOW_TYPE_CONTROL)) {
-  host_window_->SetName(window_name);
-  host_window_->Init(ui::LAYER_SOLID_COLOR);
-  host_window_->set_owned_by_parent(false);
-  // The host window is a container of surface tree. It doesn't handle pointer
-  // events.
-  host_window_->SetEventTargetingPolicy(
-      aura::EventTargetingPolicy::kDescendantsOnly);
-  host_window_->SetEventTargeter(std::make_unique<CustomWindowTargeter>(this));
-  layer_tree_frame_sink_holder_ = std::make_unique<LayerTreeFrameSinkHolder>(
-      this, host_window_->CreateLayerTreeFrameSink());
+                                         aura::client::WINDOW_TYPE_CONTROL)),
+      frame_sink_holder_factory_(
+          base::BindRepeating(&SurfaceTreeHost::CreateLayerTreeFrameSinkHolder,
+                              base::Unretained(this))) {
+  InitHostWindow(window_name);
   context_provider_ = aura::Env::GetInstance()
                           ->context_factory()
                           ->SharedMainThreadContextProvider();
@@ -148,19 +143,23 @@ void SurfaceTreeHost::SetRootSurface(Surface* root_surface) {
     // Force recreating resources when the surface is added to a tree again.
     root_surface_->SurfaceHierarchyResourcesLost();
     root_surface_ = nullptr;
+    previous_content_bounds_ = absl::nullopt;
   }
 
   if (root_surface) {
     root_surface_ = root_surface;
     root_surface_->SetSurfaceDelegate(this);
 
+    if (client_submits_surfaces_in_pixel_coordinates_) {
+      SetScaleFactorTransform(GetScaleFactor());
+    }
     // TODO(oshima): Investigate if we can set this to `host_window`.
-    root_surface->window()->SetProperty(
+    root_surface_->window()->SetProperty(
         ui::kAXConsiderInvisibleAndIgnoreChildren, true);
     host_window_->AddChild(root_surface_->window());
     UpdateHostWindowBounds();
-    root_surface_->window()->Show();
   }
+  set_bounds_is_dirty(true);
 }
 
 bool SurfaceTreeHost::HasHitTestRegion() const {
@@ -208,6 +207,21 @@ void SurfaceTreeHost::SubmitCompositorFrameForTesting(
   active_presentation_callbacks_[frame.metadata.frame_token] =
       PresentationCallbacks();
   layer_tree_frame_sink_holder_->SubmitCompositorFrame(std::move(frame));
+}
+
+void SurfaceTreeHost::SetHostWindowForTesting(
+    std::unique_ptr<aura::Window> test_host_window,
+    const std::string& window_name) {
+  host_window_ = std::move(test_host_window);
+  InitHostWindow(window_name);
+}
+
+void SurfaceTreeHost::SetLayerTreeFrameSinkHolderFactoryForTesting(
+    LayerTreeFrameSinkHolderFactory frame_sink_holder_factory) {
+  DCHECK(frame_callbacks_.empty() && active_presentation_callbacks_.empty());
+
+  frame_sink_holder_factory_ = std::move(frame_sink_holder_factory);
+  layer_tree_frame_sink_holder_ = frame_sink_holder_factory_.Run();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -313,9 +327,13 @@ void SurfaceTreeHost::SubmitCompositorFrame() {
       std::move(presentation_callbacks);
 
   root_surface_->AppendSurfaceHierarchyContentsToFrame(
-      gfx::PointF(root_surface_origin_), GetScaleFactor(),
-      client_submits_surfaces_in_pixel_coordinates(),
-      layer_tree_frame_sink_holder_->resource_manager(), &frame);
+      gfx::PointF(root_surface_origin_),
+      layer_tree_frame_sink_holder_->NeedsFullDamageForNextFrame(),
+      layer_tree_frame_sink_holder_->resource_manager(),
+      client_submits_surfaces_in_pixel_coordinates()
+          ? absl::nullopt
+          : absl::make_optional(GetScaleFactor()),
+      &frame);
 
   std::vector<GLbyte*> sync_tokens;
   // We track previously verified tokens and set them to be verified to avoid
@@ -385,18 +403,27 @@ void SurfaceTreeHost::UpdateHostWindowBounds() {
   aura::WindowOcclusionTracker::ScopedPause pause_occlusion;
 
   const gfx::Rect& bounds = root_surface_->surface_hierarchy_content_bounds();
-  if (bounds != host_window_->bounds())
-    host_window_->SetBounds({host_window_->bounds().origin(), bounds.size()});
+  if (previous_content_bounds_ != bounds) {
+    previous_content_bounds_ = bounds;
+    gfx::Size size = bounds.size();
+    if (client_submits_surfaces_in_pixel_coordinates_) {
+      size = gfx::ScaleToCeiledSize(size, 1.0f / GetScaleFactor());
+    }
+    gfx::Rect scaled_bounds(bounds.origin(), size);
+    if (scaled_bounds != host_window_->bounds()) {
+      // DP size has changed, set new bounds.
+      host_window_->SetBounds({host_window_->bounds().origin(), size});
+    } else {
+      // DP size has not changed, but pixel size has - allocate new surface id.
+      host_window_->AllocateLocalSurfaceId();
+    }
+  }
 
   // TODO(yjliu): a) consolidate with ClientControlledShellSurface. b) use the
   // scale factor the buffer is created for to set the transform for
   // synchronization.
   if (client_submits_surfaces_in_pixel_coordinates_) {
-    gfx::Transform tr;
-    float scale = GetScaleFactor();
-    tr.Scale(1.0f / scale, 1.0f / scale);
-    if (host_window_->transform() != tr)
-      host_window_->SetTransform(tr);
+    SetScaleFactorTransform(GetScaleFactor());
   }
   const bool fills_bounds_opaquely =
       gfx::SizeF(bounds.size()) == root_surface_->content_size() &&
@@ -414,14 +441,25 @@ void SurfaceTreeHost::UpdateHostWindowBounds() {
 ////////////////////////////////////////////////////////////////////////////////
 // SurfaceTreeHost, private:
 
+void SurfaceTreeHost::InitHostWindow(const std::string& window_name) {
+  host_window_->SetName(window_name);
+  host_window_->Init(ui::LAYER_SOLID_COLOR);
+  host_window_->set_owned_by_parent(false);
+  // The host window is a container of surface tree. It doesn't handle pointer
+  // events.
+  host_window_->SetEventTargetingPolicy(
+      aura::EventTargetingPolicy::kDescendantsOnly);
+  host_window_->SetEventTargeter(std::make_unique<CustomWindowTargeter>(this));
+  layer_tree_frame_sink_holder_ = frame_sink_holder_factory_.Run();
+}
+
 viz::CompositorFrame SurfaceTreeHost::PrepareToSubmitCompositorFrame() {
   DCHECK(root_surface_);
 
   if (layer_tree_frame_sink_holder_->is_lost()) {
     // We can immediately delete the old LayerTreeFrameSinkHolder because all of
     // it's resources are lost anyways.
-    layer_tree_frame_sink_holder_ = std::make_unique<LayerTreeFrameSinkHolder>(
-        this, host_window_->CreateLayerTreeFrameSink());
+    layer_tree_frame_sink_holder_ = frame_sink_holder_factory_.Run();
     CleanUpCallbacks();
   }
 
@@ -511,6 +549,22 @@ void SurfaceTreeHost::CleanUpCallbacks() {
     }
   }
   active_presentation_callbacks_.clear();
+}
+
+std::unique_ptr<LayerTreeFrameSinkHolder>
+SurfaceTreeHost::CreateLayerTreeFrameSinkHolder() {
+  return std::make_unique<LayerTreeFrameSinkHolder>(
+      this, host_window_->CreateLayerTreeFrameSink());
+}
+
+void SurfaceTreeHost::SetScaleFactorTransform(float scale_factor) {
+  DCHECK(client_submits_surfaces_in_pixel_coordinates_);
+
+  gfx::Transform tr;
+  tr.Scale(1.0f / scale_factor, 1.0f / scale_factor);
+  if (root_surface()->window()->transform() != tr) {
+    root_surface()->window()->SetTransform(tr);
+  }
 }
 
 }  // namespace exo

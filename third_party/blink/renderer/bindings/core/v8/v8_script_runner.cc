@@ -165,6 +165,7 @@ v8::MaybeLocal<v8::Script> CompileScriptInternal(
       ScriptCacheConsumer* cache_consumer = classic_script.CacheConsumer();
       scoped_refptr<CachedMetadata> cached_metadata =
           V8CodeCache::GetCachedMetadata(cache_handler);
+      const bool full_code_cache = V8CodeCache::IsFull(cached_metadata.get());
       v8::ScriptCompiler::Source source(
           code, origin,
           V8CodeCache::CreateCachedData(cached_metadata).release(),
@@ -193,7 +194,7 @@ v8::MaybeLocal<v8::Script> CompileScriptInternal(
       if (cache_result) {
         *cache_result = absl::make_optional(
             inspector_compile_script_event::V8ConsumeCacheResult(
-                cached_data->length, cached_data->rejected));
+                cached_data->length, cached_data->rejected, full_code_cache));
       }
       return script;
     }
@@ -315,6 +316,9 @@ v8::MaybeLocal<v8::Module> V8ScriptRunner::CompileModule(
         CachedMetadataHandler* cache_handler = params.CacheHandler();
         DCHECK(cache_handler);
         cache_handler->DidUseCodeCache();
+        const scoped_refptr<CachedMetadata> cached_metadata =
+            V8CodeCache::GetCachedMetadata(cache_handler);
+        const bool full_code_cache = V8CodeCache::IsFull(cached_metadata.get());
         // TODO(leszeks): Add support for passing in ScriptCacheConsumer.
         v8::ScriptCompiler::Source source(
             code, origin,
@@ -336,7 +340,7 @@ v8::MaybeLocal<v8::Module> V8ScriptRunner::CompileModule(
         }
         cache_result = absl::make_optional(
             inspector_compile_script_event::V8ConsumeCacheResult(
-                cached_data->length, cached_data->rejected));
+                cached_data->length, cached_data->rejected, full_code_cache));
         break;
       }
       default:
@@ -707,7 +711,6 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallFunction(
     v8::Local<v8::Value> argv[],
     v8::Isolate* isolate) {
   LocalDOMWindow* window = DynamicTo<LocalDOMWindow>(context);
-  LocalFrame* frame = window ? window->GetFrame() : nullptr;
   TRACE_EVENT0("v8", "v8.callFunction");
   RuntimeCallStatsScopedTracer rcs_scoped_tracer(isolate);
   RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
@@ -729,10 +732,9 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallFunction(
     DCHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
   }
 
-  DCHECK(!frame ||
-         BindingSecurity::ShouldAllowAccessToFrame(
-             ToLocalDOMWindow(function->GetCreationContextChecked()), frame,
-             BindingSecurity::ErrorReportOption::kDoNotReport));
+  DCHECK(!window || !window->GetFrame() ||
+         BindingSecurity::ShouldAllowAccessTo(
+             ToLocalDOMWindow(function->GetCreationContextChecked()), window));
   v8::Isolate::SafeForTerminationScope safe_for_termination(isolate);
   v8::MicrotasksScope microtasks_scope(isolate, microtask_queue,
                                        v8::MicrotasksScope::kRunMicrotasks);

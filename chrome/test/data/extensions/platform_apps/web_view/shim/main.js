@@ -2868,6 +2868,20 @@ function testFindInMultipleWebViews() {
       });
 }
 
+function testFindAfterTerminate() {
+  let webview = new WebView();
+  webview.src = 'data:text/html,<body><iframe></iframe></body>';
+  webview.addEventListener('loadstop', () => {
+    webview.find('A');
+    webview.terminate();
+    webview.find('B', {'backward': true});
+    webview.find('B', {'backward': true}, (results) => {
+      embedder.test.succeed();
+    });
+  });
+  document.body.appendChild(webview);
+}
+
 function testLoadDataAPI() {
   var webview = new WebView();
   webview.src = 'about:blank';
@@ -3332,6 +3346,18 @@ function testRendererNavigationRedirectWhileUnattached() {
   webview.src = 'about:blank';
 };
 
+function testRemoveBeforeAttach() {
+  // Create a guest and immediately remove it. So once the browser acknowledges
+  // creation, the guest will be destroyed on the renderer side and no
+  // attachment request will occur.
+  let webview = document.createElement('webview');
+  webview.src = 'about:blank';
+  document.body.appendChild(webview);
+  webview.remove();
+
+  embedder.test.succeed();
+};
+
 function runNewWindowCrossWindowAttachTest(noopener) {
   let firstWebviewUrl = noopener ? embedder.windowOpenNoopenerGuestURL :
                                    embedder.windowOpenGuestURL;
@@ -3644,6 +3670,7 @@ embedder.test.testList = {
   'testFindAPI': testFindAPI,
   'testFindAPI_findupdate': testFindAPI_findupdate,
   'testFindInMultipleWebViews': testFindInMultipleWebViews,
+  'testFindAfterTerminate': testFindAfterTerminate,
   'testLoadDataAPI': testLoadDataAPI,
   'testLoadDataAPIAccessibleResources': testLoadDataAPIAccessibleResources,
   'testResizeEvents': testResizeEvents,
@@ -3661,6 +3688,7 @@ embedder.test.testList = {
   'testMailtoLink': testMailtoLink,
   'testRendererNavigationRedirectWhileUnattached':
       testRendererNavigationRedirectWhileUnattached,
+  'testRemoveBeforeAttach': testRemoveBeforeAttach,
   'testBlobURL': testBlobURL,
   'testWebViewAndEmbedderInNewWindow': testWebViewAndEmbedderInNewWindow,
   'testWebViewAndEmbedderInNewWindow_Noopener':

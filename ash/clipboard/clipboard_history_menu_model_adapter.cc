@@ -4,31 +4,152 @@
 
 #include "ash/clipboard/clipboard_history_menu_model_adapter.h"
 
+#include <string>
+
+#include "ash/bubble/bubble_utils.h"
 #include "ash/clipboard/clipboard_history.h"
 #include "ash/clipboard/clipboard_history_util.h"
 #include "ash/clipboard/views/clipboard_history_item_view.h"
+#include "ash/clipboard/views/clipboard_history_label.h"
+#include "ash/clipboard/views/clipboard_history_view_constants.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/clipboard_history_controller.h"
 #include "ash/public/cpp/clipboard_image_model_factory.h"
+#include "ash/strings/grit/ash_strings.h"
+#include "ash/style/typography.h"
 #include "ash/wm/window_util.h"
+#include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/menu_model.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/menu/menu_item_view.h"
+#include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/controls/menu/submenu_view.h"
+#include "ui/views/controls/separator.h"
+#include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/box_layout_view.h"
+#include "ui/views/layout/flex_layout_types.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
+
+namespace {
+
+constexpr int kHeaderBetweenChildSpacing = 16;
+
+// Returns whether the given `index` in the menu model's item list corresponds
+// to the menu header.
+bool IsHeaderIndex(size_t index) {
+  // The header, if present, is the menu's first item.
+  return chromeos::features::IsClipboardHistoryRefreshEnabled() && index == 0u;
+}
+
+// Returns whether the given `index` in the menu model's item list corresponds
+// to a clipboard history item.
+bool IsClipboardHistoryItemIndex(size_t index,
+                                 size_t num_clipboard_history_items) {
+  // The header, if present, adds 1 to the expected index of each clipboard
+  // history item in the menu model's item list.
+  return chromeos::features::IsClipboardHistoryRefreshEnabled()
+             ? index > 0 && index <= num_clipboard_history_items
+             : index < num_clipboard_history_items;
+}
+
+// Returns whether the given `index` in the menu model's item list corresponds
+// to the menu footer.
+bool IsFooterIndex(size_t index, size_t num_clipboard_history_items) {
+  // The footer, if present, is the menu's last item. The header, if present,
+  // adds 1 to the footer's expected index.
+  // TODO(http://b/267694412): Check for all possible footer-enabled conditions.
+  return features::IsClipboardHistoryLongpressEnabled() &&
+         (index == chromeos::features::IsClipboardHistoryRefreshEnabled()
+              ? num_clipboard_history_items + 1
+              : num_clipboard_history_items);
+}
+
+// Populates `container` with a menu title and clear-all button to appear at the
+// top of the clipboard history menu.
+void InsertHeaderContent(views::MenuItemView* container) {
+  container->AddChildView(
+      views::Builder<views::BoxLayoutView>()
+          .SetOrientation(views::BoxLayout::Orientation::kHorizontal)
+          .SetBorder(
+              views::CreateEmptyBorder(ClipboardHistoryViews::kContentsInsets))
+          .SetBetweenChildSpacing(kHeaderBetweenChildSpacing)
+          .AfterBuild(base::BindOnce([](views::BoxLayoutView* header) {
+            const int width =
+                clipboard_history_util::GetPreferredItemViewWidth();
+            header->SetPreferredSize(
+                gfx::Size(width, header->GetHeightForWidth(width)));
+          }))
+          .AddChildren(
+              views::Builder<views::Label>(
+                  bubble_utils::CreateLabel(TypographyToken::kCrosButton1,
+                                            u"[i18n] Clipboard",
+                                            cros_tokens::kCrosSysOnSurface))
+                  .SetID(clipboard_history_util::kMenuTitleViewID)
+                  .SetHorizontalAlignment(gfx::ALIGN_LEFT)
+                  .SetProperty(views::kFlexBehaviorKey,
+                               views::FlexSpecification().WithWeight(1)),
+              views::Builder<views::Label>(
+                  bubble_utils::CreateLabel(TypographyToken::kCrosButton2,
+                                            u"[i18n] Clear all",
+                                            cros_tokens::kCrosSysPrimary))
+                  .SetID(clipboard_history_util::kClearAllButtonViewID))
+          .Build());
+}
+
+// Populates `container` with a separator and a label containing educational
+// content to appear at the bottom of the clipboard history menu.
+void InsertFooterContent(views::MenuItemView* container) {
+  const int content_width =
+      clipboard_history_util::GetPreferredItemViewWidth() -
+      ClipboardHistoryViews::kContentsInsets.width();
+
+  // Introduce a layout view between `container` and the desired separator and
+  // label to circumvent `container` manually laying out its children.
+  container->AddChildView(
+      views::Builder<views::BoxLayoutView>()
+          .SetOrientation(views::BoxLayout::Orientation::kVertical)
+          .AddChildren(
+              views::Builder<views::Separator>()
+                  .SetBorder(views::CreateEmptyBorder(
+                      ClipboardHistoryViews::kContentsInsets))
+                  .SetColorId(cros_tokens::kCrosSysSeparator)
+                  .SetOrientation(views::Separator::Orientation::kHorizontal)
+                  .SetPreferredLength(content_width),
+              views::Builder<views::Label>(
+                  bubble_utils::CreateLabel(
+                      TypographyToken::kCrosAnnotation1,
+                      l10n_util::GetStringUTF16(
+                          IDS_ASH_CLIPBOARD_HISTORY_CONTROL_V_LONGPRESS_FOOTER),
+                      cros_tokens::kCrosSysSecondary))
+                  .SetBorder(views::CreateEmptyBorder(
+                      ClipboardHistoryViews::kContentsInsets))
+                  .SetHorizontalAlignment(gfx::ALIGN_LEFT)
+                  .SetMultiLine(true)
+                  .SizeToFit(/*fixed_width=*/content_width))
+          .Build());
+}
+
+}  // namespace
 
 // ClipboardHistoryMenuModelAdapter::MenuModelWithWillCloseCallback ------------
 
@@ -104,7 +225,8 @@ ClipboardHistoryMenuModelAdapter::~ClipboardHistoryMenuModelAdapter() = default;
 
 void ClipboardHistoryMenuModelAdapter::Run(
     const gfx::Rect& anchor_rect,
-    ui::MenuSourceType source_type) {
+    ui::MenuSourceType source_type,
+    crosapi::mojom::ClipboardHistoryControllerShowSource show_source) {
   DCHECK(!root_view_);
   DCHECK(model_);
   DCHECK(item_snapshots_.empty());
@@ -125,10 +247,25 @@ void ClipboardHistoryMenuModelAdapter::Run(
 
   const ui::DataTransferEndpoint data_dst(ui::EndpointType::kDefault,
                                           /*notify_if_restricted=*/false);
+
+  if (chromeos::features::IsClipboardHistoryRefreshEnabled()) {
+    // Add a placeholder non-interactive item that will contain the clipboard
+    // history menu's header, consisting of a title and a clear-all button.
+    model_->AddTitle(std::u16string());
+  }
+
   for (const auto& item : items) {
     model_->AddItem(command_id, std::u16string());
     item_snapshots_.emplace(command_id, item);
     ++command_id;
+  }
+
+  if (show_source == crosapi::mojom::ClipboardHistoryControllerShowSource::
+                         kControlVLongpress) {
+    // Add a placeholder non-interactive item that will contain the clipboard
+    // history menu's footer, consisting of a separator (styled differently from
+    // the context menu separators) and educational text.
+    model_->AddTitle(std::u16string());
   }
 
   // Start async rendering of HTML, if any exists.
@@ -145,7 +282,7 @@ void ClipboardHistoryMenuModelAdapter::Run(
                       views::MenuRunner::USE_ASH_SYS_UI_LAYOUT |
                       views::MenuRunner::FIXED_ANCHOR);
   menu_runner_->RunMenuAt(
-      /*widget_owner=*/nullptr, /*menu_button_controller=*/nullptr, anchor_rect,
+      /*parent=*/nullptr, /*button_controller=*/nullptr, anchor_rect,
       views::MenuAnchorPosition::kBubbleBottomRight, source_type);
 }
 
@@ -321,6 +458,11 @@ views::MenuItemView* ClipboardHistoryMenuModelAdapter::GetMenuItemViewAtForTest(
           ->GetMenuItemViewAtForTest(index));
 }
 
+const ui::SimpleMenuModel* ClipboardHistoryMenuModelAdapter::GetModelForTest()
+    const {
+  return model_.get();
+}
+
 ClipboardHistoryMenuModelAdapter::ClipboardHistoryMenuModelAdapter(
     std::unique_ptr<MenuModelWithWillCloseCallback> model,
     base::RepeatingClosure menu_closed_callback,
@@ -430,12 +572,25 @@ views::MenuItemView* ClipboardHistoryMenuModelAdapter::AppendMenuItem(
   // Margins are managed by `ClipboardHistoryItemView`.
   container->SetMargins(/*top_margin=*/0, /*bottom_margin=*/0);
 
-  std::unique_ptr<ClipboardHistoryItemView> item_view =
-      ClipboardHistoryItemView::CreateFromClipboardHistoryItem(
-          GetItemFromCommandId(command_id).id(), clipboard_history_, container);
-  item_view->Init();
-  item_views_by_command_id_.insert(std::make_pair(command_id, item_view.get()));
-  container->AddChildView(std::move(item_view));
+  const size_t num_items = clipboard_history_->GetItems().size();
+  if (IsHeaderIndex(index)) {
+    CHECK_EQ(model->GetTypeAt(index), ui::MenuModel::ItemType::TYPE_TITLE);
+    InsertHeaderContent(container);
+  } else if (IsClipboardHistoryItemIndex(index, num_items)) {
+    CHECK_EQ(model->GetTypeAt(index), ui::MenuModel::ItemType::TYPE_COMMAND);
+    std::unique_ptr<ClipboardHistoryItemView> item_view =
+        ClipboardHistoryItemView::CreateFromClipboardHistoryItem(
+            GetItemFromCommandId(command_id).id(), clipboard_history_,
+            container);
+    item_view->Init();
+    item_views_by_command_id_.insert(
+        std::make_pair(command_id, item_view.get()));
+    container->AddChildView(std::move(item_view));
+  } else {
+    CHECK(IsFooterIndex(index, num_items));
+    CHECK_EQ(model->GetTypeAt(index), ui::MenuModel::ItemType::TYPE_TITLE);
+    InsertFooterContent(container);
+  }
 
   return container;
 }

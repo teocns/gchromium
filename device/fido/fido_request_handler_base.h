@@ -74,6 +74,9 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
     // contain the hybrid or internal transports.
     bool is_only_hybrid_or_internal = false;
 
+    // True this process has iCloud Keychain support. Only meaningful on macOS.
+    bool has_icloud_keychain = false;
+
     // The intersection of transports supported by the client and allowed by the
     // relying party.
     base::flat_set<FidoTransportProtocol> available_transports;
@@ -83,12 +86,18 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
     RecognizedCredential has_platform_authenticator_credential =
         RecognizedCredential::kNoRecognizedCredential;
 
-    // The set of recognized platform credential user entities that can fulfill
-    // a GetAssertion request. Not all platform authenticators report this, so
-    // the set might be empty even if
-    // |has_platform_authenticator_credential| is |kHasRecognizedCredential|.
-    std::vector<DiscoverableCredentialMetadata>
-        recognized_platform_authenticator_credentials;
+    // This field mirrors the previous one but is specific to iCloud
+    // Keychain. They are separate because a macOS system can have both the
+    // Chromium platform authenticator and iCloud Keychain as platform
+    // authenticators.
+    RecognizedCredential has_icloud_keychain_credential =
+        RecognizedCredential::kNoRecognizedCredential;
+
+    // The set of recognized credential user entities that can fulfill a
+    // GetAssertion request. Not all authenticators report this, so the set
+    // might be empty even if |has_platform_authenticator_credential| is
+    // |kHasRecognizedCredential|.
+    std::vector<DiscoverableCredentialMetadata> recognized_credentials;
 
     bool is_ble_powered = false;
     bool can_power_on_ble_adapter = false;
@@ -113,12 +122,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
     // authenticator is available.
     bool win_is_uvpaa = false;
 
-    // Contains the authenticator ID of the native Windows
-    // authenticator if |has_win_native_api_authenticator| is true.
-    // This allows the observer to distinguish it from other
-    // authenticators.
-    std::string win_native_api_authenticator_id;
-
     // Indicates whether the request is occurring in an off-the-record
     // BrowserContext (e.g. Chrome Incognito mode).
     bool is_off_the_record_context = false;
@@ -131,6 +134,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
     // authenticator and thus have privacy implications.
     ResidentKeyRequirement resident_key_requirement =
         ResidentKeyRequirement::kDiscouraged;
+
+    // Indicates the UserVerificationRequirement of the current request.
+    UserVerificationRequirement user_verification_requirement =
+        UserVerificationRequirement::kDiscouraged;
 
     // transport_list_did_include_internal is set to true during a getAssertion
     // request if at least one element of the allowList included the "internal"
@@ -347,6 +354,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
   // platform authenticator whether it has responsive discoverable credentials
   // and whether it has responsive credentials at all.
   void OnHavePlatformCredentialStatus(
+      AuthenticatorType authenticator_type,
       std::vector<DiscoverableCredentialMetadata> user_entities,
       RecognizedCredential has_credentials);
 

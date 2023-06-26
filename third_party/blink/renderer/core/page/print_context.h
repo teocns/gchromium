@@ -29,10 +29,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "ui/gfx/geometry/rect.h"
-
-namespace gfx {
-class SizeF;
-}
+#include "ui/gfx/geometry/size_f.h"
 
 namespace blink {
 
@@ -43,28 +40,10 @@ class Node;
 
 class CORE_EXPORT PrintContext : public GarbageCollected<PrintContext> {
  public:
-  // By shrinking to a width of 75%, we will render the correct physical
-  // dimensions in paged media (i.e. cm, pt,). The shrinkage used
-  // to be 80% to match other browsers - they have since moved on.
-  // Wide pages will be scaled down more than this.
-  // This value is the percentage inverted.
-  static constexpr float kPrintingMinimumShrinkFactor = 1.33333333f;
-
   PrintContext(LocalFrame*, bool use_printing_layout);
   virtual ~PrintContext();
 
   LocalFrame* GetFrame() const { return frame_; }
-
-  // Break up a page into rects without relayout.
-  // FIXME: This means that CSS page breaks won't be on page boundary if the
-  // size is different than what was passed to BeginPrintMode(). That's probably
-  // not always desirable.
-  virtual void ComputePageRects(const gfx::SizeF& print_size);
-
-  // Deprecated. Page size computation is already in this class, clients
-  // shouldn't be copying it.
-  virtual void ComputePageRectsWithPageSize(
-      const gfx::SizeF& page_size_in_pixels);
 
   // These are only valid after page rects are computed.
   wtf_size_t PageCount() const { return page_rects_.size(); }
@@ -76,7 +55,7 @@ class CORE_EXPORT PrintContext : public GarbageCollected<PrintContext> {
   // Enter print mode, updating layout for new page size.
   // This function can be called multiple times to apply new print options
   // without going back to screen mode.
-  virtual void BeginPrintMode(float width, float height = 0);
+  virtual void BeginPrintMode(gfx::SizeF page_size);
 
   // Return to screen mode.
   virtual void EndPrintMode();
@@ -114,8 +93,7 @@ class CORE_EXPORT PrintContext : public GarbageCollected<PrintContext> {
   Vector<gfx::Rect> page_rects_;
 
  private:
-  void ComputePageRectsWithPageSizeInternal(
-      const gfx::SizeF& page_size_in_pixels);
+  void ComputePageRects(const gfx::SizeF& print_size);
   void CollectLinkedDestinations(Node*);
 
   // Used to prevent misuses of BeginPrintMode() and EndPrintMode() (e.g., call

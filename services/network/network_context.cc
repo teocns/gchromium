@@ -89,6 +89,7 @@
 #include "services/network/brokered_client_socket_factory.h"
 #include "services/network/cookie_manager.h"
 #include "services/network/cors/cors_url_loader_factory.h"
+#include "services/network/data_remover_util.h"
 #include "services/network/disk_cache/mojo_backend_file_operations_factory.h"
 #include "services/network/host_resolver.h"
 #include "services/network/http_auth_cache_copier.h"
@@ -110,6 +111,7 @@
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/cpp/parsed_headers.h"
 #include "services/network/public/cpp/simple_host_resolver.h"
+#include "services/network/public/cpp/thread_delegate.h"
 #include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -120,6 +122,7 @@
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
 #include "services/network/restricted_cookie_manager.h"
 #include "services/network/session_cleanup_cookie_store.h"
+#include "services/network/shared_dictionary/shared_dictionary_constants.h"
 #include "services/network/shared_dictionary/shared_dictionary_manager.h"
 #include "services/network/ssl_config_service_mojo.h"
 #include "services/network/throttling/network_conditions.h"
@@ -464,10 +467,6 @@ NetworkContext::NetworkContext(
 #endif  // BUILDFLAG(ENABLE_REPORTING)
       params_(std::move(params)),
       on_connection_close_callback_(std::move(on_connection_close_callback)),
-#if BUILDFLAG(IS_ANDROID)
-      app_status_listener_(
-          std::make_unique<NetworkContextApplicationStatusListener>()),
-#endif  // BUILDFLAG(IS_ANDROID)
       receiver_(this, std::move(receiver)),
       first_party_sets_access_delegate_(
           std::move(params_->first_party_sets_access_delegate_receiver),
@@ -488,17 +487,42 @@ NetworkContext::NetworkContext(
 
 #if BUILDFLAG(IS_DIRECTORY_TRANSFER_REQUIRED)
   if (params_->file_paths) {
+    if (params_->file_paths->http_cache_directory) {
+      EnsureMounted(&*params_->file_paths->http_cache_directory);
+    }
+    if (params_->file_paths->shared_dictionary_directory) {
+      EnsureMounted(&*params_->file_paths->shared_dictionary_directory);
+    }
     EnsureMounted(&params_->file_paths->data_directory);
-  }
-  if (params_->http_cache_directory) {
-    EnsureMounted(&*params_->http_cache_directory);
   }
 #endif  // BUILDFLAG(IS_DIRECTORY_TRANSFER_REQUIRED)
 
   if (params_->shared_dictionary_enabled) {
-    // TODO(crbug.com/1413922): Implement a manager which supports persistence
-    // and use if for non-incognito mode.
-    shared_dictionary_manager_ = SharedDictionaryManager::CreateInMemory();
+    if (params_->file_paths &&
+        params_->file_paths->shared_dictionary_directory &&
+        !params_->file_paths->shared_dictionary_directory->path().empty()) {
+#if BUILDFLAG(IS_ANDROID)
+      app_status_listeners_.push_back(
+          std::make_unique<NetworkContextApplicationStatusListener>());
+#endif  // BUILDFLAG(IS_ANDROID)
+      // TODO(crbug.com/1413922): Set `file_operations_factory` to support
+      // sandboxed network service on Android.
+      shared_dictionary_manager_ = SharedDictionaryManager::CreateOnDisk(
+          params_->file_paths->shared_dictionary_directory->path().Append(
+              FILE_PATH_LITERAL("db")),
+          params_->file_paths->shared_dictionary_directory->path().Append(
+              FILE_PATH_LITERAL("cache")),
+          params_->shared_dictionary_cache_max_size,
+          shared_dictionary::kDictionaryMaxCountPerNetworkContext,
+#if BUILDFLAG(IS_ANDROID)
+          app_status_listeners_.rbegin()->get(),
+#endif  // BUILDFLAG(IS_ANDROID)
+          /*file_operations_factory=*/nullptr);
+    } else {
+      shared_dictionary_manager_ = SharedDictionaryManager::CreateInMemory(
+          params_->shared_dictionary_cache_max_size,
+          shared_dictionary::kDictionaryMaxCountPerNetworkContext);
+    }
   }
 
   mojo::PendingRemote<mojom::URLLoaderFactory>
@@ -590,10 +614,6 @@ NetworkContext::NetworkContext(
 #if BUILDFLAG(ENABLE_REPORTING)
       is_observing_reporting_service_(false),
 #endif  // BUILDFLAG(ENABLE_REPORTING)
-#if BUILDFLAG(IS_ANDROID)
-      app_status_listener_(
-          std::make_unique<NetworkContextApplicationStatusListener>()),
-#endif  // BUILDFLAG(IS_ANDROID)
       receiver_(this, std::move(receiver)),
       first_party_sets_access_delegate_(
           /*receiver=*/mojo::NullReceiver(),
@@ -740,15 +760,13 @@ void NetworkContext::SetClient(
 void NetworkContext::CreateURLLoaderFactory(
     mojo::PendingReceiver<mojom::URLLoaderFactory> receiver,
     mojom::URLLoaderFactoryParamsPtr params) {
-  scoped_refptr<ResourceSchedulerClient> resource_scheduler_client;
-  if (!base::FeatureList::IsEnabled(features::kDisableResourceScheduler)) {
-    resource_scheduler_client = base::MakeRefCounted<ResourceSchedulerClient>(
-        current_resource_scheduler_client_id_,
-        IsBrowserInitiated(params->process_id == mojom::kBrowserProcessId),
-        resource_scheduler_.get(),
-        url_request_context_->network_quality_estimator());
-    current_resource_scheduler_client_id_.Increment();
-  }
+  scoped_refptr<ResourceSchedulerClient> resource_scheduler_client =
+      base::MakeRefCounted<ResourceSchedulerClient>(
+          current_resource_scheduler_client_id_,
+          IsBrowserInitiated(params->process_id == mojom::kBrowserProcessId),
+          resource_scheduler_.get(),
+          url_request_context_->network_quality_estimator());
+  current_resource_scheduler_client_id_.Increment();
   CreateURLLoaderFactory(std::move(receiver), std::move(params),
                          std::move(resource_scheduler_client));
 }
@@ -818,7 +836,9 @@ void NetworkContext::OnComputedFirstPartySetMetadata(
 
   auto callback = base::BindOnce(&NetworkContext::OnRCMDisconnect,
                                  base::Unretained(this), ptr.get());
-  ptr->InstallReceiver(std::move(receiver), std::move(callback));
+  ptr->InstallReceiver(std::move(receiver),
+                       ThreadDelegate::GetHighPriorityTaskRunner(),
+                       std::move(callback));
   restricted_cookie_managers_.insert(std::move(ptr));
 }
 
@@ -1186,8 +1206,9 @@ void NetworkContext::QueueReport(
 #if BUILDFLAG(ENABLE_REPORTING)
   // If |reporting_source| is provided, it must not be empty.
   DCHECK(!(reporting_source.has_value() && reporting_source->is_empty()));
-  if (require_network_isolation_key_)
+  if (require_network_anonymization_key_) {
     DCHECK(!network_anonymization_key.IsEmpty());
+  }
 
   // Get the ReportingService.
   net::URLRequestContext* request_context = url_request_context();
@@ -1215,8 +1236,9 @@ void NetworkContext::QueueSignedExchangeReport(
     mojom::SignedExchangeReportPtr report,
     const net::NetworkAnonymizationKey& network_anonymization_key) {
 #if BUILDFLAG(ENABLE_REPORTING)
-  if (require_network_isolation_key_)
+  if (require_network_anonymization_key_) {
     DCHECK(!network_anonymization_key.IsEmpty());
+  }
 
   net::NetworkErrorLoggingService* logging_service =
       url_request_context_->network_error_logging_service();
@@ -1738,8 +1760,9 @@ void NetworkContext::VerifyCertForSignedExchange(
     const std::string& ocsp_result,
     const std::string& sct_list,
     VerifyCertForSignedExchangeCallback callback) {
-  if (require_network_isolation_key_)
+  if (require_network_anonymization_key_) {
     DCHECK(!network_anonymization_key.IsEmpty());
+  }
 
   uint64_t cert_verify_id = ++next_cert_verify_id_;
   CHECK_NE(0u, next_cert_verify_id_);  // The request ID should not wrap around.
@@ -1939,7 +1962,7 @@ void NetworkContext::PreconnectSockets(
     const GURL& original_url,
     bool allow_credentials,
     const net::NetworkAnonymizationKey& network_anonymization_key) {
-  DCHECK(!require_network_isolation_key_ ||
+  DCHECK(!require_network_anonymization_key_ ||
          !network_anonymization_key.IsEmpty());
 
   GURL url = GetHSTSRedirect(original_url);
@@ -2391,11 +2414,15 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
   } else {
     net::URLRequestContextBuilder::HttpCacheParams cache_params;
     cache_params.max_size = params_->http_cache_max_size;
-    if (!params_->http_cache_directory) {
+    // Checking both to see if there are any file paths at all, and if there is
+    // specifically an http_cache_directory filepath in order to avoid a
+    // potential nullptr dereference if we just checked that
+    // `params_->file_paths->http_cache_directory' existed.
+    if (!params_->file_paths || !params_->file_paths->http_cache_directory) {
       cache_params.type =
           net::URLRequestContextBuilder::HttpCacheParams::IN_MEMORY;
     } else {
-      cache_params.path = params_->http_cache_directory->path();
+      cache_params.path = params_->file_paths->http_cache_directory->path();
       cache_params.type = network_session_configurator::ChooseCacheType();
       if (params_->http_cache_file_operations_factory) {
         cache_params.file_operations_factory =
@@ -2406,7 +2433,9 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
     cache_params.reset_cache = params_->reset_http_cache_backend;
 
 #if BUILDFLAG(IS_ANDROID)
-    cache_params.app_status_listener = app_status_listener();
+    app_status_listeners_.push_back(
+        std::make_unique<NetworkContextApplicationStatusListener>());
+    cache_params.app_status_listener = app_status_listeners_.rbegin()->get();
 #endif  // BUILDFLAG(IS_ANDROID)
     builder.EnableHttpCache(cache_params);
   }
@@ -2551,17 +2580,17 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
             std::move(params_->socket_broker)));
   }
 
-  // If `require_network_isolation_key_` is true, but the features that can
-  // trigger another URLRequest are not set to respect NetworkIsolationKeys,
-  // the URLRequests that they create might not have a NIK, so only set the
+  // If `require_network_anonymization_key_` is true, but the features that can
+  // trigger another URLRequest are not set to respect NetworkAnonymizationKeys,
+  // the URLRequests that they create might not have a NAK, so only set the
   // corresponding value in the URLRequestContext to true at the URLRequest
-  // layer if all those features are set to respect NIK.
-  if (require_network_isolation_key_ &&
+  // layer if all those features are set to respect NAK.
+  if (require_network_anonymization_key_ &&
       net::NetworkAnonymizationKey::IsPartitioningEnabled() &&
       base::FeatureList::IsEnabled(
           domain_reliability::features::
               kPartitionDomainReliabilityByNetworkIsolationKey)) {
-    builder.set_require_network_isolation_key(true);
+    builder.set_require_network_anonymization_key(true);
   }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -2574,7 +2603,8 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
   auto result =
       URLRequestContextOwner(std::move(pref_service), builder.Build());
 
-  require_network_isolation_key_ = params_->require_network_isolation_key;
+  require_network_anonymization_key_ =
+      params_->require_network_anonymization_key;
 
   // Subscribe the CertVerifier to configuration changes that are exposed via
   // the mojom::SSLConfig, but which are not part of the
@@ -2867,6 +2897,34 @@ void NetworkContext::CreateTrustedUrlLoaderFactoryForNetworkService(
   url_loader_factory_params->process_id = network::mojom::kBrowserProcessId;
   CreateURLLoaderFactory(std::move(url_loader_factory_pending_receiver),
                          std::move(url_loader_factory_params));
+}
+
+void NetworkContext::SetSharedDictionaryCacheMaxSize(uint64_t cache_max_size) {
+  if (!shared_dictionary_manager_) {
+    return;
+  }
+  shared_dictionary_manager_->SetCacheMaxSize(cache_max_size);
+}
+
+void NetworkContext::ClearSharedDictionaryCache(
+    base::Time start_time,
+    base::Time end_time,
+    mojom::ClearDataFilterPtr filter,
+    ClearSharedDictionaryCacheCallback callback) {
+  if (!shared_dictionary_manager_) {
+    std::move(callback).Run();
+    return;
+  }
+  shared_dictionary_manager_->ClearData(
+      start_time, end_time,
+      filter
+          ? base::BindRepeating(&DoesUrlMatchFilter, filter->type,
+                                std::set<url::Origin>(filter->origins.begin(),
+                                                      filter->origins.end()),
+                                std::set<std::string>(filter->domains.begin(),
+                                                      filter->domains.end()))
+          : base::RepeatingCallback<bool(const GURL&)>(),
+      std::move(callback));
 }
 
 }  // namespace network

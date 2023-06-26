@@ -24,7 +24,9 @@ enum TabOpeningPostOpeningAction {
   NO_ACTION = 0,
   START_VOICE_SEARCH,
   START_QR_CODE_SCANNER,
-  START_LENS,
+  START_LENS_FROM_HOME_SCREEN_WIDGET,
+  START_LENS_FROM_APP_ICON_LONG_PRESS,
+  START_LENS_FROM_SPOTLIGHT,
   FOCUS_OMNIBOX,
   SHOW_DEFAULT_BROWSER_SETTINGS,
   TAB_OPENING_POST_OPENING_ACTION_COUNT,
@@ -39,7 +41,8 @@ class GURL;
 // The URL that should be opened. This may not always be the same URL as the one
 // that was received. The reason for this is in the case of Universal Link
 // navigation where we may want to open up a fallback URL e.g., the New Tab Page
-// instead of the actual universal link.
+// instead of the actual universal link. If this URL is empty, a new tab page
+// will be created upon app open iff there is no active tab.
 @property(nonatomic, readonly, assign) const GURL& externalURL;
 
 // Original URL that should be opened. May or may not be the same as

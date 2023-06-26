@@ -179,7 +179,8 @@ class CastDialogViewTest : public ChromeViewsTestBase {
     base::RunLoop().RunUntilIdle();
   }
 
-  const std::vector<raw_ptr<CastDialogSinkView>>& sink_views() {
+  const std::vector<raw_ptr<CastDialogSinkView, DanglingUntriaged>>&
+  sink_views() {
     return dialog_->sink_views_for_test();
   }
 
@@ -204,7 +205,7 @@ class CastDialogViewTest : public ChromeViewsTestBase {
   std::unique_ptr<views::Widget> anchor_widget_;
   NiceMock<MockCastDialogController> controller_;
   CastDialogCoordinator cast_dialog_coordinator_;
-  raw_ptr<CastDialogView> dialog_ = nullptr;
+  raw_ptr<CastDialogView, DanglingUntriaged> dialog_ = nullptr;
   TestingProfile profile_;
 };
 
@@ -252,22 +253,7 @@ TEST_F(CastDialogViewTest, StopCasting) {
   InitializeDialogWithModel(model);
   EXPECT_CALL(controller_,
               StopCasting(model.media_sinks()[1].route->media_route_id()));
-  SinkPressedAtIndex(1);
-}
-
-TEST_F(CastDialogViewTest, FreezeUiStopCasting) {
-  // Enable the proper features / prefs.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kAccessCodeCastFreezeUI);
-  profile_.GetPrefs()->SetBoolean(prefs::kAccessCodeCastEnabled, true);
-
-  CastDialogModel model = CreateModelWithSinks({CreateConnectedSink()});
-  InitializeDialogWithModel(model);
-
-  EXPECT_CALL(controller_,
-              StopCasting(model.media_sinks()[0].route->media_route_id()))
-      .Times(1);
-  StopPressedAtIndex(0);
+  StopPressedAtIndex(1);
 }
 
 TEST_F(CastDialogViewTest, FreezeRoute) {

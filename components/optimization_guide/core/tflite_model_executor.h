@@ -103,9 +103,9 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputType> {
       // tasks can safely be executed.
       scoped_refptr<base::SequencedTaskRunner> watchdog_sequence =
           base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
-      using WatchdogType = ModelExecutionTimeoutWatchdog<OutputType, InputType>;
-      watchdog_ = std::unique_ptr<WatchdogType, base::OnTaskRunnerDeleter>(
-          new WatchdogType(
+      watchdog_ = std::unique_ptr<ModelExecutionTimeoutWatchdog,
+                                  base::OnTaskRunnerDeleter>(
+          new ModelExecutionTimeoutWatchdog(
               watchdog_sequence, optimization_target_,
               model_inference_timeout.value_or(
                   features::ModelExecutionWatchdogDefaultTimeout())),
@@ -164,13 +164,33 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputType> {
     model_fb_.reset();
   }
 
-  // Starts the execution of the model. When complete, |callback_on_complete|
-  // will be run via |reply_task_runner_| with the output of the model.
   using ExecutionCallback =
       base::OnceCallback<void(const absl::optional<OutputType>&)>;
+  using BatchExecutionCallback =
+      base::OnceCallback<void(const std::vector<absl::optional<OutputType>>&)>;
+
+  // When complete, |callback_on_complete| will be run via |reply_task_runner_|
+  // with the outputs of the model.
   void SendForExecution(ExecutionCallback callback_on_complete,
                         base::TimeTicks start_time,
                         InputType input) override {
+    BatchExecutionCallback adapted_callback = base::BindOnce(
+        [](ExecutionCallback callback,
+           const std::vector<absl::optional<OutputType>>& output) {
+          CHECK_EQ(output.size(), 1U);
+          std::move(callback).Run(output[0]);
+        },
+        std::move(callback_on_complete));
+    SendForBatchExecution(std::move(adapted_callback), start_time, {input});
+  }
+
+  // Starts the execution of the model. When complete, |callback_on_complete|
+  // will be run via |reply_task_runner_| with the outputs of the model.
+  void SendForBatchExecution(
+      BatchExecutionCallback callback_on_complete,
+      base::TimeTicks start_time,
+      ModelExecutor<OutputType, InputType>::ConstRefInputVector inputs)
+      override {
     DCHECK(execution_task_runner_->RunsTasksInCurrentSequence());
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     DCHECK(reply_task_runner_);
@@ -183,18 +203,31 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputType> {
                 optimization_target_),
         task_scheduling_latency);
 
-    ScopedExecutionStatusResultRecorder status_recorder(optimization_target_);
+    std::vector<absl::optional<OutputType>> outputs;
+    outputs.reserve(inputs.size());
 
     // Attempt to load the model file if it isn't loaded yet, fail if loading is
     // unsuccessful or no model is available to load.
-    if (!loaded_model_ && !LoadModelFile(status_recorder.mutable_status())) {
-      reply_task_runner_->PostTask(
-          FROM_HERE,
-          base::BindOnce(std::move(callback_on_complete), absl::nullopt));
+    ExecutionStatus load_status = ExecutionStatus::kUnknown;
+    if (!loaded_model_ && !LoadModelFile(&load_status)) {
       // Some error status is expected, and derived classes should have set the
       // status.
-      DCHECK_NE(status_recorder.status(), ExecutionStatus::kUnknown);
-      DCHECK_NE(status_recorder.status(), ExecutionStatus::kSuccess);
+      DCHECK_NE(load_status, ExecutionStatus::kUnknown);
+      DCHECK_NE(load_status, ExecutionStatus::kSuccess);
+
+      for (size_t i = 0; i < inputs.size(); i++) {
+        outputs.push_back(absl::nullopt);
+        // If the model fails to load in a batch context, this status would not
+        // get recorded the same number of times as it would in success. Thus,
+        // increment the bucket |inputs.size()| number of times to keep metrics
+        // sane.
+        ScopedExecutionStatusResultRecorder status_recorder(
+            optimization_target_);
+        status_recorder.set_status(load_status);
+      }
+
+      reply_task_runner_->PostTask(
+          FROM_HERE, base::BindOnce(std::move(callback_on_complete), outputs));
       return;
     }
 
@@ -209,42 +242,54 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputType> {
     last_execution_time_ = base::TimeTicks::Now();
 
     DCHECK(loaded_model_);
-    absl::optional<OutputType> output;
 
-    // IMPORTANT: Once the arm method is called, disarm must be called when the
-    // model execution finishes. Do NOT early-return in this next block.
-    if (watchdog_) {
-      watchdog_->ArmWithTask(loaded_model_.get());
-    }
-    {
-      TRACE_EVENT1("browser", "OptGuideModelExecutor::Execute",
-                   "OptimizationTarget",
-                   optimization_guide::GetStringNameForOptimizationTarget(
-                       optimization_target_));
-      base::ElapsedThreadTimer execution_timer;
-      base::TimeTicks execute_start_time = base::TimeTicks::Now();
-      output =
-          Execute(loaded_model_.get(), status_recorder.mutable_status(), input);
-      DCHECK_NE(status_recorder.status(), ExecutionStatus::kUnknown);
+    for (const InputType& input : inputs) {
+      ScopedExecutionStatusResultRecorder status_recorder(optimization_target_);
+      // IMPORTANT: Once the arm method is called, disarm must be called when
+      // the model execution finishes. Do NOT early-return in this next block.
+      if (watchdog_) {
+        // |base::Unretained| is safe here since the watchdog itself guarantees
+        // the lifetime of the stored pointer will not extend beyond when it is
+        // disarmed.
+        watchdog_->ArmWithTask(
+            base::BindOnce(&ModelExecutionTask::Cancel,
+                           base::Unretained(loaded_model_.get())));
+      }
+      {
+        TRACE_EVENT1("browser", "OptGuideModelExecutor::Execute",
+                     "OptimizationTarget",
+                     optimization_guide::GetStringNameForOptimizationTarget(
+                         optimization_target_));
+        base::ElapsedThreadTimer execution_timer;
+        base::TimeTicks execute_start_time = base::TimeTicks::Now();
+        absl::optional<OutputType> output = Execute(
+            loaded_model_.get(), status_recorder.mutable_status(), input);
+        DCHECK_NE(status_recorder.status(), ExecutionStatus::kUnknown);
+        outputs.push_back(output);
 
-      // The max of this histogram is 1 hour because we want to understand
-      // tail behavior and catch long running model executions.
-      base::UmaHistogramLongTimes(
-          "OptimizationGuide.ModelExecutor.ExecutionLatency." +
-              GetStringNameForOptimizationTarget(optimization_target_),
-          base::TimeTicks::Now() - execute_start_time);
-      base::UmaHistogramLongTimes(
-          "OptimizationGuide.ModelExecutor.ExecutionThreadTime." +
-              GetStringNameForOptimizationTarget(optimization_target_),
-          execution_timer.Elapsed());
-    }
-    if (watchdog_) {
-      watchdog_->DisarmOnExecutionComplete();
+        // The max of this histogram is 1 hour because we want to understand
+        // tail behavior and catch long running model executions.
+        base::UmaHistogramLongTimes(
+            "OptimizationGuide.ModelExecutor.ExecutionLatency." +
+                GetStringNameForOptimizationTarget(optimization_target_),
+            base::TimeTicks::Now() - execute_start_time);
+        base::UmaHistogramLongTimes(
+            "OptimizationGuide.ModelExecutor.ExecutionThreadTime." +
+                GetStringNameForOptimizationTarget(optimization_target_),
+            execution_timer.Elapsed());
+        base::UmaHistogramMicrosecondsTimes(
+            "OptimizationGuide.ModelExecutor.ExecutionThreadTimeMicroseconds." +
+                GetStringNameForOptimizationTarget(optimization_target_),
+            execution_timer.Elapsed());
+      }
+      if (watchdog_) {
+        watchdog_->DisarmOnExecutionComplete();
+      }
     }
 
     DCHECK(callback_on_complete);
     reply_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback_on_complete), output));
+        FROM_HERE, base::BindOnce(std::move(callback_on_complete), outputs));
 
     OnExecutionComplete();
   }
@@ -335,8 +380,7 @@ class TFLiteModelExecutor : public ModelExecutor<OutputType, InputType> {
 
   bool should_unload_model_on_complete_ = true;
 
-  std::unique_ptr<ModelExecutionTimeoutWatchdog<OutputType, InputType>,
-                  base::OnTaskRunnerDeleter>
+  std::unique_ptr<ModelExecutionTimeoutWatchdog, base::OnTaskRunnerDeleter>
       watchdog_;
 
   scoped_refptr<base::SequencedTaskRunner> execution_task_runner_;

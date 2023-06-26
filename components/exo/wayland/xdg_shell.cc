@@ -275,6 +275,7 @@ class WaylandToplevel : public aura::WindowObserver {
   ShellSurfaceData GetShellSurfaceData() {
     return ShellSurfaceData(shell_surface_data_->shell_surface.get(),
                             shell_surface_data_->serial_tracker,
+                            shell_surface_data_->rotation_serial_tracker,
                             xdg_surface_resource_);
   }
 
@@ -505,6 +506,10 @@ class WaylandPopup : aura::WindowObserver {
   }
 
   void Reposition(WaylandPositioner* positioner, uint32_t token) {
+    if (wl_resource_get_version(resource_) <
+        XDG_POPUP_REPOSITIONED_SINCE_VERSION) {
+      return;
+    }
     xdg_popup_send_repositioned(resource_, token);
 
     display::Display display =
@@ -721,9 +726,8 @@ void xdg_wm_base_create_positioner(wl_client* client,
   wl_resource* positioner_resource = wl_resource_create(
       client, &xdg_positioner_interface, wl_resource_get_version(resource), id);
 
-  SetImplementation(
-      positioner_resource, &xdg_positioner_implementation,
-      std::make_unique<WaylandPositioner>(WaylandPositioner::Version::STABLE));
+  SetImplementation(positioner_resource, &xdg_positioner_implementation,
+                    std::make_unique<WaylandPositioner>());
 }
 
 void xdg_wm_base_get_xdg_surface(wl_client* client,
@@ -747,7 +751,8 @@ void xdg_wm_base_get_xdg_surface(wl_client* client,
 
   std::unique_ptr<WaylandXdgSurface> wayland_shell_surface =
       std::make_unique<WaylandXdgSurface>(std::move(shell_surface),
-                                          data->serial_tracker);
+                                          data->serial_tracker,
+                                          data->rotation_serial_tracker);
 
   wl_resource* xdg_surface_resource = wl_resource_create(
       client, &xdg_surface_interface, wl_resource_get_version(resource), id);
@@ -828,8 +833,11 @@ static const struct zxdg_decoration_manager_v1_interface
 
 WaylandXdgSurface ::WaylandXdgSurface(
     std::unique_ptr<XdgShellSurface> shell_surface,
-    SerialTracker* const serial_tracker)
-    : shell_surface(std::move(shell_surface)), serial_tracker(serial_tracker) {}
+    SerialTracker* const serial_tracker,
+    SerialTracker* const rotation_serial_tracker)
+    : shell_surface(std::move(shell_surface)),
+      serial_tracker(serial_tracker),
+      rotation_serial_tracker(rotation_serial_tracker) {}
 
 WaylandXdgSurface::~WaylandXdgSurface() = default;
 

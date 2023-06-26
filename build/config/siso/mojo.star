@@ -10,10 +10,10 @@ __filegroups = {}
 
 __handlers = {}
 
-def __step_config(ctx, step_config):
-    step_config["rules"].extend([
+def __step_rules():
+    return [
         {
-            "name": "mojo/mojom_bindigns_generator",
+            "name": "mojo/mojom_bindings_generator",
             "command_prefix": "python3 ../../mojo/public/tools/bindings/mojom_bindings_generator.py",
             "inputs": [
                 "mojo/public/tools/bindings/mojom_bindings_generator.py",
@@ -108,17 +108,55 @@ def __step_config(ctx, step_config):
             },
             "restat": True,
             "remote": True,
+            "timeout": "2m",
             "output_local": True,
-            "platform": {
-                # mojo_bindings_generators.py will run faster on n2-highmem-8
-                # than n2-custom-2-3840
-                # e.g.
-                #  n2-highmem-8: exec: 880.202978ms
-                #  n2-custom-2-3840: exec: 2.42808488s
-                "gceMachineType": "n2-highmem-8",
-            },
+            "platform_ref": "mojo",
         },
-    ])
+        {
+            "name": "mojo/mojom_parser",
+            "command_prefix": "python3 ../../mojo/public/tools/mojom/mojom_parser.py",
+            "indirect_inputs": {
+                "includes": [
+                    "*.build_metadata",
+                    "*.mojom",
+                    "*.mojom-module",
+                    "*.test-mojom",
+                    "*.test-mojom-module",
+                ],
+            },
+            "exclude_input_patterns": [
+                "*.stamp",
+            ],
+            # TODO(b/288523418): missing inputs for mojom_parser?
+            "outputs_map": {
+                "./gen/mojo/public/interfaces/bindings/tests/sample_import2.mojom-module": {
+                    "inputs": [
+                        "./gen/mojo/public/interfaces/bindings/tests/test_mojom_import_wrapper.build_metadata",
+                        "./gen/mojo/public/interfaces/bindings/tests/test_mojom_import_wrapper_wrapper.build_metadata",
+                    ],
+                },
+                "./gen/mojo/public/interfaces/bindings/tests/math_calculator.mojom-module": {
+                    "inputs": [
+                        "./gen/mojo/public/interfaces/bindings/tests/test_mojom_import_wrapper.build_metadata",
+                        "./gen/mojo/public/interfaces/bindings/tests/test_mojom_import_wrapper_wrapper.build_metadata",
+                    ],
+                },
+                "./gen/mojo/public/interfaces/bindings/tests/test_associated_interfaces.mojom-module": {
+                    "inputs": [
+                        "./gen/mojo/public/interfaces/bindings/tests/test_mojom_import_wrapper.build_metadata",
+                        "./gen/mojo/public/interfaces/bindings/tests/test_mojom_import_wrapper_wrapper.build_metadata",
+                    ],
+                },
+            },
+            "remote": True,
+            "input_root_absolute_path": True,
+            "output_local": True,
+            "platform_ref": "mojo",
+        },
+    ]
+
+def __step_config(ctx, step_config):
+    step_config["rules"].extend(__step_rules())
     return step_config
 
 mojo = module(
@@ -126,4 +164,6 @@ mojo = module(
     step_config = __step_config,
     filegroups = __filegroups,
     handlers = __handlers,
+    # Export the step rules so that it can be reused in rewrapper_to_reproxy.
+    step_rules = __step_rules,
 )

@@ -11,6 +11,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/network_config_service.h"
+#include "ash/webui/common/trusted_types_util.h"
 #include "ash/webui/grit/ash_shimless_rma_resources.h"
 #include "ash/webui/grit/ash_shimless_rma_resources_map.h"
 #include "ash/webui/shimless_rma/backend/shimless_rma_delegate.h"
@@ -282,6 +283,20 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_REVERT_BUTTON_LABEL},
       {"confirmDeviceInfoSkuWarning",
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_SKU_WARNING},
+      {"confirmDeviceInfoDeviceNotCompliant",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_DEVICE_NOT_COMPLIANT},
+      {"confirmDeviceInfoDeviceCompliant",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_DEVICE_COMPLIANT},
+      {"confirmDeviceInfoDeviceComplianceWarning",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_DEVICE_COMPLIANCE_WARNING},
+      {"confirmDeviceInfoDeviceQuestionIsBranded",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_DEVICE_QUESTION_IS_BRANDED},
+      {"confirmDeviceInfoDeviceQuestionDoesMeetRequirements",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_DEVICE_QUESTION_DOES_MEET_REQUIREMENTS},
+      {"confirmDeviceInfoDeviceAnswerNo",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_ANSWER_NO},
+      {"confirmDeviceInfoDeviceAnswerYes",
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_ANSWER_YES},
       // Firmware reimaging page
       {"firmwareUpdateInstallImageTitleText",
        IDS_SHIMLESS_RMA_FIRMWARE_UPDATE_INSTALL_IMAGE_TITLE},
@@ -374,6 +389,8 @@ void AddFeatureFlags(content::WebUIDataSource* html_source) {
       base::FeatureList::IsEnabled(features::kShimlessRMAOsUpdate));
   html_source->AddBoolean("diagnosticPageEnabled",
                           features::IsShimlessRMADiagnosticPageEnabled());
+  html_source->AddBoolean("complianceCheckEnabled",
+                          features::IsShimlessRMAComplianceCheckEnabled());
 }
 
 }  // namespace
@@ -407,6 +424,17 @@ bool HasLaunchRmaSwitchAndIsAllowed() {
 
 }  // namespace shimless_rma
 
+ShimlessRMADialogUIConfig::ShimlessRMADialogUIConfig(
+    CreateWebUIControllerFunc create_controller_func)
+    : ChromeOSWebUIConfig(content::kChromeUIScheme,
+                          ash::kChromeUIShimlessRMAHost,
+                          create_controller_func) {}
+
+bool ShimlessRMADialogUIConfig::IsWebUIEnabled(
+    content::BrowserContext* browser_context) {
+  return shimless_rma::HasLaunchRmaSwitchAndIsAllowed();
+}
+
 ShimlessRMADialogUI::ShimlessRMADialogUI(
     content::WebUI* web_ui,
     std::unique_ptr<shimless_rma::ShimlessRmaDelegate> shimless_rma_delegate)
@@ -421,7 +449,7 @@ ShimlessRMADialogUI::ShimlessRMADialogUI(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test chrome://webui-test "
       "'self';");
-  html_source->DisableTrustedTypesCSP();
+  ash::EnableTrustedTypesCSP(html_source);
 
   const auto resources =
       base::make_span(kAshShimlessRmaResources, kAshShimlessRmaResourcesSize);

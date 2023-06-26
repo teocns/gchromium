@@ -8,6 +8,7 @@
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/power_monitor/battery_state_sampler.h"
 #include "base/power_monitor/power_monitor_buildflags.h"
 #include "base/system/sys_info.h"
 #include "base/time/default_tick_clock.h"
@@ -65,7 +66,6 @@
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "base/power_monitor/battery_state_sampler.h"
 #include "chrome/browser/performance_manager/mechanisms/page_freezer.h"
 #include "chrome/browser/performance_manager/policies/heuristic_memory_saver_policy.h"
 #include "chrome/browser/performance_manager/policies/high_efficiency_mode_policy.h"
@@ -171,28 +171,13 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
   graph->PassToGraph(
       std::make_unique<performance_manager::policies::PageFreezingPolicy>());
 
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kHeuristicMemorySaver)) {
-    graph->PassToGraph(std::make_unique<performance_manager::policies::
-                                            HeuristicMemorySaverPolicy>(
-        performance_manager::features::
-            kHeuristicMemorySaverAvailableMemoryThresholdPercent.Get(),
-        performance_manager::features::
-            kHeuristicMemorySaverAvailableMemoryThresholdMb.Get(),
-        base::Seconds(
-            performance_manager::features::
-                kHeuristicMemorySaverThresholdReachedHeartbeatSeconds.Get()),
-        base::Seconds(
-            performance_manager::features::
-                kHeuristicMemorySaverThresholdNotReachedHeartbeatSeconds.Get()),
-        base::Minutes(
-            performance_manager::features::
-                kHeuristicMemorySaverMinimumMinutesInBackground.Get())));
-  } else {
-    graph->PassToGraph(
-        std::make_unique<
-            performance_manager::policies::HighEfficiencyModePolicy>());
-  }
+  // Add both policies. Only one will be enabled at a time.
+  graph->PassToGraph(
+      std::make_unique<
+          performance_manager::policies::HeuristicMemorySaverPolicy>());
+  graph->PassToGraph(
+      std::make_unique<
+          performance_manager::policies::HighEfficiencyModePolicy>());
 #endif  // !BUILDFLAG(IS_ANDROID)
 
   graph->PassToGraph(

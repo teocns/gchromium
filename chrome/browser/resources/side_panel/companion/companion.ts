@@ -8,7 +8,7 @@ import {assert} from '//resources/js/assert_ts.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
 import {Url} from '//resources/mojo/url/mojom/url.mojom-webui.js';
 
-import {ImageQuery, MethodType, PromoAction, PromoType} from './companion.mojom-webui.js';
+import {ImageQuery, MethodType, PromoAction, PromoType, VisualSearchResult} from './companion.mojom-webui.js';
 import {CompanionProxy, CompanionProxyImpl} from './companion_proxy.js';
 
 /**
@@ -43,16 +43,28 @@ enum ParamType {
   UI_SURFACE = 'uiSurface',
 
   // Arguments for MethodType.kRecordUiSurfaceShown.
-  CHILD_ELEMENT_COUNT = 'childElementCount',
+  UI_SURFACE_POSITION = 'uiSurfacePosition',
+  CHILD_ELEMENT_AVAILABLE_COUNT = 'childElementAvailableCount',
+  CHILD_ELEMENT_SHOWN_COUNT = 'childElementShownCount',
+
+  // Arguments for MethodType.kRecordUiSurfaceClicked.
+  CLICK_POSITION = 'clickPosition',
 
   // Arguments for MethodType.kOnCqJamptagClicked.
   CQ_JUMPTAG_TEXT = 'cqJumptagText',
+
+  // Arguments for MethodType.kOpenUrlInBrowser
+  URL_TO_OPEN = 'urlToOpen',
+  USE_NEW_TAB = 'useNewTab',
 
   // Arguments for browser -> iframe communication.
   COMPANION_UPDATE_PARAMS = 'companionUpdateParams',
 
   // Arguments for sending text find results from browser to iframe.
   CQ_TEXT_FIND_RESULTS = 'cqTextFindResults',
+
+  // Arguments for sending Visual Search results from browser to iframe.
+  VISUAL_SEARCH_PARAMS = 'visualSearchParams',
 }
 
 const companionProxy: CompanionProxy = CompanionProxyImpl.getInstance();
@@ -156,6 +168,34 @@ function initialize() {
         }
       });
 
+  // POST dataUris from the Visual Search classification results to the iframe
+  companionProxy.callbackRouter.onDeviceVisualClassificationResult.addListener(
+      (results: VisualSearchResult[]) => {
+        const dataUris = results.map(result => result.dataUri);
+        const message = {
+          [ParamType.METHOD_TYPE]:
+              MethodType.kOnDeviceVisualClassificationResult,
+          [ParamType.VISUAL_SEARCH_PARAMS]: dataUris,
+        };
+
+        const companionOrigin =
+            new URL(loadTimeData.getString('companion_origin')).origin;
+        const frame = document.body.querySelector('iframe');
+        assert(frame);
+        if (frame.contentWindow) {
+          // We ensure that frame is done loading before posting the message.
+          if (frame.contentDocument?.readyState === 'complete') {
+            frame.contentWindow.postMessage(message, companionOrigin);
+          } else {
+            // Since frame is not done loading, we postpone it is loaded.
+            frame.addEventListener('load', () => {
+              assert(frame.contentWindow);
+              frame.contentWindow.postMessage(message, companionOrigin);
+            });
+          }
+        }
+      });
+
   companionProxy.handler.showUI();
 }
 
@@ -189,10 +229,18 @@ function onCompanionMessageEvent(event: MessageEvent) {
     openInNewTabUrl.url = data[ParamType.URL_FOR_OPEN_IN_NEW_TAB];
     companionProxy.handler.onOpenInNewTabButtonURLChanged(openInNewTabUrl);
   } else if (methodType === MethodType.kRecordUiSurfaceShown) {
+    const uiSurfacePosition = data[ParamType.UI_SURFACE_POSITION] || -1;
+    const childElementAvailableCount =
+        data[ParamType.CHILD_ELEMENT_AVAILABLE_COUNT] || -1;
+    const childElementShownCount =
+        data[ParamType.CHILD_ELEMENT_SHOWN_COUNT] || -1;
     companionProxy.handler.recordUiSurfaceShown(
-        data[ParamType.UI_SURFACE], data[ParamType.CHILD_ELEMENT_COUNT]);
+        data[ParamType.UI_SURFACE], uiSurfacePosition,
+        childElementAvailableCount, childElementShownCount);
   } else if (methodType === MethodType.kRecordUiSurfaceClicked) {
-    companionProxy.handler.recordUiSurfaceClicked(data[ParamType.UI_SURFACE]);
+    const clickPosition = data[ParamType.CLICK_POSITION] || -1;
+    companionProxy.handler.recordUiSurfaceClicked(
+        data[ParamType.UI_SURFACE], clickPosition);
   } else if (methodType === MethodType.kOnCqCandidatesAvailable) {
     companionProxy.handler.onCqCandidatesAvailable(
         data[ParamType.CQ_TEXT_DIRECTIVES]);
@@ -200,6 +248,11 @@ function onCompanionMessageEvent(event: MessageEvent) {
     companionProxy.handler.onPhFeedback(data[ParamType.PH_FEEDBACK]);
   } else if (methodType === MethodType.kOnCqJumptagClicked) {
     companionProxy.handler.onCqJumptagClicked(data[ParamType.CQ_JUMPTAG_TEXT]);
+  } else if (methodType === MethodType.kOpenUrlInBrowser) {
+    const urlToOpen = new Url();
+    urlToOpen.url = data[ParamType.URL_TO_OPEN] || '';
+    companionProxy.handler.openUrlInBrowser(
+        urlToOpen, data[ParamType.USE_NEW_TAB]);
   }
 }
 

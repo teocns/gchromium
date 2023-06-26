@@ -311,13 +311,14 @@ class SplitViewControllerTest : public AshTestBase {
                                        std::vector<int>&& exit_counts) {
     CheckForDuplicateTraceName(trace);
 
-    // Overview histograms recorded via ui::ThroughputTracker is reported
-    // on the next frame presented after animation stops. Wait for the next
-    // frame with a 100ms timeout for the report, regardless of whether there
-    // is a next frame.
-    std::ignore = ui::WaitForNextFrameToBePresented(
-        Shell::GetPrimaryRootWindow()->layer()->GetCompositor(),
-        base::Milliseconds(100));
+    // Force a frame then wait, ensuring there is one more frame presented after
+    // animation finishes to allow animation throughput data to be passed from
+    // cc to ui.
+    ui::Compositor* compositor =
+        Shell::GetPrimaryRootWindow()->layer()->GetCompositor();
+    compositor->ScheduleFullRedraw();
+    std::ignore =
+        ui::WaitForNextFrameToBePresented(compositor, base::Milliseconds(500));
 
     {
       SCOPED_TRACE(trace + std::string(".Enter"));
@@ -776,10 +777,11 @@ TEST_F(SplitViewControllerTest, ExitOverviewMode) {
   EXPECT_TRUE(wm::IsActiveWindow(window1.get()));
 }
 
+#if defined(NDEBUG) && !defined(ADDRESS_SANITIZER) && \
+    !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
 // Tests that the overview mode enter exit smoothness histograms are recorded
 // properly when one window is snapped.
-// TODO(b/252523767): Reenable this test.
-TEST_F(SplitViewControllerTest, DISABLED_EnterExitOverviewModeHistograms) {
+TEST_F(SplitViewControllerTest, EnterExitOverviewModeHistograms) {
   const gfx::Rect bounds(0, 0, 400, 400);
   std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
   std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
@@ -795,7 +797,7 @@ TEST_F(SplitViewControllerTest, DISABLED_EnterExitOverviewModeHistograms) {
             split_view_controller()->state());
 
   ui::ScopedAnimationDurationScaleMode animation_scale(
-      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+      ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
 
   ToggleOverview();
   WaitForOverviewEnterAnimation();
@@ -805,6 +807,7 @@ TEST_F(SplitViewControllerTest, DISABLED_EnterExitOverviewModeHistograms) {
   WaitForOverviewExitAnimation();
   CheckOverviewEnterExitHistogram("ExitInSplitView", {0, 1}, {0, 1});
 }
+#endif
 
 // Tests that the split divider was created when the split view mode is active
 // and destroyed when the split view mode is ended. The split divider should be
@@ -1745,8 +1748,9 @@ TEST_F(SplitViewControllerTest, LongPressInOverviewMode) {
 
 // Tests the overview animation smoothness histograms when using long pressing
 // the overview button.
-// TODO(b/252523767): Reenable this test.
-TEST_F(SplitViewControllerTest, DISABLED_LongPressInOverviewModeHistograms) {
+#if defined(NDEBUG) && !defined(ADDRESS_SANITIZER) && \
+    !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
+TEST_F(SplitViewControllerTest, LongPressInOverviewModeHistograms) {
   ui::ScopedAnimationDurationScaleMode animation_scale(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
 
@@ -1776,6 +1780,7 @@ TEST_F(SplitViewControllerTest, DISABLED_LongPressInOverviewModeHistograms) {
   EXPECT_EQ(window.get(), split_view_controller()->primary_window());
   CheckOverviewEnterExitHistogram("NoTransition", {1, 0}, {0, 0});
 }
+#endif
 
 TEST_F(SplitViewControllerTest, LongPressWithUnsnappableWindow) {
   // Add an unsnappable window and a regular window.
@@ -3472,25 +3477,20 @@ TEST_F(SplitViewControllerTest, SnapWindowWithMinSizeOpensOverview) {
   split_view_controller()->SnapWindow(
       window2.get(), SplitViewController::SnapPosition::kSecondary);
 
-  // Snap `window1` to 2/3. Since `window2` can't fit in 1/3, test that we open
-  // Overview instead.
+  // Try to snap `window1` to 2/3. Since `window2` can't fit in 1/3, test that
+  // the divider and both windows bounce back to 1/2.
   WindowSnapWMEvent snap_primary_two_third(WM_EVENT_SNAP_PRIMARY,
                                            chromeos::kTwoThirdSnapRatio);
   WindowState::Get(window1.get())->OnWMEvent(&snap_primary_two_third);
-  EXPECT_EQ(split_view_controller()->state(),
-            SplitViewController::State::kPrimarySnapped);
-  EXPECT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
-
-  // Activate `window2`, i.e. from Overview. Test that `window2` gets pushed to
-  // 1/2 and `window1` also gets updated to 1/2.
-  wm::ActivateWindow(window2.get());
-  EXPECT_EQ(split_view_controller()->state(),
-            SplitViewController::State::kBothSnapped);
-  const int divider_delta = kSplitviewDividerShortSideLength / 2;
-  EXPECT_EQ(work_area_bounds.width() * 0.5f,
-            window1->bounds().width() + divider_delta);
-  EXPECT_EQ(work_area_bounds.width() * 0.5f,
-            window2->bounds().width() + divider_delta);
+  SkipDividerSnapAnimation();
+  gfx::Rect divider_bounds =
+      split_view_divider()->GetDividerBoundsInScreen(/*is_dragging=*/false);
+  ASSERT_NEAR(work_area_bounds.width() * 0.5f, divider_bounds.x(),
+              divider_bounds.width());
+  ASSERT_NEAR(work_area_bounds.width() * 0.5f, window1->bounds().width(),
+              kSplitviewDividerShortSideLength / 2);
+  ASSERT_NEAR(work_area_bounds.width() * 0.5f, window2->bounds().width(),
+              kSplitviewDividerShortSideLength / 2);
 }
 
 // Tests that auto-snap for partial windows works correctly.

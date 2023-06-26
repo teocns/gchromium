@@ -15,7 +15,6 @@
 
 #include "base/check_op.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/rand_util.h"
@@ -34,6 +33,7 @@
 #include "content/browser/attribution_reporting/combinatorics.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
 #include "content/browser/attribution_reporting/stored_source.h"
+#include "services/network/public/cpp/trigger_verification.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 
@@ -43,21 +43,21 @@ namespace {
 
 using ::attribution_reporting::mojom::SourceType;
 
-const base::FeatureParam<base::TimeDelta> kFirstReportWindowDeadline{
-    &blink::features::kConversionMeasurement, "first_report_window_deadline",
-    AttributionConfig::EventLevelLimit::kDefaultFirstReportWindowDeadline};
+const base::FeatureParam<bool> kVTCEarlyReportingWindows(
+    &blink::features::kConversionMeasurement,
+    "vtc_early_reporting_windows",
+    false);
 
-const base::FeatureParam<base::TimeDelta> kSecondReportWindowDeadline{
-    &blink::features::kConversionMeasurement, "second_report_window_deadline",
-    AttributionConfig::EventLevelLimit::kDefaultSecondReportWindowDeadline};
+std::vector<base::TimeDelta> GetVtcEarlyDeadlines(
+    const AttributionConfig& config) {
+  if (!kVTCEarlyReportingWindows.Get()) {
+    return std::vector<base::TimeDelta>();
+  }
 
-const base::FeatureParam<base::TimeDelta> kAggregateReportMinDelay{
-    &blink::features::kConversionMeasurement, "aggregate_report_min_delay",
-    AttributionConfig::AggregateLimit::kDefaultMinDelay};
-
-const base::FeatureParam<base::TimeDelta> kAggregateReportDelaySpan{
-    &blink::features::kConversionMeasurement, "aggregate_report_delay_span",
-    AttributionConfig::AggregateLimit::kDefaultDelaySpan};
+  return std::vector<base::TimeDelta>{
+      config.event_level_limit.first_event_report_window_deadline,
+      config.event_level_limit.second_event_report_window_deadline};
+}
 
 base::Time GetClampedTime(base::TimeDelta time_delta, base::Time source_time) {
   constexpr base::TimeDelta kMinDeltaTime = base::Days(1);
@@ -113,44 +113,7 @@ AttributionStorageDelegateImpl::AttributionStorageDelegateImpl(
     AttributionDelayMode delay_mode)
     : AttributionStorageDelegateImpl(noise_mode,
                                      delay_mode,
-                                     AttributionConfig()) {
-  base::TimeDelta first_deadline = kFirstReportWindowDeadline.Get();
-  base::TimeDelta second_deadline = kSecondReportWindowDeadline.Get();
-
-  if (!first_deadline.is_negative() && first_deadline < second_deadline) {
-    config_.event_level_limit.first_report_window_deadline = first_deadline;
-    config_.event_level_limit.second_report_window_deadline = second_deadline;
-  } else {
-    LOG(WARNING)
-        << "Invalid reporting window deadline value(s) - "
-        << "Reporting window deadlines should be non-negative "
-        << "and the first deadline should be less than the second."
-        << "Using default values: ["
-        << AttributionConfig::EventLevelLimit::kDefaultFirstReportWindowDeadline
-        << ", "
-        << AttributionConfig::EventLevelLimit::
-               kDefaultSecondReportWindowDeadline
-        << "]";
-  }
-
-  if (base::TimeDelta min_delay = kAggregateReportMinDelay.Get();
-      !min_delay.is_negative()) {
-    config_.aggregate_limit.min_delay = min_delay;
-  } else {
-    LOG(WARNING) << "Minimum aggregate delay declared negative, "
-                 << "using default value: "
-                 << AttributionConfig::AggregateLimit::kDefaultMinDelay;
-  }
-
-  if (base::TimeDelta delay_span = kAggregateReportDelaySpan.Get();
-      !delay_span.is_negative()) {
-    config_.aggregate_limit.delay_span = delay_span;
-  } else {
-    LOG(WARNING) << "Aggregate delay span declared negative, "
-                 << "using default value: "
-                 << AttributionConfig::AggregateLimit::kDefaultDelaySpan;
-  }
-}
+                                     AttributionConfig()) {}
 
 AttributionStorageDelegateImpl::AttributionStorageDelegateImpl(
     AttributionNoiseMode noise_mode,
@@ -183,12 +146,12 @@ base::Time AttributionStorageDelegateImpl::GetEventLevelReportTime(
 
   const CommonSourceInfo& common_info = source.common_info();
 
-  base::TimeDelta expiry_deadline = ExpiryDeadline(
-      common_info.source_time(), source.event_report_window_time());
+  base::TimeDelta expiry_deadline =
+      ExpiryDeadline(source.source_time(), source.event_report_window_time());
   switch (delay_mode_) {
     case AttributionDelayMode::kDefault:
       return ComputeReportTime(
-          common_info.source_time(), trigger_time,
+          source.source_time(), trigger_time,
           EffectiveDeadlines(common_info.source_type(), expiry_deadline));
     case AttributionDelayMode::kNone:
       return trigger_time;
@@ -254,6 +217,19 @@ void AttributionStorageDelegateImpl::ShuffleReports(
   }
 }
 
+void AttributionStorageDelegateImpl::ShuffleTriggerVerifications(
+    std::vector<network::TriggerVerification>& verifications) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  switch (noise_mode_) {
+    case AttributionNoiseMode::kDefault:
+      base::RandomShuffle(verifications.begin(), verifications.end());
+      break;
+    case AttributionNoiseMode::kNone:
+      break;
+  }
+}
+
 double AttributionStorageDelegateImpl::GetRandomizedResponseRate(
     SourceType source_type,
     base::TimeDelta expiry_deadline) const {
@@ -272,6 +248,7 @@ double AttributionStorageDelegateImpl::GetRandomizedResponseRate(
 AttributionStorageDelegate::RandomizedResponse
 AttributionStorageDelegateImpl::GetRandomizedResponse(
     const CommonSourceInfo& source,
+    base::Time source_time,
     base::Time event_report_window_time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -279,10 +256,10 @@ AttributionStorageDelegateImpl::GetRandomizedResponse(
     case AttributionNoiseMode::kDefault: {
       double randomized_trigger_rate = GetRandomizedResponseRate(
           source.source_type(),
-          ExpiryDeadline(source.source_time(), event_report_window_time));
+          ExpiryDeadline(source_time, event_report_window_time));
       return GenerateWithRate(randomized_trigger_rate)
-                 ? absl::make_optional(
-                       GetRandomFakeReports(source, event_report_window_time))
+                 ? absl::make_optional(GetRandomFakeReports(
+                       source, source_time, event_report_window_time))
                  : absl::nullopt;
     }
     case AttributionNoiseMode::kNone:
@@ -293,13 +270,14 @@ AttributionStorageDelegateImpl::GetRandomizedResponse(
 std::vector<AttributionStorageDelegate::FakeReport>
 AttributionStorageDelegateImpl::GetRandomFakeReports(
     const CommonSourceInfo& source,
+    base::Time source_time,
     base::Time event_report_window_time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(noise_mode_, AttributionNoiseMode::kDefault);
 
-  std::vector<base::TimeDelta> deadlines = EffectiveDeadlines(
-      source.source_type(),
-      ExpiryDeadline(source.source_time(), event_report_window_time));
+  std::vector<base::TimeDelta> deadlines =
+      EffectiveDeadlines(source.source_type(),
+                         ExpiryDeadline(source_time, event_report_window_time));
 
   const int num_combinations = GetNumberOfStarsAndBarsSequences(
       /*num_stars=*/GetMaxAttributionsPerSource(source.source_type()),
@@ -309,12 +287,14 @@ AttributionStorageDelegateImpl::GetRandomFakeReports(
   // Subtract 1 because `AttributionRandomGenerator::RandInt()` is inclusive.
   const int sequence_index = base::RandInt(0, num_combinations - 1);
 
-  return GetFakeReportsForSequenceIndex(source, deadlines, sequence_index);
+  return GetFakeReportsForSequenceIndex(source, source_time, deadlines,
+                                        sequence_index);
 }
 
 std::vector<AttributionStorageDelegate::FakeReport>
 AttributionStorageDelegateImpl::GetFakeReportsForSequenceIndex(
     const CommonSourceInfo& source,
+    base::Time source_time,
     const std::vector<base::TimeDelta>& deadlines,
     int random_stars_and_bars_sequence_index) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -347,11 +327,11 @@ AttributionStorageDelegateImpl::GetFakeReportsForSequenceIndex(
     DCHECK_GE(trigger_data, 0);
     DCHECK_LT(trigger_data, trigger_data_cardinality);
 
-    base::Time report_time = ReportTimeAtWindow(source, deadlines,
+    base::Time report_time = ReportTimeAtWindow(source_time, deadlines,
                                                 /*window_index=*/result.quot);
     base::Time trigger_time = LastTriggerTimeForReportTime(report_time);
 
-    DCHECK_EQ(ComputeReportTime(source.source_time(), trigger_time, deadlines),
+    DCHECK_EQ(ComputeReportTime(source_time, trigger_time, deadlines),
               report_time);
 
     fake_reports.push_back({
@@ -409,20 +389,20 @@ std::vector<base::TimeDelta> AttributionStorageDelegateImpl::EarlyDeadlines(
   switch (source_type) {
     case SourceType::kNavigation:
       return std::vector<base::TimeDelta>{
-          config_.event_level_limit.first_report_window_deadline,
-          config_.event_level_limit.second_report_window_deadline};
+          config_.event_level_limit.first_navigation_report_window_deadline,
+          config_.event_level_limit.second_navigation_report_window_deadline};
     case SourceType::kEvent:
-      return std::vector<base::TimeDelta>();
+      return GetVtcEarlyDeadlines(config_);
   }
 }
 
 base::Time AttributionStorageDelegateImpl::ReportTimeAtWindow(
-    const CommonSourceInfo& source,
+    base::Time source_time,
     const std::vector<base::TimeDelta>& deadlines,
     int window_index) const {
   DCHECK_GE(window_index, 0);
   DCHECK_LT(static_cast<size_t>(window_index), deadlines.size());
-  return ReportTimeFromDeadline(source.source_time(), deadlines[window_index]);
+  return ReportTimeFromDeadline(source_time, deadlines[window_index]);
 }
 
 std::vector<AttributionStorageDelegate::NullAggregatableReport>

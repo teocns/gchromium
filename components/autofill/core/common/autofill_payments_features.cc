@@ -47,6 +47,12 @@ BASE_FEATURE(kAutofillEnableCardProductName,
              "AutofillEnableCardProductName",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When enabled, we will store CVC for both local and server credit cards. This
+// will also allow the users to autofill their CVCs on checkout pages.
+BASE_FEATURE(kAutofillEnableCvcStorageAndFilling,
+             "AutofillEnableCvcStorageAndFilling",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // When enabled, if the user encounters the yellow path (challenge path) in the
 // VCN retrieval flow and the server denotes that the card is eligible for email
 // OTP authentication, email OTP authentication will be offered as one of the
@@ -181,6 +187,13 @@ BASE_FEATURE(kAutofillFillMerchantPromoCodeFields,
              "AutofillFillMerchantPromoCodeFields",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// When enabled, legal term of save card view and virtual card enroll view will
+// be moved before action buttons and icon will be moved after titles in those
+// views.
+BASE_FEATURE(kAutofillMoveLegalTermsAndIconForNewCardEnrollment,
+             "AutofillMoveLegalTermsAndIconForNewCardEnrollment",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // When enabled, Autofill will offer saving a card to the users when the Chrome
 // detects a card number with the last 4 digits that matches an existing server
 // card but has a different expiration date.
@@ -262,7 +275,7 @@ BASE_FEATURE(kAutofillUpstreamUseAlternateSecureDataType,
 // When enabled, we use the Elo regex to match the BIN ranges.
 BASE_FEATURE(kAutofillUseEloRegexForBinMatching,
              "AutofillUseEloRegexForBinMatching",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // The delay required since the last strike before offering another virtual card
 // enrollment attempt.
@@ -270,6 +283,14 @@ const base::FeatureParam<int>
     kAutofillVirtualCardEnrollDelayInStrikeDatabaseInDays{
         &kAutofillEnforceDelaysInStrikeDatabase,
         "autofill_virtual_card_enroll_delay_in_strike_database_in_days", 7};
+
+#if BUILDFLAG(IS_IOS)
+// When enabled, use two '•' when displaying the last four digits of a credit
+// card number. (E.g., '•• 8888' rather than '•••• 8888').
+BASE_FEATURE(kAutofillUseTwoDotsForLastFourDigits,
+             "AutofillUseTwoDotsForLastFourDigits",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 bool ShouldShowImprovedUserConsentForCreditCardSave() {
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch

@@ -4,6 +4,9 @@
 
 #include "components/sync/nigori/cryptographer_impl.h"
 
+#include <utility>
+
+#include "components/sync/engine/nigori/cross_user_sharing_public_private_key_pair.h"
 #include "components/sync/engine/nigori/key_derivation_params.h"
 #include "components/sync/protocol/nigori_local_data.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -111,6 +114,8 @@ TEST(CryptographerImplTest, ShouldSerializeToAndFromProto) {
       "password1", KeyDerivationParams::CreateForPbkdf2());
   const std::string key_name2 = original_cryptographer->EmplaceKey(
       "password2", KeyDerivationParams::CreateForPbkdf2());
+  original_cryptographer->EmplaceKeyPair(
+      CrossUserSharingPublicPrivateKeyPair::GenerateNewKeyPair(), 0);
 
   original_cryptographer->SelectDefaultEncryptionKey(key_name1);
   sync_pb::EncryptedData encrypted1;
@@ -125,6 +130,7 @@ TEST(CryptographerImplTest, ShouldSerializeToAndFromProto) {
       CryptographerImpl::FromProto(original_cryptographer->ToProto());
   ASSERT_THAT(restored_cryptographer, NotNull());
   EXPECT_TRUE(restored_cryptographer->CanEncrypt());
+  EXPECT_TRUE(restored_cryptographer->HasKeyPair(0));
 
   std::string decrypted;
   EXPECT_TRUE(restored_cryptographer->DecryptToString(encrypted1, &decrypted));
@@ -152,6 +158,34 @@ TEST(CryptographerImplTest, ShouldExportDefaultKey) {
   // resulting key name should match the original.
   EXPECT_THAT(NigoriKeyBag::CreateEmpty().AddKeyFromProto(exported_key),
               Eq(key_name));
+}
+
+TEST(CryptographerImplTest, ShouldEmplaceKeyPair) {
+  std::unique_ptr<CryptographerImpl> cryptographer =
+      CryptographerImpl::CreateEmpty();
+  ASSERT_THAT(cryptographer, NotNull());
+  CrossUserSharingPublicPrivateKeyPair key_pair =
+      CrossUserSharingPublicPrivateKeyPair::GenerateNewKeyPair();
+  ASSERT_FALSE(cryptographer->HasKeyPair(0));
+
+  cryptographer->EmplaceKeyPair(std::move(key_pair), 0);
+
+  EXPECT_TRUE(cryptographer->HasKeyPair(0));
+}
+
+TEST(CryptographerImplTest, ShouldEmplaceExistingKeyPair) {
+  std::unique_ptr<CryptographerImpl> cryptographer =
+      CryptographerImpl::CreateEmpty();
+  ASSERT_THAT(cryptographer, NotNull());
+  ASSERT_FALSE(cryptographer->HasKeyPair(0));
+  cryptographer->EmplaceKeyPair(
+      CrossUserSharingPublicPrivateKeyPair::GenerateNewKeyPair(), 0);
+  ASSERT_TRUE(cryptographer->HasKeyPair(0));
+
+  cryptographer->EmplaceKeyPair(
+      CrossUserSharingPublicPrivateKeyPair::GenerateNewKeyPair(), 0);
+
+  EXPECT_TRUE(cryptographer->HasKeyPair(0));
 }
 
 }  // namespace syncer

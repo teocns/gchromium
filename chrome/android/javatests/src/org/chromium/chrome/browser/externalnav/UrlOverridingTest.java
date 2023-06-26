@@ -18,6 +18,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
@@ -51,11 +52,11 @@ import org.mockito.junit.MockitoRule;
 import org.mockito.quality.Strictness;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.PackageManagerUtils;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -204,10 +205,6 @@ public class UrlOverridingTest {
             "intent://test/#Intent;scheme=externalappscheme;end;";
 
     private static final String OTHER_BROWSER_PACKAGE = "com.other.browser";
-    // Needs to be a real package on the device so we can get an icon from it. It will not be
-    // launched.
-    private static final String NON_BROWSER_PACKAGE = "com.android.settings";
-    private static final String NON_BROWSER_PACKAGE_AUTO = "com.android.car.settings";
 
     private static final String EXTERNAL_APP_SCHEME = "externalappscheme";
 
@@ -359,9 +356,7 @@ public class UrlOverridingTest {
     public void setUp() throws Exception {
         mActivityTestRule.getEmbeddedTestServerRule().setServerUsesHttps(true);
         mContextToRestore = ContextUtils.getApplicationContext();
-        mNonBrowserPackageName =
-            BuildInfo.getInstance().isAutomotive ? NON_BROWSER_PACKAGE_AUTO
-                : NON_BROWSER_PACKAGE;
+        mNonBrowserPackageName = getNonBrowserPackageName();
         mTestContext = new TestContext(mContextToRestore, mNonBrowserPackageName);
         ContextUtils.initApplicationContextForTests(mTestContext);
         IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
@@ -650,6 +645,16 @@ public class UrlOverridingTest {
         return mTestServer.getURL(OPEN_WINDOW_FROM_LINK_USER_GESTURE_PAGE)
                 + "?replace_text=" + Base64.encodeToString(param, Base64.URL_SAFE) + ":"
                 + Base64.encodeToString(value, Base64.URL_SAFE);
+    }
+
+    private String getNonBrowserPackageName() {
+        List<PackageInfo> packages =
+                ContextUtils.getApplicationContext().getPackageManager().getInstalledPackages(0);
+        if (packages == null || packages.size() == 0) {
+            return "";
+        }
+
+        return packages.get(0).packageName;
     }
 
     @Test
@@ -1052,6 +1057,12 @@ public class UrlOverridingTest {
             Criteria.checkThat(mActivityTestRule.getActivity().getActivityTab().getUrl().getSpec(),
                     Matchers.is(mTestServer.getURL(HELLO_PAGE)));
         });
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertTrue(
+                    RedirectHandlerTabHelper
+                            .getOrCreateHandlerFor(mActivityTestRule.getActivity().getActivityTab())
+                            .shouldNotOverrideUrlLoading());
+        });
     }
 
     @Test
@@ -1243,8 +1254,8 @@ public class UrlOverridingTest {
 
     @Test
     @LargeTest
-    @Features.
-    EnableFeatures({"FencedFrames<Study,PrivacySandboxAdsAPIsOverride,FencedFramesAPIChanges"})
+    @Features.EnableFeatures(
+            {"FencedFrames<Study,PrivacySandboxAdsAPIsOverride,FencedFramesAPIChanges,FencedFramesDefaultMode"})
     @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
             "force-fieldtrial-params=Study.Group:implementation_type/mparch"})
     public void

@@ -114,7 +114,9 @@ class ManagementSetEnabledFunction : public ExtensionFunction {
  private:
   void OnInstallPromptDone(bool did_accept);
 
-  bool HasUnsupportedRequirements(const std::string& extension_id);
+  bool HasUnsupportedRequirements(const std::string& extension_id) const;
+
+  bool IsExtensionApprovalFlowRequired(const Extension* target_extension) const;
 
   void OnRequirementsChecked(const PreloadCheck::Errors& errors);
 
@@ -137,7 +139,10 @@ class ManagementUninstallFunctionBase : public ExtensionFunction {
                                         const std::u16string& error);
 
  protected:
+  // ExtensionFunction:
   ~ManagementUninstallFunctionBase() override;
+  bool ShouldKeepWorkerAliveIndefinitely() override;
+
   ResponseAction Uninstall(const std::string& extension_id,
                            bool show_confirm_dialog);
 
@@ -218,40 +223,6 @@ class ManagementGenerateAppForLinkFunction : public ExtensionFunction {
 
  private:
   std::unique_ptr<AppForLinkDelegate> app_for_link_delegate_;
-};
-
-class ManagementCanInstallReplacementAndroidAppFunction
-    : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("management.canInstallReplacementAndroidApp",
-                             MANAGEMENT_CANINSTALLREPLACEMENTANDROIDAPP)
-
-  ManagementCanInstallReplacementAndroidAppFunction();
-
- protected:
-  ~ManagementCanInstallReplacementAndroidAppFunction() override;
-
-  ResponseAction Run() override;
-
- private:
-  void OnFinishedAndroidAppCheck(bool result);
-};
-
-class ManagementInstallReplacementAndroidAppFunction
-    : public ExtensionFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("management.installReplacementAndroidApp",
-                             MANAGEMENT_INSTALLREPLACEMENTANDROIDAPP)
-
-  ManagementInstallReplacementAndroidAppFunction();
-
- protected:
-  ~ManagementInstallReplacementAndroidAppFunction() override;
-
-  ResponseAction Run() override;
-
- private:
-  void OnAppInstallInitiated(bool installable);
 };
 
 class ManagementInstallReplacementWebAppFunction : public ExtensionFunction {

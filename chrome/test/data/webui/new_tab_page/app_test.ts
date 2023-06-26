@@ -51,7 +51,9 @@ suite('NewTabPageAppTest', () => {
     handler.setResultFor('getModulesIdNames', Promise.resolve({data: []}));
     windowProxy.setResultMapperFor('matchMedia', () => ({
                                                    addListener() {},
+                                                   addEventListener() {},
                                                    removeListener() {},
+                                                   removeEventListener() {},
                                                  }));
     windowProxy.setResultFor('waitForLazyRender', Promise.resolve());
     windowProxy.setResultFor('createIframeSrc', '');
@@ -202,6 +204,51 @@ suite('NewTabPageAppTest', () => {
           assertStyle($$(app, '#oneGoogleBarScrim')!, 'display', 'none');
         }
       });
+    });
+  });
+
+  suite('ogb scrim', () => {
+    suiteSetup(() => {
+      loadTimeData.overrideValues({removeScrim: true});
+    });
+
+    test('scroll bounce', async () => {
+      // Arrange.
+
+      // Set theme that triggers the scrim.
+      const theme = createTheme(true);
+      theme.backgroundImage = createBackgroundImage('https://foo.com');
+      callbackRouterRemote.setTheme(theme);
+      await callbackRouterRemote.$.flushForTesting();
+
+      // Make sure page is scrollable.
+      const spacer = document.createElement('div');
+      spacer.style.width = '100%';
+      spacer.style.height = '10000px';
+      spacer.style.flexShrink = '0';
+      $$(app, '#content')!.append(spacer);
+
+      // Simulates a vertical scroll.
+      const scrollY = async (y: number) => {
+        window.scroll(0, y);
+        // `window.scroll` doesn't automatically trigger scroll event.
+        window.dispatchEvent(new Event('scroll'));
+        // Wait for position update to propagate.
+        await new Promise<void>(
+            resolve => requestAnimationFrame(() => resolve()));
+      };
+
+      // Act (no bounce).
+      await scrollY(0);
+
+      // Assert (no bounce).
+      assertStyle($$(app, '#oneGoogleBarScrim')!, 'position', 'fixed');
+
+      // Act (scroll).
+      await scrollY(10);
+
+      // Assert (scroll).
+      assertStyle($$(app, '#oneGoogleBarScrim')!, 'position', 'absolute');
     });
   });
 
@@ -604,10 +651,43 @@ suite('NewTabPageAppTest', () => {
     });
   });
 
+  function modulesCommonTests(modulesElementTag: string) {
+    test('promo and modules coordinate', async () => {
+      // Arrange.
+      loadTimeData.overrideValues({navigationStartTime: 0.0});
+      windowProxy.setResultFor('now', 123.0);
+      const middleSlotPromo = $$(app, 'ntp-middle-slot-promo');
+      assertTrue(!!middleSlotPromo);
+      const modules = $$(app, modulesElementTag)!;
+      assertTrue(!!modules);
+
+      // Assert.
+      assertStyle(middleSlotPromo, 'display', 'none');
+      assertStyle(modules, 'display', 'none');
+
+      // Act.
+      middleSlotPromo.dispatchEvent(new Event('ntp-middle-slot-promo-loaded'));
+
+      // Assert.
+      assertStyle(middleSlotPromo, 'display', 'none');
+      assertStyle(modules, 'display', 'none');
+
+      // Act.
+      modules.dispatchEvent(new Event('modules-loaded'));
+
+      // Assert.
+      assertNotStyle(middleSlotPromo, 'display', 'none');
+      assertNotStyle(modules, 'display', 'none');
+      assertEquals(1, metrics.count('NewTabPage.Modules.ShownTime'));
+      assertEquals(1, metrics.count('NewTabPage.Modules.ShownTime', 123));
+    });
+  }
+
   suite('modules', () => {
     suiteSetup(() => {
       loadTimeData.overrideValues({
         modulesEnabled: true,
+        modulesRedesignedEnabled: false,
         wideModulesEnabled: false,
       });
     });
@@ -649,34 +729,56 @@ suite('NewTabPageAppTest', () => {
       assertStyle(modules, 'width', `${sampleMaxWidthPx}px`);
     });
 
-    test('promo and modules coordinate', async () => {
-      // Arrange.
-      loadTimeData.overrideValues({navigationStartTime: 0.0});
-      windowProxy.setResultFor('now', 123.0);
-      const middleSlotPromo = $$(app, 'ntp-middle-slot-promo');
-      assertTrue(!!middleSlotPromo);
-      const modules = $$(app, 'ntp-modules');
+    modulesCommonTests('ntp-modules');
+  });
+
+  suite('v2 modules', () => {
+    suiteSetup(() => {
+      loadTimeData.overrideValues({
+        modulesEnabled: true,
+        modulesRedesignedEnabled: true,
+      });
+    });
+
+    test('container is hidden', async () => {
+      const modules = $$(app, 'ntp-modules-v2')!;
       assertTrue(!!modules);
-
-      // Assert.
-      assertStyle(middleSlotPromo, 'display', 'none');
       assertStyle(modules, 'display', 'none');
+    });
 
+    test(`clicking records click`, () => {
       // Act.
-      middleSlotPromo.dispatchEvent(new Event('ntp-middle-slot-promo-loaded'));
+      $$<HTMLElement>(app, 'ntp-modules-v2')!.click();
 
       // Assert.
-      assertStyle(middleSlotPromo, 'display', 'none');
+      assertEquals(1, metrics.count('NewTabPage.Click'));
+      assertEquals(1, metrics.count('NewTabPage.Click', NtpElement.MODULE));
+    });
+
+    modulesCommonTests('ntp-modules-v2');
+  });
+
+  suite('v2 modules', () => {
+    suiteSetup(() => {
+      loadTimeData.overrideValues({
+        modulesEnabled: true,
+        modulesRedesignedEnabled: true,
+      });
+    });
+
+    test('container is hidden', async () => {
+      const modules = $$(app, 'ntp-modules-v2')!;
+      assertTrue(!!modules);
       assertStyle(modules, 'display', 'none');
+    });
 
+    test(`clicking records click`, () => {
       // Act.
-      modules.dispatchEvent(new Event('modules-loaded'));
+      $$<HTMLElement>(app, 'ntp-modules-v2')!.click();
 
       // Assert.
-      assertNotStyle(middleSlotPromo, 'display', 'none');
-      assertNotStyle(modules, 'display', 'none');
-      assertEquals(1, metrics.count('NewTabPage.Modules.ShownTime'));
-      assertEquals(1, metrics.count('NewTabPage.Modules.ShownTime', 123));
+      assertEquals(1, metrics.count('NewTabPage.Click'));
+      assertEquals(1, metrics.count('NewTabPage.Click', NtpElement.MODULE));
     });
   });
 
@@ -696,12 +798,12 @@ suite('NewTabPageAppTest', () => {
         {
           descriptor:
               new ModuleDescriptor('foo', () => Promise.resolve(fooElement)),
-          element: fooElement,
+          elements: [fooElement],
         },
         {
           descriptor:
               new ModuleDescriptor('bar', () => Promise.resolve(barElement)),
-          element: barElement,
+          elements: [barElement],
         },
       ]);
       await counterfactualLoad();

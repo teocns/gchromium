@@ -41,6 +41,7 @@
 #include "media/gpu/chromeos/platform_video_frame_utils.h"
 #include "media/gpu/gpu_video_encode_accelerator_helpers.h"
 #include "media/gpu/macros.h"
+#include "media/gpu/v4l2/v4l2_utils.h"
 #include "media/video/h264_level_limits.h"
 #include "media/video/h264_parser.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -211,8 +212,8 @@ bool V4L2VideoEncodeAccelerator::Initialize(
   client_ = client_ptr_factory_->GetWeakPtr();
 
   output_format_fourcc_ =
-      V4L2Device::VideoCodecProfileToV4L2PixFmt(config.output_profile, false);
-  if (!output_format_fourcc_) {
+      VideoCodecProfileToV4L2PixFmt(config.output_profile, false);
+  if (output_format_fourcc_ == V4L2_PIX_FMT_INVALID) {
     MEDIA_LOG(ERROR, media_log.get())
         << "invalid output_profile=" << GetProfileName(config.output_profile);
     return false;
@@ -228,8 +229,9 @@ bool V4L2VideoEncodeAccelerator::Initialize(
 
   gfx::Size min_resolution;
   gfx::Size max_resolution;
-  device_->GetSupportedResolution(output_format_fourcc_, &min_resolution,
-                                  &max_resolution);
+  GetSupportedResolution(base::BindRepeating(&V4L2Device::Ioctl, device_),
+                         output_format_fourcc_, &min_resolution,
+                         &max_resolution);
   if (config.input_visible_size.width() < min_resolution.width() ||
       config.input_visible_size.height() < min_resolution.height() ||
       config.input_visible_size.width() > max_resolution.width() ||
@@ -639,10 +641,7 @@ bool V4L2VideoEncodeAccelerator::IsFlushSupported() {
 
 VideoEncodeAccelerator::SupportedProfiles
 V4L2VideoEncodeAccelerator::GetSupportedProfiles() {
-  scoped_refptr<V4L2Device> device = V4L2Device::Create();
-  if (!device)
-    return SupportedProfiles();
-
+  auto device = base::MakeRefCounted<V4L2Device>();
   return device->GetSupportedEncodeProfiles();
 }
 
@@ -1345,7 +1344,7 @@ bool V4L2VideoEncodeAccelerator::EnqueueInputRecord(
   input_buf.SetTimeStamp(timestamp);
 
   DCHECK_EQ(device_input_layout_->format(), frame->format());
-  size_t num_planes = V4L2Device::GetNumPlanesOfV4L2PixFmt(
+  size_t num_planes = GetNumPlanesOfV4L2PixFmt(
       Fourcc::FromVideoPixelFormat(device_input_layout_->format(),
                                    !device_input_layout_->is_multi_planar())
           ->ToV4L2PixFmt());
@@ -1397,8 +1396,7 @@ bool V4L2VideoEncodeAccelerator::EnqueueInputRecord(
         break;
       }
       default:
-        NOTREACHED();
-        return false;
+        NOTREACHED_NORETURN();
     }
 
     input_buf.SetPlaneBytesUsed(i, bytesused);
@@ -1702,7 +1700,7 @@ V4L2VideoEncodeAccelerator::NegotiateInputFormat(VideoPixelFormat input_format,
       continue;
 
     DVLOGF(3) << "Success: S_FMT with " << FourccToString(pix_fmt);
-    device_input_layout_ = V4L2Device::V4L2FormatToVideoFrameLayout(*format);
+    device_input_layout_ = V4L2FormatToVideoFrameLayout(*format);
     if (!device_input_layout_) {
       LOG(ERROR) << "Invalid device_input_layout_";
       return absl::nullopt;

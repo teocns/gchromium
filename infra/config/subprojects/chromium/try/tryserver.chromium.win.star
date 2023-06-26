@@ -80,10 +80,8 @@ try_.orchestrator_builder(
             condition = builder_config.rts_condition.QUICK_RUN_ONLY,
         ),
     ),
+    check_for_flakiness = True,
     compilator = "win-rel-compilator",
-    # TODO (crbug.com/1413505) - disabling due to high pending times. test
-    # history inaccuracies causing additional tests to be run.
-    # check_for_flakiness = True,
     coverage_test_types = ["unit", "overall"],
     experiments = {
         "chromium_rts.inverted_rts": 100,
@@ -283,7 +281,9 @@ try_.gpu.optional_tests_builder(
     main_list_view = "try",
     tryjob = try_.job(
         location_filters = [
+            cq.location_filter(path_regexp = "chrome/browser/media/.+"),
             cq.location_filter(path_regexp = "chrome/browser/vr/.+"),
+            cq.location_filter(path_regexp = "components/cdm/renderer/.+"),
             cq.location_filter(path_regexp = "content/browser/xr/.+"),
             cq.location_filter(path_regexp = "content/test/gpu/.+"),
             cq.location_filter(path_regexp = "device/vr/.+"),
@@ -291,11 +291,13 @@ try_.gpu.optional_tests_builder(
             cq.location_filter(path_regexp = "media/audio/.+"),
             cq.location_filter(path_regexp = "media/base/.+"),
             cq.location_filter(path_regexp = "media/capture/.+"),
+            cq.location_filter(path_regexp = "media/cdm/.+"),
             cq.location_filter(path_regexp = "media/filters/.+"),
             cq.location_filter(path_regexp = "media/gpu/.+"),
             cq.location_filter(path_regexp = "media/mojo/.+"),
             cq.location_filter(path_regexp = "media/renderers/.+"),
             cq.location_filter(path_regexp = "media/video/.+"),
+            cq.location_filter(path_regexp = "services/webnn/.+"),
             cq.location_filter(path_regexp = "testing/buildbot/tryserver.chromium.win.json"),
             cq.location_filter(path_regexp = "testing/trigger_scripts/.+"),
             cq.location_filter(path_regexp = "third_party/blink/renderer/modules/vr/.+"),
@@ -310,4 +312,9 @@ try_.gpu.optional_tests_builder(
             cq.location_filter(path_regexp = "ui/gl/.+"),
         ],
     ),
+)
+
+try_.builder(
+    name = "win-cr23-rel",
+    mirrors = ["ci/win-cr23-rel"],
 )

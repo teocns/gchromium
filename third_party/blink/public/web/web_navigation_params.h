@@ -22,6 +22,7 @@
 #include "third_party/blink/public/common/frame/frame_policy.h"
 #include "third_party/blink/public/common/frame/view_transition_state.h"
 #include "third_party/blink/public/common/navigation/impression.h"
+#include "third_party/blink/public/common/page/browsing_context_group_info.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-shared.h"
@@ -318,6 +319,9 @@ struct BLINK_EXPORT WebNavigationParams {
     // TODO(dgozman): we only use this response for navigation timings.
     // Perhaps, we can just get rid of it.
     WebURLResponse redirect_response;
+    // When navigation is restarted due to a Critical-CH header this stores the
+    // time at which the the restart was initiated.
+    base::TimeTicks critical_ch_restart_time;
   };
   // Redirects which happened while fetching the main resource.
   // TODO(dgozman): we are only interested in the final values instead of
@@ -466,6 +470,10 @@ struct BLINK_EXPORT WebNavigationParams {
   // enforced on the document created by this navigation.
   std::unique_ptr<WebPolicyContainer> policy_container;
 
+  // The browser process can set this to true if it decides that this frame
+  // cannot be crossOriginIsolated (e.g. due to COOP origin mismatch).
+  bool coop_forbids_document_to_be_cross_origin_isolated = true;
+
   // Blink's copy of a permissions policy constructed in the browser that should
   // take precedence over any permissions policy constructed in blink. This is
   // useful for isolated applications, which use a different base permissions
@@ -535,6 +543,14 @@ struct BLINK_EXPORT WebNavigationParams {
 
   // Whether the document should be loaded with the has_storage_access bit set.
   bool load_with_storage_access = false;
+
+  // Indicates which browsing context group this frame belongs to. This starts
+  // as nullopt and is only set when we commit a main frame in another browsing
+  // context group. Same browsing context group navigations never set this
+  // because no update is required. Subframes navigations never set this,
+  // because they cannot change browsing context group.
+  absl::optional<BrowsingContextGroupInfo> browsing_context_group_info =
+      absl::nullopt;
 };
 
 }  // namespace blink

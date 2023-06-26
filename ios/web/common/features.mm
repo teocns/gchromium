@@ -5,6 +5,7 @@
 #import "ios/web/common/features.h"
 
 #import "base/metrics/field_trial_params.h"
+#import "build/blink_buildflags.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -53,10 +54,6 @@ BASE_FEATURE(kEnableFullscreenAPI,
              "EnableFullscreenAPI",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kMediaPermissionsControl,
-             "MediaPermissionsControl",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kUseLoadSimulatedRequestForOfflinePage,
              "UseLoadSimulatedRequestForErrorPageNavigation",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -87,18 +84,16 @@ BASE_FEATURE(kEnableWebInspector,
 
 BASE_FEATURE(kSmoothScrollingDefault,
              "FullscreenSmoothScrollingDefault",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+#if BUILDFLAG(USE_BLINK)
+             base::FEATURE_DISABLED_BY_DEFAULT
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+);
 
 BASE_FEATURE(kEnableSessionSerializationOptimizations,
              "EnableSessionSerializationOptimizations",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-bool IsMediaPermissionsControlEnabled() {
-  if (@available(iOS 15, *)) {
-    return base::FeatureList::IsEnabled(kMediaPermissionsControl);
-  }
-  return false;
-}
 
 bool IsLoadSimulatedRequestAPIEnabled() {
   if (@available(iOS 15, *)) {
@@ -108,7 +103,7 @@ bool IsLoadSimulatedRequestAPIEnabled() {
 }
 
 bool IsFullscreenAPIEnabled() {
-  if (@available(iOS 16.0, *)) {
+  if (@available(iOS 16.4, *)) {
     return base::FeatureList::IsEnabled(kEnableFullscreenAPI);
   }
   return false;

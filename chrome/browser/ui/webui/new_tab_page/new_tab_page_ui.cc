@@ -73,7 +73,7 @@
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/sync/driver/sync_service.h"
+#include "components/sync/service/sync_service.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -394,17 +394,6 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
       {"modulesDriveTitle", IDS_NTP_MODULES_DRIVE_TITLE},
       {"modulesDriveInfo", IDS_NTP_MODULES_DRIVE_INFO},
       {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
-      {"modulesDummy2Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy3Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy4Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy5Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy6Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy7Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy8Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy9Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy10Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy11Title", IDS_NTP_MODULES_DUMMY2_TITLE},
-      {"modulesDummy12Title", IDS_NTP_MODULES_DUMMY2_TITLE},
       {"modulesFeedTitle", IDS_NTP_MODULES_FEED_TITLE},
       {"modulesKaleidoscopeTitle", IDS_NTP_MODULES_KALEIDOSCOPE_TITLE},
       {"modulesPhotosInfo", IDS_NTP_MODULES_PHOTOS_INFO},
@@ -523,6 +512,10 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
     source->AddLocalizedString("modulesCartDiscountConsentContent",
                                IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_CONTENT);
   }
+
+  source->AddBoolean(
+      "modulesOverflowScrollbarEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpModulesOverflowScrollbar));
 
   source->AddString("photosModuleCustomArtWork",
                     base::GetFieldTrialParamValueByFeature(
@@ -734,7 +727,7 @@ void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<omnibox::mojom::PageHandler> pending_page_handler) {
   realbox_handler_ = std::make_unique<RealboxHandler>(
       std::move(pending_page_handler), profile_, web_contents(),
-      &metrics_reporter_);
+      &metrics_reporter_, /*is_omnibox_popup_handler=*/false);
 }
 
 void NewTabPageUI::BindInterface(

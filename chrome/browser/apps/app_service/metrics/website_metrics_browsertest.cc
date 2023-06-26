@@ -186,7 +186,7 @@ class WebsiteMetricsBrowserTest : public InProcessBrowserTest {
   web_app::AppId InstallWebApp(
       const std::string& start_url,
       web_app::mojom::UserDisplayMode user_display_mode) {
-    auto info = std::make_unique<WebAppInstallInfo>();
+    auto info = std::make_unique<web_app::WebAppInstallInfo>();
     info->start_url = GURL(start_url);
     info->user_display_mode = user_display_mode;
     Profile* profile = ProfileManager::GetPrimaryUserProfile();
@@ -309,7 +309,7 @@ class WebsiteMetricsBrowserTest : public InProcessBrowserTest {
   raw_ptr<AppPlatformMetricsService, ExperimentalAsh>
       app_platform_metrics_service_ = nullptr;
 #else
-  WebsiteMetricsServiceLacros* website_metrics_service_ = nullptr;
+  raw_ptr<WebsiteMetricsServiceLacros> website_metrics_service_ = nullptr;
 #endif
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_ukm_recorder_;
 };

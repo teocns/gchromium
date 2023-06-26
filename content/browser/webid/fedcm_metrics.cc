@@ -7,6 +7,8 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/types/pass_key.h"
 #include "content/browser/webid/flags.h"
+#include "net/http/http_response_headers.h"
+#include "net/http/http_status_code.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "url/gurl.h"
 
@@ -111,7 +113,8 @@ void FedCmMetrics::RecordTokenResponseAndTurnaroundTime(
                                 turnaround_time);
 }
 
-void FedCmMetrics::RecordRequestTokenStatus(FedCmRequestIdTokenStatus status) {
+void FedCmMetrics::RecordRequestTokenStatus(FedCmRequestIdTokenStatus status,
+                                            MediationRequirement requirement) {
   if (is_disabled_)
     return;
   // If the request has failed but we have not yet rejected the promise,
@@ -126,6 +129,7 @@ void FedCmMetrics::RecordRequestTokenStatus(FedCmRequestIdTokenStatus status) {
 
   auto RecordUkm = [&](auto& ukm_builder) {
     ukm_builder.SetStatus_RequestIdToken(static_cast<int>(status));
+    ukm_builder.SetStatus_MediationRequirement(static_cast<int>(requirement));
     ukm_builder.SetFedCmSessionID(session_id_);
     ukm_builder.Record(ukm::UkmRecorder::Get());
   };
@@ -136,6 +140,8 @@ void FedCmMetrics::RecordRequestTokenStatus(FedCmRequestIdTokenStatus status) {
   RecordUkm(fedcm_idp_builder);
 
   base::UmaHistogramEnumeration("Blink.FedCm.Status.RequestIdToken", status);
+  base::UmaHistogramEnumeration("Blink.FedCm.Status.MediationRequirement",
+                                requirement);
 }
 
 void FedCmMetrics::RecordSignInStateMatchStatus(
@@ -213,27 +219,33 @@ void FedCmMetrics::RecordWebContentsVisibilityUponReadyToShowDialog(
 }
 
 void FedCmMetrics::RecordAutoReauthnMetrics(
-    bool has_single_returning_account,
+    absl::optional<bool> has_single_returning_account,
     const IdentityRequestAccount* auto_signin_account,
     bool auto_reauthn_success,
     bool is_auto_reauthn_setting_blocked,
     bool is_auto_reauthn_embargoed,
-    absl::optional<base::TimeDelta> time_from_embargo) {
-  NumReturningAccounts num_returning_accounts = NumReturningAccounts::kZero;
-  if (has_single_returning_account) {
-    num_returning_accounts = NumReturningAccounts::kOne;
-  } else if (auto_signin_account) {
-    num_returning_accounts = NumReturningAccounts::kMultiple;
-  }
+    absl::optional<base::TimeDelta> time_from_embargo,
+    bool requires_user_mediation) {
+  NumAccounts num_returning_accounts = NumAccounts::kZero;
+  if (has_single_returning_account.has_value()) {
+    if (*has_single_returning_account) {
+      num_returning_accounts = NumAccounts::kOne;
+    } else if (auto_signin_account) {
+      num_returning_accounts = NumAccounts::kMultiple;
+    }
 
-  base::UmaHistogramEnumeration("Blink.FedCm.AutoReauthn.ReturningAccounts",
-                                num_returning_accounts);
+    base::UmaHistogramEnumeration("Blink.FedCm.AutoReauthn.ReturningAccounts",
+                                  num_returning_accounts);
+  }
   base::UmaHistogramBoolean("Blink.FedCm.AutoReauthn.Succeeded",
                             auto_reauthn_success);
   base::UmaHistogramBoolean("Blink.FedCm.AutoReauthn.BlockedByContentSettings",
                             is_auto_reauthn_setting_blocked);
   base::UmaHistogramBoolean("Blink.FedCm.AutoReauthn.BlockedByEmbargo",
                             is_auto_reauthn_embargoed);
+  base::UmaHistogramBoolean(
+      "Blink.FedCm.AutoReauthn.BlockedByPreventSilentAccess",
+      requires_user_mediation);
   ukm::builders::Blink_FedCm ukm_builder(page_source_id_);
   if (time_from_embargo) {
     // Use a custom histogram with the default number of buckets so that we set
@@ -248,13 +260,27 @@ void FedCmMetrics::RecordAutoReauthnMetrics(
             time_from_embargo->InMilliseconds()));
   }
 
-  ukm_builder.SetAutoReauthn_ReturningAccounts(
-      static_cast<int>(num_returning_accounts));
+  if (has_single_returning_account.has_value()) {
+    ukm_builder.SetAutoReauthn_ReturningAccounts(
+        static_cast<int>(num_returning_accounts));
+  }
   ukm_builder.SetAutoReauthn_Succeeded(auto_reauthn_success);
   ukm_builder.SetAutoReauthn_BlockedByContentSettings(
       is_auto_reauthn_setting_blocked);
   ukm_builder.SetAutoReauthn_BlockedByEmbargo(is_auto_reauthn_embargoed);
+  ukm_builder.SetAutoReauthn_BlockedByPreventSilentAccess(
+      requires_user_mediation);
   ukm_builder.SetFedCmSessionID(session_id_);
+  ukm_builder.Record(ukm::UkmRecorder::Get());
+}
+
+void RecordPreventSilentAccess(RenderFrameHost& rfh,
+                               PreventSilentAccessFrameType frame_type) {
+  base::UmaHistogramEnumeration("Blink.FedCm.PreventSilentAccessFrameType",
+                                frame_type);
+
+  ukm::builders::Blink_FedCm ukm_builder(rfh.GetPageUkmSourceId());
+  ukm_builder.SetPreventSilentAccessFrameType(static_cast<int>(frame_type));
   ukm_builder.Record(ukm::UkmRecorder::Get());
 }
 
@@ -269,6 +295,22 @@ void RecordApprovedClientsSize(int size) {
   if (IsFedCmMultipleIdentityProvidersEnabled())
     return;
   base::UmaHistogramCounts10000("Blink.FedCm.ApprovedClientsSize", size);
+}
+
+void RecordIdpSignOutNetError(int response_code) {
+  int net_error = net::OK;
+  if (response_code < 0) {
+    // In this case, we got a net error, so change |net_error| to the value.
+    net_error = response_code;
+  }
+  base::UmaHistogramSparse("Blink.FedCm.SignInStatusSetToSignout.NetError",
+                           -net_error);
+}
+
+void RecordAccountsResponseInvalidReason(
+    IdpNetworkRequestManager::AccountsResponseInvalidReason reason) {
+  base::UmaHistogramEnumeration(
+      "Blink.FedCm.Status.AccountsResponseInvalidReason", reason);
 }
 
 }  // namespace content

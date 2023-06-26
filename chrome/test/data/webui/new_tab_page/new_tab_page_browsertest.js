@@ -37,6 +37,10 @@ TEST_F('NewTabPageAppTest', 'OgbThemingRemoveScrimTrue', function() {
   runMochaSuite('NewTabPageAppTest ogb theming removeScrim is true');
 });
 
+TEST_F('NewTabPageAppTest', 'OgbScrim', function() {
+  runMochaSuite('NewTabPageAppTest ogb scrim');
+});
+
 TEST_F('NewTabPageAppTest', 'Theming', function() {
   runMochaSuite('NewTabPageAppTest theming');
 });
@@ -51,6 +55,10 @@ TEST_F('NewTabPageAppTest', 'Clicks', function() {
 
 TEST_F('NewTabPageAppTest', 'Modules', function() {
   runMochaSuite('NewTabPageAppTest modules');
+});
+
+TEST_F('NewTabPageAppTest', 'V2Modules', function() {
+  runMochaSuite('NewTabPageAppTest v2 modules');
 });
 
 TEST_F('NewTabPageAppTest', 'CounterfactualModules', function() {
@@ -234,6 +242,17 @@ TEST_F('NewTabPageModulesModuleWrapperTest', 'All', function() {
   mocha.run();
 });
 
+var NewTabPageModulesModulesV2Test = class extends NewTabPageBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/v2/modules_test.js';
+  }
+};
+
+TEST_F('NewTabPageModulesModulesV2Test', 'All', function() {
+  mocha.run();
+});
+
 var NewTabPageModulesModulesTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
@@ -296,7 +315,7 @@ GEN('#if !defined(OFFICIAL_BUILD)');
 var NewTabPageModulesDummyModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/dummy_v2/module_test.js';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/v2/dummy/module_test.js';
   }
 };
 
@@ -331,7 +350,7 @@ TEST_F('NewTabPageModulesDriveModuleTest', 'All', function() {
 var NewTabPageModulesDriveV2ModuleTest = class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/drive_v2/module_test.js';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/v2/drive/module_test.js';
   }
 };
 
@@ -347,17 +366,6 @@ var NewTabPageModulesRecipesTest = class extends NewTabPageBrowserTest {
 };
 
 TEST_F('NewTabPageModulesRecipesTest', 'All', function() {
-  mocha.run();
-});
-
-var NewTabPageModulesRecipesV2ModuleTest = class extends NewTabPageBrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/recipes_v2/module_test.js';
-  }
-};
-
-TEST_F('NewTabPageModulesRecipesV2ModuleTest', 'All', function() {
   mocha.run();
 });
 
@@ -489,7 +497,7 @@ var NewTabPageModulesHistoryClustersV2ModuleTest =
     class extends NewTabPageBrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/history_clusters_v2/module_test.js';
+    return 'chrome://new-tab-page/test_loader.html?module=new_tab_page/modules/v2/history_clusters/module_test.js';
   }
 
   /** @override */

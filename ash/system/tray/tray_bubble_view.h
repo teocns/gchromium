@@ -108,12 +108,15 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
     // `tray_bubble_view`'s destructor can be called well after it's
     // corresponding tray has been cleaned up.
     base::WeakPtr<Delegate> delegate = nullptr;
-    gfx::NativeWindow parent_window = nullptr;
+    gfx::NativeWindow parent_window = gfx::NativeWindow();
     raw_ptr<View, ExperimentalAsh> anchor_view = nullptr;
     AnchorMode anchor_mode = AnchorMode::kView;
     // Only used if anchor_mode == AnchorMode::kRect.
     gfx::Rect anchor_rect;
     bool is_anchored_to_status_area = true;
+    // If true, the bubble will be anchored to the corner of the shelf, near the
+    // status area button.
+    bool anchor_to_shelf_corner = false;
     ShelfAlignment shelf_alignment = ShelfAlignment::kBottom;
     int preferred_width = 0;
     int max_height = 0;
@@ -123,6 +126,10 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
     int corner_radius = kBubbleCornerRadius;
     absl::optional<gfx::Insets> insets;
     absl::optional<gfx::Insets> margin;
+    // If the view has a large corner radius(e.g. slider bubble), we should
+    // paint the shadow on texture layer since `SystemShadowOnNinePatchLayer`
+    // has geometry limitations. See `SystemShadowOnTextureLayer` for details.
+    bool has_large_corner_radius = false;
     bool has_shadow = true;
     SystemShadow::Type shadow_type = kBubbleShadowType;
     // Use half opaque widget instead of fully opaque.
@@ -181,6 +188,10 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
   // area.
   virtual bool IsAnchoredToStatusArea() const;
 
+  // True if the bubble is anchored to the corner of the shelf, near the status
+  // area button.
+  bool IsAnchoredToShelfCorner() const;
+
   // Stops rerouting key events to this view. If this view is not currently
   // rerouting events, then this function will be idempotent.
   void StopReroutingEvents();
@@ -200,6 +211,8 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
   // views::BubbleDialogDelegateView:
   void OnWidgetClosing(views::Widget* widget) override;
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& bounds) override;
   ui::LayerType GetLayerType() const override;
 
   // views::View:
@@ -221,6 +234,22 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
   void OnNotificationDisplayed(
       const std::string& notification_id,
       const message_center::DisplaySource source) override;
+
+  // Notify tray bubble's observers and `StatusAreaWidget` that this tray is
+  // being open (only applicable to bubble that is anchored to status area).
+  // This function is automatically called during `TrayBubbleView`'s
+  // `InitializeAndShowBubble()`. However, if a class is showing the bubble
+  // without triggering `InitializeAndShowBubble()` of `TrayBubbleView`, it
+  // should call this method.
+  void NotifyTrayBubbleOpen();
+
+  // Notify tray bubble's observers and `StatusAreaWidget` that this tray is
+  // being closed (only applicable to bubble that is anchored to status area).
+  // This function is automatically called during `TrayBubbleView`'s
+  // `OnWidgetClosing()`. However, if a class is closing/hiding the bubble
+  // without triggering `OnWidgetClosing()` of `TrayBubbleView`, it should call
+  // this method.
+  void NotifyTrayBubbleClosed();
 
  protected:
   // views::View:
@@ -274,9 +303,6 @@ class ASH_EXPORT TrayBubbleView : public views::BubbleDialogDelegateView,
   std::unique_ptr<EventHandler> reroute_event_handler_;
 
   std::unique_ptr<SystemShadow> shadow_;
-
-  absl::optional<StatusAreaWidget::ScopedTrayBubbleCounter>
-      tray_bubble_counter_;
 };
 
 BEGIN_VIEW_BUILDER(ASH_EXPORT, TrayBubbleView, views::BubbleDialogDelegateView)

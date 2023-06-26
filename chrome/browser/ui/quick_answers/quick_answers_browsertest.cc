@@ -14,6 +14,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/quick_answers/quick_answers_browsertest_base.h"
@@ -45,7 +46,7 @@ namespace quick_answers {
 namespace {
 
 constexpr char kTestQuery[] = "test";
-constexpr int kCursorXToOverlapWithANotification = 600;
+constexpr int kCursorXToOverlapWithANotification = 630;
 constexpr int kCursorYToOverlapWithANotification = 400;
 
 constexpr char kTestNotificationId[] = "id";
@@ -351,8 +352,9 @@ IN_PROC_BROWSER_TEST_F(RichAnswersBrowserTest,
 
   // Check that the shown result type icon on the QuickAnswersView
   // correctly corresponds to the Quick Answers result type.
-  QuickAnswersView* quick_answers_view = static_cast<QuickAnswersView*>(
-      quick_answers_view_widget->GetContentsView());
+  quick_answers::QuickAnswersView* quick_answers_view =
+      static_cast<quick_answers::QuickAnswersView*>(
+          quick_answers_view_widget->GetContentsView());
   ui::ImageModel expected_image_model = ui::ImageModel::FromVectorIcon(
       omnibox::kAnswerTranslationIcon, cros_tokens::kCrosSysSystemBaseElevated,
       /*icon_size=*/kQuickAnswersResultTypeIconSizeDip);

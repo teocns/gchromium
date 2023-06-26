@@ -110,7 +110,7 @@ BASE_FEATURE(kLacrosResourcesFileSharing,
 // Enabling this fixes b/265853952.
 BASE_FEATURE(kAlwaysConfirmComposition,
              "AlwaysConfirmComposition",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Update of the virtual keyboard settings UI as described in
@@ -391,7 +391,8 @@ bool IsSwipeToMoveCursorEnabled() {
       base::android::BuildInfo::GetInstance()->sdk_int() >=
       base::android::SDK_VERSION_R;
 #else
-      base::FeatureList::IsEnabled(kSwipeToMoveCursor);
+      base::FeatureList::IsEnabled(kSwipeToMoveCursor) ||
+      IsTouchTextEditingRedesignEnabled();
 #endif
   return enabled;
 }
@@ -417,19 +418,6 @@ bool IsRawDrawUsingMSAA() {
   return kIsRawDrawUsingMSAA.Get();
 }
 
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kUseToastManager,
-             "UseToastManager",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-bool UseToastManager() {
-  return base::FeatureList::IsEnabled(kUseToastManager);
-}
-
-BASE_FEATURE(kKeepAndroidTintedResources,
-             "KeepAndroidTintedResources",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_ANDROID)
-
 BASE_FEATURE(kEnableVariableRefreshRate,
              "EnableVariableRefreshRate",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -440,25 +428,12 @@ bool IsVariableRefreshRateEnabled() {
 // Fixes b/267944900.
 BASE_FEATURE(kWaylandKeepSelectionFix,
              "WaylandKeepSelectionFix",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Fixes b/267944900.
 BASE_FEATURE(kWaylandCancelComposition,
              "WaylandCancelComposition",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kWaylandScreenCoordinatesEnabled,
-             "WaylandScreenCoordinatesEnabled",
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-);
-
-bool IsWaylandScreenCoordinatesEnabled() {
-  return base::FeatureList::IsEnabled(kWaylandScreenCoordinatesEnabled);
-}
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables chrome color management wayland protocol for lacros.
 BASE_FEATURE(kLacrosColorManagement,
@@ -473,8 +448,13 @@ BASE_FEATURE(kChromeRefresh2023,
              "ChromeRefresh2023",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kChromeRefreshSecondary2023,
+             "ChromeRefreshSecondary2023",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 bool IsChromeRefresh2023() {
-  return base::FeatureList::IsEnabled(kChromeRefresh2023);
+  return base::FeatureList::IsEnabled(kChromeRefresh2023) ||
+         base::FeatureList::IsEnabled(kChromeRefreshSecondary2023);
 }
 
 BASE_FEATURE(kChromeWebuiRefresh2023,
@@ -483,7 +463,8 @@ BASE_FEATURE(kChromeWebuiRefresh2023,
 
 bool IsChromeWebuiRefresh2023() {
   return IsChromeRefresh2023() &&
-         base::FeatureList::IsEnabled(kChromeWebuiRefresh2023);
+         (base::FeatureList::IsEnabled(kChromeWebuiRefresh2023) ||
+          base::FeatureList::IsEnabled(kChromeRefreshSecondary2023));
 }
 
 constexpr base::FeatureParam<ChromeRefresh2023Level>::Option
@@ -506,8 +487,19 @@ ChromeRefresh2023Level GetChromeRefresh2023Level() {
 #if !BUILDFLAG(IS_LINUX)
 BASE_FEATURE(kWebUiSystemFont,
              "WebUiSystemFont",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
+
+#if BUILDFLAG(IS_MAC)
+// When enabled, images will be written to the system clipboard as both a TIFF
+// and a PNG (as opposed to just a TIFF). This requires encoding the sanitized
+// bitmap to a PNG on the UI thread on copy, which may cause jank. This matches
+// the behavior of other platforms.
+// TODO(https://crbug.com/1443646): Remove this flag eventually.
+BASE_FEATURE(kMacClipboardWriteImageWithPng,
+             "MacClipboardWriteImageWithPng",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_APPLE)
 // Font Smoothing was enabled by default prior to introducing this feature.
@@ -516,9 +508,5 @@ BASE_FEATURE(kCr2023MacFontSmoothing,
              "Cr2023MacFontSmoothing",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
-
-BASE_FEATURE(kUseNanosecondsForMotionEvent,
-             "UseNanosecondsForMotionEvent",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features

@@ -574,6 +574,66 @@ TEST(CreditCardTest, SetMetadata_NotMatchingId) {
   EXPECT_NE(full_metadata.use_date, full_card.use_date());
 }
 
+// Test that if one of the two compared cards is masked server card,
+// `HasSameNumberAs` returns true if the last four are the same. For all the
+// other comparing card types (none of them is masked server card),
+// `HasSameNumberAs` returns true if the full card number are the same.
+TEST(CreditCardTest, HasSameNumberAs) {
+  // Creates three types (local card, masked server card and full server card)
+  // of credit cards with the same number.
+  CreditCard local_card = test::GetCreditCard();
+  CreditCard masked_server_card = test::GetMaskedServerCardVisa();
+  CreditCard full_server_card = test::GetFullServerCard();
+
+  // Verify that card number is the same for all combinations of card type.
+  EXPECT_TRUE(local_card.HasSameNumberAs(local_card));
+  EXPECT_TRUE(local_card.HasSameNumberAs(masked_server_card));
+  EXPECT_TRUE(local_card.HasSameNumberAs(full_server_card));
+  EXPECT_TRUE(masked_server_card.HasSameNumberAs(masked_server_card));
+  EXPECT_TRUE(masked_server_card.HasSameNumberAs(full_server_card));
+  EXPECT_TRUE(full_server_card.HasSameNumberAs(full_server_card));
+
+  // Update the local card and full server card number to a different number but
+  // all the three credit cards are with same last four.
+  local_card.SetRawInfo(CREDIT_CARD_NUMBER, u"4111 1111 0006 1111");
+  full_server_card.SetRawInfo(CREDIT_CARD_NUMBER, u"4111 1111 2226 1111");
+
+  // Verify that only last 4 is compared if one of the compared cards is a
+  // masked server card; for all other types, full card number is compared.
+  EXPECT_TRUE(local_card.HasSameNumberAs(masked_server_card));
+  EXPECT_FALSE(local_card.HasSameNumberAs(full_server_card));
+  EXPECT_TRUE(masked_server_card.HasSameNumberAs(full_server_card));
+}
+
+// Test that `HasSameExpirationDateAs` returns true only if two cards have the
+// same expiration year and month.
+TEST(CreditCardTest, HasSameExpirationDateAs) {
+  CreditCard card_1;
+  test::SetCreditCardInfo(&card_1, "John Dillinger", "4111 1111 1111 1111",
+                          "09", "2017", "1");
+
+  CreditCard card_2;
+  // Set the same expiration date as `card_1`.
+  test::SetCreditCardInfo(&card_2, "John Dillinger", "4111 1111 1111 1111",
+                          "09", "2017", "1");
+  EXPECT_TRUE(card_1.HasSameExpirationDateAs(card_2));
+
+  // Set the same month and different year as `card_1`.
+  test::SetCreditCardInfo(&card_2, "John Dillinger", "4111 1111 1111 1111",
+                          "09", "2018", "1");
+  EXPECT_FALSE(card_1.HasSameExpirationDateAs(card_2));
+
+  // Set the same year and different month as `card_1`.
+  test::SetCreditCardInfo(&card_2, "John Dillinger", "4111 1111 1111 1111",
+                          "01", "2017", "1");
+  EXPECT_FALSE(card_1.HasSameExpirationDateAs(card_2));
+
+  // Set the different expiration date as `card_1`.
+  test::SetCreditCardInfo(&card_2, "John Dillinger", "4111 1111 1111 1111",
+                          "01", "2018", "1");
+  EXPECT_FALSE(card_1.HasSameExpirationDateAs(card_2));
+}
+
 struct SetExpirationYearFromStringTestCase {
   std::string expiration_year;
   int expected_year;
@@ -673,7 +733,7 @@ TEST(CreditCardTest, Copy) {
   EXPECT_TRUE(a == b);
 }
 
-struct IsLocalDuplicateOfServerCardTestCase {
+struct IsLocalOrServerDuplicateOfTestCase {
   CreditCard::RecordType first_card_record_type;
   const char* first_card_name;
   const char* first_card_number;
@@ -689,13 +749,13 @@ struct IsLocalDuplicateOfServerCardTestCase {
   const char* second_billing_address_id;
   const char* second_card_issuer_network;
 
-  bool is_local_duplicate;
+  bool is_local_or_server_duplicate;
 };
 
-class IsLocalDuplicateOfServerCardTest
-    : public testing::TestWithParam<IsLocalDuplicateOfServerCardTestCase> {};
+class IsLocalOrServerDuplicateOfTest
+    : public testing::TestWithParam<IsLocalOrServerDuplicateOfTestCase> {};
 
-TEST_P(IsLocalDuplicateOfServerCardTest, IsLocalDuplicateOfServerCard) {
+TEST_P(IsLocalOrServerDuplicateOfTest, IsLocalOrServerDuplicateOf) {
   auto test_case = GetParam();
   CreditCard a(base::Uuid::GenerateRandomV4().AsLowercaseString(),
                std::string());
@@ -716,45 +776,51 @@ TEST_P(IsLocalDuplicateOfServerCardTest, IsLocalDuplicateOfServerCard) {
   if (test_case.second_card_record_type == CreditCard::MASKED_SERVER_CARD)
     b.SetNetworkForMaskedCard(test_case.second_card_issuer_network);
 
-  EXPECT_EQ(test_case.is_local_duplicate, a.IsLocalDuplicateOfServerCard(b))
+  EXPECT_EQ(test_case.is_local_or_server_duplicate,
+            a.IsLocalOrServerDuplicateOf(b))
       << " when comparing cards " << a.Label() << " and " << b.Label();
+  // Flipping the checks for the cards to verify the functionality of
+  // IsLocalOrServerDuplicateOf.
+  EXPECT_EQ(test_case.is_local_or_server_duplicate,
+            b.IsLocalOrServerDuplicateOf(a))
+      << " when comparing cards " << b.Label() << " and " << a.Label();
 }
 
 INSTANTIATE_TEST_SUITE_P(
     CreditCardTest,
-    IsLocalDuplicateOfServerCardTest,
+    IsLocalOrServerDuplicateOfTest,
     testing::Values(
-        IsLocalDuplicateOfServerCardTestCase{LOCAL_CARD, "", "", "", "", "",
-                                             LOCAL_CARD, "", "", "", "", "",
-                                             nullptr, false},
-        IsLocalDuplicateOfServerCardTestCase{LOCAL_CARD, "", "", "", "", "",
-                                             FULL_SERVER_CARD, "", "", "", "",
-                                             "", nullptr, true},
-        IsLocalDuplicateOfServerCardTestCase{FULL_SERVER_CARD, "", "", "", "",
-                                             "", FULL_SERVER_CARD, "", "", "",
-                                             "", "", nullptr, false},
-        IsLocalDuplicateOfServerCardTestCase{
+        IsLocalOrServerDuplicateOfTestCase{LOCAL_CARD, "", "", "", "", "",
+                                           LOCAL_CARD, "", "", "", "", "",
+                                           nullptr, false},
+        IsLocalOrServerDuplicateOfTestCase{LOCAL_CARD, "", "", "", "", "",
+                                           FULL_SERVER_CARD, "", "", "", "", "",
+                                           nullptr, true},
+        IsLocalOrServerDuplicateOfTestCase{FULL_SERVER_CARD, "", "", "", "", "",
+                                           FULL_SERVER_CARD, "", "", "", "", "",
+                                           nullptr, false},
+        IsLocalOrServerDuplicateOfTestCase{
             LOCAL_CARD, "John Dillinger", "423456789012", "01", "2010", "1",
             FULL_SERVER_CARD, "John Dillinger", "423456789012", "01", "2010",
             "1", nullptr, true},
-        IsLocalDuplicateOfServerCardTestCase{
+        IsLocalOrServerDuplicateOfTestCase{
             LOCAL_CARD, "J Dillinger", "423456789012", "01", "2010", "1",
             FULL_SERVER_CARD, "John Dillinger", "423456789012", "01", "2010",
             "1", nullptr, false},
-        IsLocalDuplicateOfServerCardTestCase{
+        IsLocalOrServerDuplicateOfTestCase{
             LOCAL_CARD, "", "423456789012", "01", "2010", "1", FULL_SERVER_CARD,
             "John Dillinger", "423456789012", "01", "2010", "1", nullptr, true},
-        IsLocalDuplicateOfServerCardTestCase{
+        IsLocalOrServerDuplicateOfTestCase{
             LOCAL_CARD, "", "423456789012", "", "", "1", FULL_SERVER_CARD,
             "John Dillinger", "423456789012", "01", "2010", "1", nullptr, true},
-        IsLocalDuplicateOfServerCardTestCase{
+        IsLocalOrServerDuplicateOfTestCase{
             LOCAL_CARD, "", "423456789012", "", "", "1", MASKED_SERVER_CARD,
             "John Dillinger", "9012", "01", "2010", "1", kVisaCard, true},
-        IsLocalDuplicateOfServerCardTestCase{
+        IsLocalOrServerDuplicateOfTestCase{
             LOCAL_CARD, "John Dillinger", "4234-5678-9012", "01", "2010", "1",
             FULL_SERVER_CARD, "John Dillinger", "423456789012", "01", "2010",
             "1", nullptr, true},
-        IsLocalDuplicateOfServerCardTestCase{
+        IsLocalOrServerDuplicateOfTestCase{
             LOCAL_CARD, "John Dillinger", "4234-5678-9012", "01", "2010", "1",
             FULL_SERVER_CARD, "John Dillinger", "423456789012", "01", "2010",
             "2", nullptr, false}));
@@ -854,6 +920,35 @@ TEST(CreditCardTest, MatchingCardDetails) {
   EXPECT_FALSE(b.MatchingCardDetails(a));
 }
 
+TEST(CreditCardTest, IsVerified) {
+  CreditCard card;
+  EXPECT_FALSE(card.IsVerified());
+
+  card.set_origin("http://www.example.com");
+  EXPECT_FALSE(card.IsVerified());
+
+  card.set_origin("https://www.example.com");
+  EXPECT_FALSE(card.IsVerified());
+
+  card.set_origin("file:///tmp/example.txt");
+  EXPECT_FALSE(card.IsVerified());
+
+  card.set_origin("data:text/plain;charset=utf-8;base64,ZXhhbXBsZQ==");
+  EXPECT_FALSE(card.IsVerified());
+
+  card.set_origin("chrome://settings/autofill");
+  EXPECT_FALSE(card.IsVerified());
+
+  card.set_origin(kSettingsOrigin);
+  EXPECT_TRUE(card.IsVerified());
+
+  card.set_origin("Some gibberish string");
+  EXPECT_TRUE(card.IsVerified());
+
+  card.set_origin(std::string());
+  EXPECT_FALSE(card.IsVerified());
+}
+
 TEST(CreditCardTest, Compare) {
   CreditCard a(base::Uuid::GenerateRandomV4().AsLowercaseString(),
                std::string());
@@ -915,6 +1010,23 @@ TEST(CreditCardTest, Compare) {
   // Reset the issuer ids to empty, and empty ids are considered the same.
   a.set_issuer_id("");
   b.set_issuer_id("");
+  EXPECT_EQ(0, a.Compare(b));
+
+  // Difference in cvc.
+  a.set_cvc(u"1234");
+  b.set_cvc(u"987");
+  EXPECT_NE(0, a.Compare(b));
+  // Card with cvc is different from card with empty cvc.
+  a.set_cvc(u"1234");
+  b.set_cvc(u"");
+  EXPECT_NE(0, a.Compare(b));
+  // Reset the cvc to empty, and empty cvc are considered the same.
+  a.set_cvc(u"");
+  b.set_cvc(u"");
+  EXPECT_EQ(0, a.Compare(b));
+  // Two same non-empty cvc are considered the same.
+  a.set_cvc(u"123");
+  b.set_cvc(u"123");
   EXPECT_EQ(0, a.Compare(b));
 
   // Different values produce non-zero results.
@@ -1423,13 +1535,44 @@ TEST(CreditCardTest, CreditCardType) {
   EXPECT_EQ(u"Visa", card.GetRawInfo(CREDIT_CARD_TYPE));
 }
 
+// Verify that we preserve exactly what the user typed for CVC.
 TEST(CreditCardTest, CreditCardVerificationCode) {
   CreditCard card(base::Uuid::GenerateRandomV4().AsLowercaseString(),
                   "https://www.example.com/");
 
-  // The verification code cannot be set, as Chrome does not store this data.
+  // CVC for generic network is 3 digit string with number characters.
   card.SetRawInfo(CREDIT_CARD_VERIFICATION_CODE, u"999");
-  EXPECT_EQ(std::u16string(), card.GetRawInfo(CREDIT_CARD_VERIFICATION_CODE));
+  EXPECT_EQ(u"999", card.GetRawInfo(CREDIT_CARD_VERIFICATION_CODE));
+  EXPECT_EQ(u"999", card.cvc());
+
+  // These should fail, and preserve the previous value. CVC for generic network
+  // is 3 digit string with number characters.
+  card.SetRawInfo(CREDIT_CARD_VERIFICATION_CODE, u"0");
+  EXPECT_EQ(u"999", card.GetRawInfo(CREDIT_CARD_VERIFICATION_CODE));
+  EXPECT_EQ(u"999", card.cvc());
+
+  card.SetRawInfo(CREDIT_CARD_VERIFICATION_CODE, u"1");
+  EXPECT_EQ(u"999", card.GetRawInfo(CREDIT_CARD_VERIFICATION_CODE));
+  EXPECT_EQ(u"999", card.cvc());
+
+  card.SetRawInfo(CREDIT_CARD_VERIFICATION_CODE, u"9999");
+  EXPECT_EQ(u"999", card.GetRawInfo(CREDIT_CARD_VERIFICATION_CODE));
+  EXPECT_EQ(u"999", card.cvc());
+
+  card.SetRawInfo(CREDIT_CARD_VERIFICATION_CODE, u"12345");
+  EXPECT_EQ(u"999", card.GetRawInfo(CREDIT_CARD_VERIFICATION_CODE));
+  EXPECT_EQ(u"999", card.cvc());
+
+  card.SetRawInfo(CREDIT_CARD_VERIFICATION_CODE, u"ab15");
+  EXPECT_EQ(u"999", card.GetRawInfo(CREDIT_CARD_VERIFICATION_CODE));
+  EXPECT_EQ(u"999", card.cvc());
+
+  // 15-digit Amex card number.
+  card.SetRawInfo(CREDIT_CARD_NUMBER, u"378282246310005");
+  // CVC for Amex network is 4 digit string with number characters.
+  card.SetRawInfo(CREDIT_CARD_VERIFICATION_CODE, u"9999");
+  EXPECT_EQ(u"9999", card.GetRawInfo(CREDIT_CARD_VERIFICATION_CODE));
+  EXPECT_EQ(u"9999", card.cvc());
 }
 
 // Tests that the card in only deletable if it is expired before the threshold.
@@ -1661,7 +1804,7 @@ INSTANTIATE_TEST_SUITE_P(
         // It's then modified to fit the correct pattern based on the Elo regex,
         // sourced from the Elo documentation.
         GetCardNetworkTestCase{"5067071446391278", kEloCard, true},
-        GetCardNetworkTestCase{"6362970000457013", kEloCard, true},
+        GetCardNetworkTestCase{"6277800000457016", kEloCard, true},
 
         // These sample numbers were created by taking the expected card prefix,
         // filling out the required number of digits, and editing the last digit
@@ -1753,7 +1896,7 @@ INSTANTIATE_TEST_SUITE_P(
         GetCardNetworkTestCase{"6011", kDiscoverCard, false},
         GetCardNetworkTestCase{"62", kUnionPay, false},
         GetCardNetworkTestCase{"627780", kEloCard, false},
-        GetCardNetworkTestCase{"636297", kEloCard, false},
+        GetCardNetworkTestCase{"636368", kEloCard, false},
         GetCardNetworkTestCase{"644", kDiscoverCard, false},
         GetCardNetworkTestCase{"645", kDiscoverCard, false},
         GetCardNetworkTestCase{"646", kDiscoverCard, false},

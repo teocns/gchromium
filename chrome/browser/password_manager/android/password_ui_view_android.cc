@@ -27,6 +27,7 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "chrome/android/chrome_jni_headers/PasswordUIView_jni.h"
+#include "chrome/browser/password_manager/android/local_passwords_migration_warning_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/export/password_csv_writer.h"
@@ -301,6 +302,11 @@ jboolean JNI_PasswordUIView_HasAccountForLeakCheckRequest(JNIEnv* env) {
       identity_manager);
 }
 
+jboolean JNI_PasswordUIView_ShouldShowMigrationWarning(JNIEnv* env) {
+  return local_password_migration::ShouldShowWarning(
+      ProfileManager::GetLastUsedProfile());
+}
+
 // static
 static jlong JNI_PasswordUIView_Init(JNIEnv* env,
                                      const JavaParamRef<jobject>& obj) {
@@ -308,7 +314,8 @@ static jlong JNI_PasswordUIView_Init(JNIEnv* env,
   return reinterpret_cast<intptr_t>(controller);
 }
 
-void PasswordUIViewAndroid::OnSavedPasswordsChanged() {
+void PasswordUIViewAndroid::OnSavedPasswordsChanged(
+    const password_manager::PasswordStoreChangeList& changes) {
   UpdatePasswordLists();
 }
 

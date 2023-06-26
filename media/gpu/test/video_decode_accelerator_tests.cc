@@ -21,7 +21,7 @@
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_transformation.h"
 #include "media/filters/dav1d_video_decoder.h"
-#include "media/gpu/test/video.h"
+#include "media/gpu/test/video_bitstream.h"
 #include "media/gpu/test/video_frame_file_writer.h"
 #include "media/gpu/test/video_frame_validator.h"
 #include "media/gpu/test/video_player/decoder_listener.h"
@@ -31,6 +31,10 @@
 #include "media/gpu/test/video_test_helpers.h"
 #include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+#include "media/gpu/chromeos/video_decoder_pipeline.h"
+#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 namespace media {
 namespace test {
@@ -120,7 +124,7 @@ media::test::VideoPlayerTestEnvironment* g_env;
 class VideoDecoderTest : public ::testing::Test {
  public:
   std::unique_ptr<DecoderListener> CreateDecoderListener(
-      const Video* video,
+      const VideoBitstream* video,
       DecoderWrapperConfig config = DecoderWrapperConfig(),
       std::unique_ptr<FrameRendererDummy> frame_renderer =
           FrameRendererDummy::Create()) {
@@ -191,10 +195,7 @@ class VideoDecoderTest : public ::testing::Test {
     // keyframeless resolution changes, see:
     // https://www.webmproject.org/vp9/levels/#test-descriptions.
     config.ignore_resolution_changes_to_smaller_vp9 =
-        base::Contains(base::ToLowerASCII(g_env->Video()->FilePath().value()),
-                       "frm_resize") ||
-        base::Contains(base::ToLowerASCII(g_env->Video()->FilePath().value()),
-                       "sub8x8_sf");
+        g_env->Video()->HasKeyFrameLessResolutionChange();
 #endif
 
     auto video_player = DecoderListener::Create(
@@ -204,8 +205,8 @@ class VideoDecoderTest : public ::testing::Test {
 
     // Increase event timeout when outputting video frames.
     if (g_env->GetFrameOutputMode() != FrameOutputMode::kNone) {
-      video_player->SetEventWaitTimeout(std::max(
-          kDefaultEventWaitTimeout, g_env->Video()->GetDuration() * 10));
+      video_player->SetEventWaitTimeout(
+          std::max(kDefaultEventWaitTimeout, g_env->Video()->Duration() * 10));
     }
     return video_player;
   }
@@ -213,7 +214,7 @@ class VideoDecoderTest : public ::testing::Test {
  private:
   // TODO(hiroh): Move this to Video class or video_frame_helpers.h.
   // TODO(hiroh): Create model frames once during the test.
-  bool CreateModelFrames(const Video* video) {
+  bool CreateModelFrames(const VideoBitstream* video) {
     if (video->Codec() != VideoCodec::kAV1) {
       LOG(ERROR) << "Frame validation by SSIM is allowed for AV1 streams only";
       return false;
@@ -225,9 +226,8 @@ class VideoDecoderTest : public ::testing::Test {
     VideoDecoderConfig decoder_config(
         video->Codec(), video->Profile(),
         VideoDecoderConfig::AlphaMode::kIsOpaque, VideoColorSpace(),
-        kNoTransformation, video->Resolution(), video->VisibleRect(),
-        video->VisibleRect().size(), EmptyExtraData(),
-        EncryptionScheme::kUnencrypted);
+        kNoTransformation, video->Resolution(), gfx::Rect(video->Resolution()),
+        video->Resolution(), EmptyExtraData(), EncryptionScheme::kUnencrypted);
 
     bool init_success = false;
     VideoDecoder::InitCB init_cb = base::BindOnce(
@@ -285,6 +285,35 @@ class VideoDecoderTest : public ::testing::Test {
 };
 
 }  // namespace
+
+#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+TEST_F(VideoDecoderTest, GetSupportedConfigs) {
+  if (g_env->GetDecoderImplementation() != DecoderImplementation::kVD) {
+    GTEST_SKIP() << "Re-initialization is only supported by the "
+                    "media::VideoDecoder interface;";
+  }
+  const media::VideoDecoderType decoder_type =
+#if BUILDFLAG(USE_VAAPI)
+      media::VideoDecoderType::kVaapi;
+#elif BUILDFLAG(USE_V4L2_CODEC)
+      media::VideoDecoderType::kV4L2;
+#else
+      media::VideoDecoderType::kUnknown;
+#endif
+  const auto supported_configs = VideoDecoderPipeline::GetSupportedConfigs(
+      decoder_type, gpu::GpuDriverBugWorkarounds());
+  ASSERT_FALSE(supported_configs->empty());
+
+  const bool contains_h264 =
+      std::find_if(supported_configs->begin(), supported_configs->end(),
+                   [](SupportedVideoDecoderConfig config) {
+                     return config.profile_min >= H264PROFILE_MIN &&
+                            config.profile_max <= H264PROFILE_MAX;
+                   }) != supported_configs->end();
+  // Every hardware video decoder in ChromeOS supports some kind of H.264.
+  EXPECT_TRUE(contains_h264);
+}
+#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 // Test initializing the video decoder for the specified video. Initialization
 // will be successful if the video decoder is capable of decoding the test
@@ -436,7 +465,7 @@ TEST_F(VideoDecoderTest, ResetEndOfStream) {
   tvp->Reset();
   EXPECT_TRUE(tvp->WaitForResetDone());
   tvp->Play();
-  EXPECT_TRUE(tvp->WaitForFlushDone());
+  ASSERT_TRUE(tvp->WaitForFlushDone());
 
   EXPECT_EQ(tvp->GetResetDoneCount(), 1u);
   EXPECT_EQ(tvp->GetFlushDoneCount(), 2u);
@@ -557,7 +586,7 @@ TEST_F(VideoDecoderTest, FlushAtEndOfStream_MultipleConcurrentDecodes) {
 
 int main(int argc, char** argv) {
   // Set the default test data path.
-  media::test::Video::SetTestDataPath(media::GetTestDataPath());
+  media::test::VideoBitstream::SetTestDataPath(media::GetTestDataPath());
 
   // Print the help message if requested. This needs to be done before
   // initializing gtest, to overwrite the default gtest help message.
@@ -700,6 +729,9 @@ int main(int argc, char** argv) {
       cmd_line->GetSwitchValueASCII(switches::kDisableFeatures));
   if (feature_list->IsFeatureOverridden("V4L2FlatStatelessVideoDecoder")) {
     enabled_features.push_back(media::kV4L2FlatStatelessVideoDecoder);
+  }
+  if (feature_list->IsFeatureOverridden("V4L2FlatStatefulVideoDecoder")) {
+    enabled_features.push_back(media::kV4L2FlatStatefulVideoDecoder);
   }
 #endif
 

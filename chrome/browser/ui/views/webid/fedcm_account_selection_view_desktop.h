@@ -23,6 +23,7 @@ class AccountSelectionBubbleViewInterface;
 // account chooser to the user.
 class FedCmAccountSelectionView : public AccountSelectionView,
                                   public AccountSelectionBubbleView::Observer,
+                                  public FedCmModalDialogView::Observer,
                                   content::WebContentsObserver,
                                   TabStripModelObserver,
                                   views::WidgetObserver {
@@ -58,10 +59,13 @@ class FedCmAccountSelectionView : public AccountSelectionView,
       const std::string& top_frame_etld_plus_one,
       const absl::optional<std::string>& iframe_etld_plus_one,
       const std::string& idp_etld_plus_one,
-      const content::IdentityProviderMetadata& idp_metadata,
-      IdentityRegistryCallback identity_registry_callback) override;
+      const blink::mojom::RpContext& rp_context,
+      const content::IdentityProviderMetadata& idp_metadata) override;
   std::string GetTitle() const override;
   absl::optional<std::string> GetSubtitle() const override;
+
+  // FedCmModalDialogView::Observer
+  void OnPopupWindowDestroyed() override;
 
   // content::WebContentsObserver
   void OnVisibilityChanged(content::Visibility visibility) override;
@@ -75,6 +79,11 @@ class FedCmAccountSelectionView : public AccountSelectionView,
 
   void SetInputEventActivationProtectorForTesting(
       std::unique_ptr<views::InputEventActivationProtector>);
+  void SetIdpSigninPopupWindowForTesting(std::unique_ptr<FedCmModalDialogView>);
+
+  // AccountSelectionBubbleView::Observer:
+  content::WebContents* ShowModalDialog(const GURL& url) override;
+  void CloseModalDialog() override;
 
  protected:
   friend class FedCmAccountSelectionViewBrowserTest;
@@ -93,6 +102,30 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   virtual const AccountSelectionBubbleViewInterface* GetBubbleView() const;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
+                           MismatchDialogDismissedByCloseIconMetric);
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
+                           MismatchDialogDismissedForOtherReasonsMetric);
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
+                           MismatchDialogContinueClickedMetric);
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
+                           MismatchDialogDestroyedMetric);
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
+                           MismatchDialogContinueClickedThenDestroyedMetric);
+  FRIEND_TEST_ALL_PREFIXES(
+      FedCmAccountSelectionViewDesktopTest,
+      IdpSigninStatusAccountsReceivedAndNoPopupClosedByIdpMetric);
+  FRIEND_TEST_ALL_PREFIXES(
+      FedCmAccountSelectionViewDesktopTest,
+      IdpSigninStatusAccountsNotReceivedAndPopupClosedByIdpMetric);
+  FRIEND_TEST_ALL_PREFIXES(
+      FedCmAccountSelectionViewDesktopTest,
+      IdpSigninStatusAccountsNotReceivedAndNoPopupClosedByIdpMetric);
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
+                           IdpSigninStatusPopupClosedBeforeAccountsPopulated);
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
+                           IdpSigninStatusPopupClosedAfterAccountsPopulated);
+
   enum class State {
     // User is shown message that they are not currently signed-in to IdP.
     // Dialog has button to sign-in to IdP.
@@ -115,6 +148,31 @@ class FedCmAccountSelectionView : public AccountSelectionView,
     AUTO_REAUTHN
   };
 
+  // This enum describes the outcome of the mismatch dialog and is used for
+  // histograms. Do not remove or modify existing values, but you may add new
+  // values at the end. This enum should be kept in sync with
+  // FedCmMismatchDialogResult in tools/metrics/histograms/enums.xml.
+  enum class MismatchDialogResult {
+    kContinued,
+    kDismissedByCloseIcon,
+    kDismissedForOtherReasons,
+
+    kMaxValue = kDismissedForOtherReasons
+  };
+
+  // This enum describes the outcome of the pop-up window and is used for
+  // histograms. Do not remove or modify existing values, but you may add new
+  // values at the end. This enum should be kept in sync with
+  // FedCmPopupWindowResult in tools/metrics/histograms/enums.xml.
+  enum class PopupWindowResult {
+    kAccountsReceivedAndPopupClosedByIdp,
+    kAccountsReceivedAndPopupNotClosedByIdp,
+    kAccountsNotReceivedAndPopupClosedByIdp,
+    kAccountsNotReceivedAndPopupNotClosedByIdp,
+
+    kMaxValue = kAccountsNotReceivedAndPopupNotClosedByIdp
+  };
+
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
 
@@ -127,8 +185,7 @@ class FedCmAccountSelectionView : public AccountSelectionView,
                      const ui::Event& event) override;
   void OnBackButtonClicked() override;
   void OnCloseButtonClicked(const ui::Event& event) override;
-  void ShowModalDialog(const GURL& url) override;
-  void CloseModalDialog() override;
+  void OnSigninToIdP() override;
 
   void ShowVerifyingSheet(const Account& account,
                           const IdentityProviderDisplayData& idp_display_data);
@@ -159,7 +216,50 @@ class FedCmAccountSelectionView : public AccountSelectionView,
 
   std::unique_ptr<views::InputEventActivationProtector> input_protector_;
 
-  raw_ptr<FedCmModalDialogView> idp_signin_modal_dialog_;
+  std::unique_ptr<FedCmModalDialogView> idp_signin_modal_dialog_;
+
+  // If dialog has been populated with accounts as a result of the IDP sign-in
+  // flow but the IDP sign-in pop-up window has not been closed yet, we use this
+  // callback to show the accounts dialog upon closing the IDP sign-in pop-up
+  // window. This can happen when IDP sign-in status header is sent after the
+  // sign-in flow is complete but the pop-up window is not closed yet e.g. user
+  // is asked to verify phone number, change password, etc.
+  base::OnceClosure show_accounts_dialog_callback_;
+
+  // If dialog has NOT been populated with accounts yet as a result of the IDP
+  // sign-in flow and the IDP sign-in pop-up window has been closed, we use this
+  // boolean to let bubble widget know it should unhide itself when the dialog
+  // is ready. This can happen when the accounts fetch has yet to finish but the
+  // pop-up window has already been closed.
+  bool should_show_bubble_widget_{false};
+
+  // If IDP sign-in pop-up window is closed through means other than
+  // IdentityProvider.close() such as the user closing the pop-up window or
+  // window.close(), we should destroy the bubble widget and reject the
+  // navigator.credentials.get promise. This boolean tracks whether
+  // IdentityProvider.close() was called.
+  bool should_destroy_bubble_widget_{true};
+
+  // Whether the "Continue" button on the mismatch dialog is clicked. Once the
+  // "Continue" button is clicked, a pop-up window is shown for the user to sign
+  // in to an IDP. The mismatch dialog is hidden until it has been updated into
+  // an accounts dialog, which occurs after the user completes the sign in flow.
+  // If the user closes the page with the hidden mismatch dialog before
+  // completing the flow, this boolean prevents us from double counting the
+  // Blink.FedCm.IdpSigninStatus.MismatchDialogResult metric.
+  bool is_mismatch_continue_clicked_{false};
+
+  // Time when IdentityProvider.close() was called for metrics purposes.
+  base::TimeTicks idp_close_popup_time_;
+
+  // Time when the accounts dialog is last shown for metrics purposes.
+  absl::optional<base::TimeTicks> accounts_dialog_shown_time_;
+
+  // Time when the mismatch dialog is last shown for metrics purposes.
+  absl::optional<base::TimeTicks> mismatch_dialog_shown_time_;
+
+  // The current state of the IDP sign-in pop-up window, if initiated by user.
+  PopupWindowResult popup_window_state_;
 
   base::WeakPtrFactory<FedCmAccountSelectionView> weak_ptr_factory_{this};
 };

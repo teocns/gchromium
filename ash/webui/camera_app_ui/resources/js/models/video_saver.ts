@@ -101,8 +101,6 @@ export class VideoSaver {
 
   /**
    * Finishes the write of video data parts and returns result video file.
-   *
-   * @return Result video file.
    */
   async endWrite(): Promise<FileAccessEntry> {
     await this.processor.close();
@@ -123,7 +121,7 @@ export class VideoSaver {
   }
 
   /**
-   * Creates video saver for the given intent.
+   * Creates video saver for the given |intent|.
    */
   static async createForIntent(intent: Intent, videoRotation: number):
       Promise<VideoSaver> {
@@ -215,7 +213,7 @@ class TimeLapseFixedSpeedSaver {
 /**
  * Maximum duration for the time-lapse video in seconds.
  */
-const TIME_LAPSE_MAX_DURATION = 30;
+export const TIME_LAPSE_MAX_DURATION = 30;
 
 /**
  * Default number of fps in case it's not defined from the original video.
@@ -239,13 +237,13 @@ export class TimeLapseSaver {
   private readonly encoder: VideoEncoder;
 
   /**
-   * Map a frame's timestamp with frameNo, only store frame that's being
+   * Maps a frame's timestamp with frameNo, only storing frames being
    * encoded.
    */
   private readonly frameNoMap = new Map<number, number>();
 
   /**
-   * Store all encoded frames with its frame numbers.
+   * Maps all encoded frames with their frame numbers.
    * TODO(b/236800499): Investigate if it is OK to store number of blobs in
    * memory.
    */
@@ -315,12 +313,13 @@ export class TimeLapseSaver {
   }
 
   /**
-   * Initializes the saver with the given initial speed.
+   * Initializes the saver with the given initial |speed|.
    */
   private async init(speed: number): Promise<void> {
     this.initialSpeed = speed;
     this.currSpeedSaver = await this.createSaver(speed);
-    this.nextSpeedSaver = await this.createSaver(this.getNextSpeed(speed));
+    this.nextSpeedSaver =
+        await this.createSaver(TimeLapseSaver.getNextSpeed(speed));
     this.speedCheckpoint = speed * TIME_LAPSE_MAX_DURATION * this.fps;
     setTimeout(() => this.manageSavers(), SAVER_MANAGER_TIMEOUT_MS);
   }
@@ -330,8 +329,8 @@ export class TimeLapseSaver {
   }
 
   /**
-   * Callback to be called when the frame is encoded. Converts an encoded chunk
-   * to Blob and stores with its frame number.
+   * Callback to be called when the frame is encoded. Converts an encoded
+   * |chunk| to Blob and stores with its frame number.
    */
   onFrameEncoded(chunk: EncodedVideoChunk): void {
     const frameNo = this.frameNoMap.get(chunk.timestamp);
@@ -344,7 +343,7 @@ export class TimeLapseSaver {
   }
 
   /**
-   * Sends the frame to the encoder.
+   * Sends the |frame| to the encoder.
    */
   write(frame: VideoFrame, frameNo: number): void {
     if (frame.timestamp === null || this.ended || this.canceled) {
@@ -414,7 +413,8 @@ export class TimeLapseSaver {
     this.currSpeedSaver = this.nextSpeedSaver;
 
     const speed = this.currSpeedSaver.speed;
-    this.nextSpeedSaver = await this.createSaver(this.getNextSpeed(speed));
+    this.nextSpeedSaver =
+        await this.createSaver(TimeLapseSaver.getNextSpeed(speed));
     this.speedCheckpoint = speed * TIME_LAPSE_MAX_DURATION * this.fps;
 
     // Drops unused frames.
@@ -429,7 +429,7 @@ export class TimeLapseSaver {
   /**
    * Manages initializing (of the new savers), writing, ending, and canceling of
    * |TimeLapseFixedSpeedSaver|. Most operations except encoding are supposed to
-   * do here to avoid race conditions.
+   * be done here to avoid race conditions.
    */
   private async manageSavers(): Promise<void> {
     try {
@@ -469,21 +469,21 @@ export class TimeLapseSaver {
   }
 
   /**
-   * Returns the time-lapse speed after the given speed.
+   * Returns the next time-lapse speed after the given |speed|.
    */
-  getNextSpeed(speed: number): number {
+  static getNextSpeed(speed: number): number {
     return speed * 2;
   }
 
   /**
-   * Creates a saver for the specified speed.
+   * Creates a saver for the given |speed|.
    */
   async createSaver(speed: number): Promise<TimeLapseFixedSpeedSaver> {
     return TimeLapseFixedSpeedSaver.create(speed, this.resolution, this.fps);
   }
 
   /**
-   * Creates video saver with encoder using provided |encoderConfig|.
+   * Creates a video saver with encoder using given |encoderConfig|.
    */
   static async create(
       encoderConfig: VideoEncoderConfig, resolution: Resolution, fps: number,

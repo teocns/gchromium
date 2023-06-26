@@ -9,8 +9,8 @@ import androidx.annotation.Nullable;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger;
-import org.chromium.chrome.browser.xsurface.FeedUserInteractionReliabilityLogger;
+import org.chromium.chrome.browser.xsurface.feed.FeedLaunchReliabilityLogger;
+import org.chromium.chrome.browser.xsurface.feed.FeedUserInteractionReliabilityLogger;
 import org.chromium.chrome.browser.xsurface.feed.FeedUserInteractionReliabilityLogger.PaginationResult;
 import org.chromium.components.feed.proto.wire.ReliabilityLoggingEnums.DiscoverAboveTheFoldRenderResult;
 import org.chromium.components.feed.proto.wire.ReliabilityLoggingEnums.DiscoverLaunchResult;
@@ -73,43 +73,43 @@ public class FeedReliabilityLoggingBridge {
 
     @CalledByNative
     public void logFeedRequestStart(int requestId, long timestamp) {
-        mLaunchLogger.getNetworkRequestReliabilityLogger(requestId).logFeedQueryRequestStart(
+        mLaunchLogger.getNetworkRequestReliabilityLogger2(requestId).logFeedQueryRequestStart(
                 timestamp);
     }
 
     @CalledByNative
     public void logWebFeedRequestStart(int requestId, long timestamp) {
-        mLaunchLogger.getNetworkRequestReliabilityLogger(requestId).logWebFeedRequestStart(
+        mLaunchLogger.getNetworkRequestReliabilityLogger2(requestId).logWebFeedRequestStart(
                 timestamp);
     }
 
     @CalledByNative
     public void logSingleWebFeedRequestStart(int requestId, long timestamp) {
-        mLaunchLogger.getNetworkRequestReliabilityLogger(requestId).logSingleWebFeedRequestStart(
+        mLaunchLogger.getNetworkRequestReliabilityLogger2(requestId).logSingleWebFeedRequestStart(
                 timestamp);
     }
 
     @CalledByNative
     public void logActionsUploadRequestStart(int requestId, long timestamp) {
-        mLaunchLogger.getNetworkRequestReliabilityLogger(requestId).logActionsUploadRequestStart(
+        mLaunchLogger.getNetworkRequestReliabilityLogger2(requestId).logActionsUploadRequestStart(
                 timestamp);
     }
 
     @CalledByNative
     public void logRequestSent(int requestId, long timestamp) {
-        mLaunchLogger.getNetworkRequestReliabilityLogger(requestId).logRequestSent(timestamp);
+        mLaunchLogger.getNetworkRequestReliabilityLogger2(requestId).logRequestSent(timestamp);
     }
 
     @CalledByNative
     public void logResponseReceived(int requestId, long serverRecvTimestamp,
             long serverSendTimestamp, long clientRecvTimestamp) {
-        mLaunchLogger.getNetworkRequestReliabilityLogger(requestId).logResponseReceived(
+        mLaunchLogger.getNetworkRequestReliabilityLogger2(requestId).logResponseReceived(
                 serverRecvTimestamp, serverSendTimestamp, clientRecvTimestamp);
     }
 
     @CalledByNative
     public void logRequestFinished(int requestId, long timestamp, int canonicalStatus) {
-        mLaunchLogger.getNetworkRequestReliabilityLogger(requestId).logRequestFinished(
+        mLaunchLogger.getNetworkRequestReliabilityLogger2(requestId).logRequestFinished(
                 timestamp, canonicalStatus);
     }
 
@@ -148,13 +148,6 @@ public class FeedReliabilityLoggingBridge {
     public void logLoadMoreStarted() {
         if (mUserInteractionLogger != null) {
             mUserInteractionLogger.onPaginationStarted();
-        }
-    }
-
-    @CalledByNative
-    public void logLoadMoreIndicatorShown() {
-        if (mUserInteractionLogger != null) {
-            mUserInteractionLogger.onPaginationIndicatorShown();
         }
     }
 

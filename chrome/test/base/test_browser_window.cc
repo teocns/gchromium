@@ -14,6 +14,7 @@
 #include "components/user_education/common/feature_promo_handle.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "ui/base/interaction/element_identifier.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/color/color_provider_manager.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -37,25 +38,6 @@ std::unique_ptr<Browser> CreateBrowserWithTestWindowForParams(
 
 // TestBrowserWindow::TestLocationBar -----------------------------------------
 
-GURL TestBrowserWindow::TestLocationBar::GetDestinationURL() const {
-  return GURL();
-}
-
-WindowOpenDisposition
-    TestBrowserWindow::TestLocationBar::GetWindowOpenDisposition() const {
-  return WindowOpenDisposition::CURRENT_TAB;
-}
-
-ui::PageTransition
-    TestBrowserWindow::TestLocationBar::GetPageTransition() const {
-  return ui::PAGE_TRANSITION_LINK;
-}
-
-base::TimeTicks TestBrowserWindow::TestLocationBar::GetMatchSelectionTimestamp()
-    const {
-  return base::TimeTicks();
-}
-
 const OmniboxView* TestBrowserWindow::TestLocationBar::GetOmniboxView() const {
   return nullptr;
 }
@@ -69,8 +51,12 @@ LocationBarTesting*
   return nullptr;
 }
 
-bool TestBrowserWindow::TestLocationBar::IsInputTypedUrlWithoutScheme() const {
-  return false;
+LocationBarModel* TestBrowserWindow::TestLocationBar::GetLocationBarModel() {
+  return nullptr;
+}
+
+content::WebContents* TestBrowserWindow::TestLocationBar::GetWebContents() {
+  return nullptr;
 }
 
 // TestBrowserWindow ----------------------------------------------------------
@@ -119,10 +105,9 @@ const ui::ThemeProvider* TestBrowserWindow::GetThemeProvider() const {
 
 const ui::ColorProvider* TestBrowserWindow::GetColorProvider() const {
   return ui::ColorProviderManager::Get().GetColorProviderFor(
-      {ui::ColorProviderManager::ColorMode::kLight,
-       ui::ColorProviderManager::ContrastMode::kNormal,
-       ui::SystemTheme::kDefault,
-       ui::ColorProviderManager::FrameType::kChromium});
+      {ui::ColorProviderKey::ColorMode::kLight,
+       ui::ColorProviderKey::ContrastMode::kNormal, ui::SystemTheme::kDefault,
+       ui::ColorProviderKey::FrameType::kChromium});
 }
 
 ui::ElementContext TestBrowserWindow::GetElementContext() {
@@ -276,6 +261,10 @@ TestBrowserWindow::ShowScreenshotCapturedBubble(content::WebContents* contents,
   return nullptr;
 }
 #endif
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+void TestBrowserWindow::MaybeShowIOSPasswordPromoBubble() {}
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 send_tab_to_self::SendTabToSelfBubbleView*
 TestBrowserWindow::ShowSendTabToSelfDevicePickerBubble(

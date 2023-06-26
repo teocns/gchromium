@@ -22,13 +22,23 @@ BoxByteStream::BoxByteStream() : buffer_(kDefaultBufferLimit) {
 
 BoxByteStream::~BoxByteStream() {
   DCHECK(!writer_);
-  DCHECK(size_offsets_.empty());
+  DCHECK(!has_open_boxes());
 }
 
-void BoxByteStream::StartBox() {
+void BoxByteStream::StartBox(mp4::FourCC fourcc) {
   CHECK(!buffer_.empty());
   size_offsets_.push_back(position_);
   WriteU32(0);
+
+  WriteU32(fourcc);
+}
+
+void BoxByteStream::StartFullBox(mp4::FourCC fourcc,
+                                 uint32_t flags,
+                                 uint8_t version) {
+  StartBox(fourcc);
+  uint32_t value = version << 24 | (flags & 0xffffff);
+  WriteU32(value);
 }
 
 void BoxByteStream::WriteU8(uint8_t value) {
@@ -44,16 +54,6 @@ void BoxByteStream::WriteU16(uint16_t value) {
     GrowWriter();
   }
   position_ += 2;
-}
-
-void BoxByteStream::WriteU24(uint32_t value) {
-  CHECK(!buffer_.empty());
-  CHECK_LE(value, 0xffffffu);
-
-  while (!writer_->WriteBytes(&value, 3)) {
-    GrowWriter();
-  }
-  position_ += 3;
 }
 
 void BoxByteStream::WriteU32(uint32_t value) {
@@ -72,14 +72,33 @@ void BoxByteStream::WriteU64(uint64_t value) {
   position_ += 8;
 }
 
+void BoxByteStream::WriteBytes(const void* buf, size_t len) {
+  CHECK(!buffer_.empty());
+  while (!writer_->WriteBytes(buf, len)) {
+    GrowWriter();
+  }
+  position_ += len;
+}
+
+void BoxByteStream::WriteString(base::StringPiece value) {
+  if (value.empty()) {
+    WriteU8(0);
+    return;
+  }
+
+  WriteBytes(value.data(), value.size());
+
+  // Ensure null terminated string.
+  if (value.back() != 0) {
+    WriteU8(0);
+  }
+}
+
 std::vector<uint8_t> BoxByteStream::Flush() {
   CHECK(!buffer_.empty());
+  DCHECK(!has_open_boxes());
 
   buffer_.resize(position_);
-
-  for (size_t size_offset : size_offsets_) {
-    WriteSize(position_ - size_offset, &buffer_[size_offset]);
-  }
 
   writer_.reset();
   size_offsets_.clear();
@@ -94,6 +113,20 @@ void BoxByteStream::EndBox() {
   size_offsets_.pop_back();
 
   WriteSize(position_ - size_offset, &buffer_[size_offset]);
+}
+
+void BoxByteStream::WriteOffsetPlaceholder() {
+  data_offsets_by_track_.push(position_);
+  WriteU32(0);
+}
+
+void BoxByteStream::FlushCurrentOffset() {
+  CHECK(!data_offsets_by_track_.empty());
+
+  size_t offset_in_trun = data_offsets_by_track_.front();
+  data_offsets_by_track_.pop();
+
+  WriteSize(position_, &buffer_[offset_in_trun]);
 }
 
 void BoxByteStream::GrowWriter() {

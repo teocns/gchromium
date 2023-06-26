@@ -277,12 +277,8 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
                const PhysicalRect& hit_test_area);
 
   // Static position is set in parent's coordinate space.
-  LayoutUnit StaticInlinePosition() const { return static_inline_position_; }
   LayoutUnit StaticBlockPosition() const { return static_block_position_; }
 
-  void SetStaticInlinePosition(LayoutUnit position) {
-    static_inline_position_ = position;
-  }
   void SetStaticBlockPosition(LayoutUnit position) {
     static_block_position_ = position;
   }
@@ -312,7 +308,12 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
     return position;
   }
 
-  // Note that this transform has the transform-origin baked in.
+  // Note that this transform has the transform-origin baked in. Due to this
+  // fact, this transform is pretty useless if we're fragmented, since each
+  // fragment has its own origin. Avoid calling this method if a box is
+  // fragmented. Ideally, we should have a DCHECK for being non-fragmented here,
+  // but that's going to fail currently. LayoutBox::MapVisualRectToContainer()
+  // calls this function without any checks, for instance.
   gfx::Transform* Transform() const { return transform_.get(); }
 
   // Returns *Transform(), or identity matrix if Transform() is nullptr.
@@ -390,6 +391,8 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
                              const ComputedStyle& new_style);
   void UpdateClipPath(const ComputedStyle* old_style,
                       const ComputedStyle& new_style);
+  void UpdateOffsetPath(const ComputedStyle* old_style,
+                        const ComputedStyle& new_style);
 
   Node* EnclosingNode() const;
 

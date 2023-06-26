@@ -202,10 +202,6 @@ build_recipe(
 )
 
 build_recipe(
-    name = "recipe:chromium_libfuzzer",
-)
-
-build_recipe(
     name = "recipe:chromium_rts/create_model",
 )
 
@@ -240,6 +236,11 @@ build_recipe(
 )
 
 build_recipe(
+    name = "recipe:gofindit/chromium/test_single_revision",
+    bootstrappable = POLYMORPHIC,
+)
+
+build_recipe(
     name = "recipe:perf/crossbench",
 )
 
@@ -249,10 +250,6 @@ build_recipe(
 
 build_recipe(
     name = "recipe:reclient_config_deploy_check/tester",
-)
-
-build_recipe(
-    name = "recipe:reclient_goma_comparison",
 )
 
 build_recipe(

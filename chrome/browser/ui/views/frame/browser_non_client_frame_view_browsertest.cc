@@ -34,6 +34,7 @@
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
+#include "ui/gfx/color_utils.h"
 
 namespace {
 
@@ -89,7 +90,7 @@ class BrowserNonClientFrameViewBrowserTest
     manifest.has_theme_color = true;
     manifest.theme_color = app_theme_color_;
 
-    auto web_app_info = std::make_unique<WebAppInstallInfo>();
+    auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
     GURL manifest_url = embedded_test_server()->GetURL("/manifest");
     web_app::UpdateWebAppInfoFromManifest(manifest, manifest_url,
                                           web_app_info.get());
@@ -211,6 +212,29 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewBrowserTest,
   EXPECT_EQ(app_theme_color_,
             GetAppFrameView()->GetFrameColor(BrowserFrameActiveState::kActive));
 #endif
+}
+
+// Verifies that the incognito window frame is always the right color.
+IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewBrowserTest,
+                       IncognitoIsCorrectColor) {
+  // Set the color that's expected to be ignored.
+  auto* theme = ui::NativeTheme::GetInstanceForNativeUi();
+  theme->set_user_color(gfx::kGoogleBlue400);
+  theme->NotifyOnNativeThemeUpdated();
+
+  Browser* incognito_browser = CreateIncognitoBrowser(browser()->profile());
+
+  BrowserView* view = BrowserView::GetBrowserViewForBrowser(incognito_browser);
+  BrowserFrame* frame = view->frame();
+  BrowserNonClientFrameView* frame_view = frame->GetFrameView();
+
+  color_utils::HSL frame_color_hsl;
+  SkColorToHSL(frame_view->GetFrameColor(BrowserFrameActiveState::kActive),
+               &frame_color_hsl);
+  // Ensure that the frame color is very dark in Incognito.
+  EXPECT_LT(frame_color_hsl.l, 0.2);
+
+  incognito_browser->window()->Close();
 }
 
 // Checks that the title bar for hosted app windows is hidden when in fullscreen

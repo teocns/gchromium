@@ -166,9 +166,8 @@ class AutofillProfile : public AutofillDataModel {
                      const std::string& app_locale);
 
   // Saves info from |profile| into |this|, provided |this| and |profile| do not
-  // have any direct conflicts (i.e. data is present but different). Will not
-  // make changes if |this| is verified and |profile| is not. Returns true if
-  // |this| and |profile| are similar.
+  // have any direct conflicts (i.e. data is present but different).
+  // Returns true if |this| and |profile| are similar.
   bool SaveAdditionalInfo(const AutofillProfile& profile,
                           const std::string& app_locale);
 
@@ -264,13 +263,6 @@ class AutofillProfile : public AutofillDataModel {
   // Sets the label of the profile.
   void set_profile_label(const std::string& label) { profile_label_ = label; }
 
-  bool disallow_settings_visible_updates() const {
-    return disallow_settings_visible_updates_;
-  }
-  void set_disallow_settings_visible_updates(bool disallow) {
-    disallow_settings_visible_updates_ = disallow;
-  }
-
   Source source() const { return source_; }
   void set_source_for_testing(AutofillProfile::Source source) {
     source_ = source;
@@ -353,12 +345,6 @@ class AutofillProfile : public AutofillDataModel {
 
   // The BCP 47 language code that can be used to format |address_| for display.
   std::string language_code_;
-
-  // The state indicates if the profile qualifies to get merged with a
-  // profile observed in a form submission. If true, the profile can still be
-  // updated silently, but it should not be considered for merges that need to
-  // involve user interactions.
-  bool disallow_settings_visible_updates_{false};
 
   // ID used for identifying this profile. Only set for SERVER_PROFILEs. This is
   // a hash of the contents.

@@ -8,7 +8,7 @@ import './logo.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 
-import {startColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
+import {ColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {HelpBubbleMixin, HelpBubbleMixinInterface} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin.js';
 import {ClickInfo, Command} from 'chrome://resources/js/browser_command.mojom-webui.js';
 import {BrowserCommandProxy} from 'chrome://resources/js/browser_command/browser_command_proxy.js';
@@ -314,6 +314,11 @@ export class AppElement extends AppElementBase {
        * to show up immediately on load.
        */
       lazyRender_: Boolean,
+
+      scrolledToTop_: {
+        type: Boolean,
+        value: document.documentElement.scrollTop <= 0,
+      },
     };
   }
 
@@ -354,6 +359,7 @@ export class AppElement extends AppElementBase {
   private promoAndModulesLoaded_: boolean;
   private removeScrim_: boolean;
   private lazyRender_: boolean;
+  private scrolledToTop_: boolean;
 
   private callbackRouter_: PageCallbackRouter;
   private pageHandler_: PageHandlerRemote;
@@ -399,7 +405,7 @@ export class AppElement extends AppElementBase {
         },
         Math.floor(window.innerWidth));
 
-    startColorChangeUpdater();
+    ColorChangeUpdater.forDocument().start();
   }
 
   override connectedCallback() {
@@ -436,6 +442,9 @@ export class AppElement extends AppElementBase {
     this.eventTracker_.add(window, 'keydown', this.onWindowKeydown_.bind(this));
     this.eventTracker_.add(
         window, 'click', this.onWindowClick_.bind(this), /*capture=*/ true);
+    this.eventTracker_.add(document, 'scroll', () => {
+      this.scrolledToTop_ = document.documentElement.scrollTop <= 0;
+    });
     if (this.shouldPrintPerformance_) {
       // It is possible that the background image has already loaded by now.
       // If it has, we request it to re-send the load time so that we can
@@ -848,7 +857,7 @@ export class AppElement extends AppElementBase {
         case $$(this, 'ntp-middle-slot-promo'):
           recordClick(NtpElement.MIDDLE_SLOT_PROMO);
           return;
-        case $$(this, 'ntp-modules'):
+        case $$(this, '#modules'):
           recordClick(NtpElement.MODULE);
           return;
         case $$(this, '#customizeButton'):

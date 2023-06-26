@@ -9,7 +9,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/strings/string_piece.h"
-#include "chrome/browser/ui/android/webid/jni_headers/AccountSelectionBridge_jni.h"
+#include "chrome/browser/ui/android/webid/internal/jni/AccountSelectionBridge_jni.h"
 #include "chrome/browser/ui/android/webid/jni_headers/Account_jni.h"
 #include "chrome/browser/ui/android/webid/jni_headers/ClientIdMetadata_jni.h"
 #include "chrome/browser/ui/android/webid/jni_headers/IdentityProviderMetadata_jni.h"
@@ -38,7 +38,7 @@ ScopedJavaLocalRef<jobject> ConvertToJavaAccount(JNIEnv* env,
       ConvertUTF8ToJavaString(env, account.name),
       ConvertUTF8ToJavaString(env, account.given_name),
       url::GURLAndroid::FromNativeGURL(env, account.picture),
-      base::android::ToJavaArrayOfStrings(env, account.hints),
+      base::android::ToJavaArrayOfStrings(env, account.login_hints),
       account.login_state == Account::LoginState::kSignIn);
 }
 
@@ -98,9 +98,9 @@ Account ConvertFieldsToAccount(
 
   GURL picture_url = *url::GURLAndroid::ToNativeGURL(env, picture_url_obj);
 
-  std::vector<std::string> hints;
-  AppendJavaStringArrayToStringVector(env, account_hints, &hints);
-  return Account(account_id, email, name, given_name, picture_url, hints,
+  std::vector<std::string> login_hints;
+  AppendJavaStringArrayToStringVector(env, account_hints, &login_hints);
+  return Account(account_id, email, name, given_name, picture_url, login_hints,
                  login_state);
 }
 
@@ -181,9 +181,24 @@ void AccountSelectionViewAndroid::ShowFailureDialog(
     const std::string& top_frame_for_display,
     const absl::optional<std::string>& iframe_for_display,
     const std::string& idp_for_display,
-    const content::IdentityProviderMetadata& idp_metadata,
-    IdentityRegistryCallback identity_registry_callback) {
-  // TODO(crbug.com/1357790): add support on Android.
+    const blink::mojom::RpContext& rp_context,
+    const content::IdentityProviderMetadata& idp_metadata) {
+  if (!RecreateJavaObject()) {
+    // It's possible that the constructor cannot access the bottom sheet clank
+    // component. That case may be temporary but we can't let users in a
+    // waiting state so report that AccountSelectionView is dismissed instead.
+    delegate_->OnDismiss(DismissReason::kOther);
+    return;
+  }
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> idp_metadata_obj =
+      ConvertToJavaIdentityProviderMetadata(env, idp_metadata);
+  Java_AccountSelectionBridge_showFailureDialog(
+      env, java_object_internal_,
+      ConvertUTF8ToJavaString(env, top_frame_for_display),
+      ConvertUTF8ToJavaString(env, iframe_for_display.value_or("")),
+      ConvertUTF8ToJavaString(env, idp_for_display), idp_metadata_obj,
+      ConvertRpContextToJavaString(env, rp_context));
 }
 
 std::string AccountSelectionViewAndroid::GetTitle() const {
@@ -204,8 +219,10 @@ absl::optional<std::string> AccountSelectionViewAndroid::GetSubtitle() const {
   return ConvertJavaStringToUTF8(subtitle);
 }
 
-void AccountSelectionViewAndroid::ShowModalDialog(const GURL& url) {
+content::WebContents* AccountSelectionViewAndroid::ShowModalDialog(
+    const GURL& url) {
   // TODO(crbug.com/1429083): Support the AuthZ modal dialog on Android.
+  return nullptr;
 }
 
 void AccountSelectionViewAndroid::CloseModalDialog() {

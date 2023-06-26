@@ -193,7 +193,7 @@ LayoutReplaced::ComputeObjectViewBoxSizeForIntrinsicSizing() const {
 
 absl::optional<PhysicalRect> LayoutReplaced::ComputeObjectViewBoxRect(
     const LayoutSize* overridden_intrinsic_size) const {
-  scoped_refptr<BasicShape> object_view_box = StyleRef().ObjectViewBox();
+  const BasicShape* object_view_box = StyleRef().ObjectViewBox();
   if (LIKELY(!object_view_box))
     return absl::nullopt;
 
@@ -383,10 +383,7 @@ LayoutSize LayoutReplaced::SizeFromNG() const {
   if (!GetBoxLayoutExtraInput()) {
     return Size();
   }
-  LayoutSize new_size(OverrideLogicalWidth(), OverrideLogicalHeight());
-  if (!StyleRef().IsHorizontalWritingMode())
-    new_size = new_size.TransposedSize();
-  return new_size;
+  return GetBoxLayoutExtraInput()->size.ToLayoutSize();
 }
 
 NGPhysicalBoxStrut LayoutReplaced::BorderPaddingFromNG() const {

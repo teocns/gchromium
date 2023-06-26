@@ -35,7 +35,7 @@ void CursorManager::Init() {
           switches::kForceShowCursor)) {
     // Set a custom cursor so users know that the switch is turned on.
     const gfx::ImageSkia custom_icon =
-        gfx::CreateVectorIcon(kTouchIndicatorIcon, SK_ColorBLACK);
+        gfx::CreateVectorIcon(kTouchIndicatorIcon);
     const float dsf =
         display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor();
     SkBitmap bitmap = custom_icon.GetRepresentation(dsf).GetBitmap();
@@ -44,7 +44,8 @@ void CursorManager::Init() {
         ui::Cursor::NewCustom(std::move(bitmap), std::move(hotspot), dsf);
     cursor.SetPlatformCursor(
         ui::CursorFactory::GetInstance()->CreateImageCursor(
-            cursor.type(), cursor.custom_bitmap(), cursor.custom_hotspot()));
+            cursor.type(), cursor.custom_bitmap(), cursor.custom_hotspot(),
+            cursor.image_scale_factor()));
 
     SetCursor(std::move(cursor));
     LockCursor();

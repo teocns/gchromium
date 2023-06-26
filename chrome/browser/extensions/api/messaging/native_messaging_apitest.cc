@@ -25,6 +25,7 @@
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/test/extension_background_page_waiter.h"
 #include "extensions/test/result_catcher.h"
 
@@ -67,35 +68,45 @@ IN_PROC_BROWSER_TEST_F(NativeMessagingApiTestBase, UserLevelSendNativeMessage) {
 
 #if BUILDFLAG(IS_WIN)
 // On Windows, a new codepath is used to directly launch .EXE-based Native
-// Hosts.
-IN_PROC_BROWSER_TEST_F(NativeMessagingApiTestBase, SendNativeMessageWinExe) {
-  constexpr bool kUserLevel = false;
-  ASSERT_NO_FATAL_FAILURE(test_host_.RegisterTestExeHost(kUserLevel));
-  ASSERT_TRUE(RunExtensionTest("native_messaging_send_native_message_exe"));
+// Hosts. This codepath allows launching of Native Hosts even when cmd.exe is
+// disabled, or if the path to the host contains a character that prevents
+// cmd.exe from successfully launching it (e.g. "&" in this test).
+class NativeMessagingLaunchExeTest : public NativeMessagingApiTestBase,
+                                     public testing::WithParamInterface<bool> {
+ public:
+  NativeMessagingLaunchExeTest() {
+    feature_list_.InitWithFeatureState(
+        extensions_features::kLaunchWindowsNativeHostsDirectly,
+        IsDirectLaunchEnabled());
+  }
+
+  bool IsDirectLaunchEnabled() const { return GetParam(); }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(NativeMessagingLaunchExe,
+                         NativeMessagingLaunchExeTest,
+                         testing::Bool());
+
+IN_PROC_BROWSER_TEST_P(NativeMessagingLaunchExeTest, SendNativeMessageWinExe) {
+  ASSERT_NO_FATAL_FAILURE(test_host_.RegisterTestExeHost(/*user_level=*/false));
+
+  // The extension works properly only if the host launches successfully, which
+  // requires the kLaunchWindowsNativeHostsDirectly feature to be enabled.
+  ASSERT_EQ(IsDirectLaunchEnabled(),
+            RunExtensionTest("native_messaging_send_native_message_exe"));
 }
 
-// Ensure that the Native Host can still use StdErr, even if StdErr is pointed
-// at NULL (the default unless chrome.exe was started with stderr redirected).
-IN_PROC_BROWSER_TEST_F(NativeMessagingApiTestBase,
-                       SendNativeMessageWinExeWithNullStdErr) {
-  constexpr bool kUserLevel = false;
-  ASSERT_NO_FATAL_FAILURE(test_host_.RegisterTestExeHost(kUserLevel));
-
-  // By default, gtest runs with stderr redirection, which interferes with what
-  // we are trying to test. Temporarily detach it.
-  HANDLE old_std_err = GetStdHandle(STD_ERROR_HANDLE);
-  SetStdHandle(STD_ERROR_HANDLE, NULL);
-  bool result = RunExtensionTest("native_messaging_send_native_message_exe");
-  // Reattach to the test framework's stderr.
-  SetStdHandle(STD_ERROR_HANDLE, old_std_err);
-  ASSERT_TRUE(result);
-}
-
-IN_PROC_BROWSER_TEST_F(NativeMessagingApiTestBase,
+IN_PROC_BROWSER_TEST_P(NativeMessagingLaunchExeTest,
                        UserLevelSendNativeMessageWinExe) {
-  constexpr bool kUserLevel = true;
-  ASSERT_NO_FATAL_FAILURE(test_host_.RegisterTestExeHost(kUserLevel));
-  ASSERT_TRUE(RunExtensionTest("native_messaging_send_native_message_exe"));
+  ASSERT_NO_FATAL_FAILURE(test_host_.RegisterTestExeHost(/*user_level=*/true));
+
+  // The extension works properly only if the host launches successfully, which
+  // requires the kLaunchWindowsNativeHostsDirectly feature to be enabled.
+  ASSERT_EQ(IsDirectLaunchEnabled(),
+            RunExtensionTest("native_messaging_send_native_message_exe"));
 }
 #endif
 

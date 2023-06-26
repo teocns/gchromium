@@ -14,7 +14,7 @@
 #include "ash/system/time/calendar_model.h"
 #include "ash/system/time/calendar_up_next_view.h"
 #include "ash/system/time/calendar_view_controller.h"
-#include "ash/system/tray/tray_detailed_view.h"
+#include "ash/system/unified/glanceable_tray_child_bubble.h"
 #include "ash/system/unified/unified_system_tray_controller.h"
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
@@ -75,13 +75,12 @@ class CalendarHeaderView : public views::View {
 // This view displays a scrollable calendar.
 class ASH_EXPORT CalendarView : public CalendarModel::Observer,
                                 public CalendarViewController::Observer,
-                                public TrayDetailedView,
+                                public GlanceableTrayChildBubble,
                                 public views::ViewObserver {
  public:
   METADATA_HEADER(CalendarView);
 
-  CalendarView(DetailedViewDelegate* delegate,
-               UnifiedSystemTrayController* controller);
+  explicit CalendarView(DetailedViewDelegate* delegate);
   CalendarView(const CalendarView& other) = delete;
   CalendarView& operator=(const CalendarView& other) = delete;
   ~CalendarView() override;
@@ -172,6 +171,7 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   enum LabelType { PREVIOUS, CURRENT, NEXT, NEXTNEXT };
 
   friend class CalendarViewTest;
+  friend class CalendarViewPixelTest;
   friend class CalendarViewAnimationTest;
 
   // Assigns month views and labels based on the current date on screen.
@@ -341,6 +341,17 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   // Removes the `up_next_view_`.
   void RemoveUpNextView();
 
+  // Callback after the animation showing the up next view has ended.
+  void OnShowUpNextAnimationEnded();
+
+  // Animates scrolling the Calendar `scroll_view_` by the given offset. Uses
+  // layer transforms to mimic scrolling and then sets a final scroll position
+  // on the scroll view to give the illusion of animating scrolling.
+  void AnimateScrollByOffset(int offset);
+
+  // Post animation callback for `AnimateScrollByOffset()`.
+  void OnAnimateScrollByOffsetComplete(int offset);
+
   // Used by the `CalendarUpNextView` to open the event list for today's date.
   void OpenEventListForTodaysDate();
 
@@ -353,6 +364,9 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   // that the calendar view can be in.
   void ClipScrollViewHeight(ScrollViewState state_to_change_to);
 
+  // Returns the calculated height of a single visible row.
+  int GetSingleVisibleRowHeight();
+
   // Setters for animation flags.
   void set_should_header_animate(bool should_animate) {
     should_header_animate_ = should_animate;
@@ -360,9 +374,6 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   void set_should_months_animate(bool should_animate) {
     should_months_animate_ = should_animate;
   }
-
-  // Unowned.
-  raw_ptr<UnifiedSystemTrayController, ExperimentalAsh> controller_;
 
   std::unique_ptr<CalendarViewController> calendar_view_controller_;
 
@@ -421,6 +432,11 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
 
   // If the Calendar View destructor is being called.
   bool is_destroying_ = false;
+
+  // Set to true if the user has scrolled the Calendar at all, either via the
+  // scroll view directly or used the month arrow buttons, in the lifetime of
+  // the CalendarView.
+  bool user_has_scrolled_ = false;
 
   // Timer that fires when the calendar view is settled on, i.e. finished
   // scrolling to, a currently-visible month

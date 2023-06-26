@@ -26,10 +26,6 @@
 #include <d3d11_4.h>
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
-#include "ui/gl/gl_fence.h"
-#endif
-
 namespace device {
 
 OpenXrRenderLoop::OpenXrRenderLoop(
@@ -55,18 +51,19 @@ bool OpenXrRenderLoop::IsFeatureEnabled(
 }
 
 mojom::XRFrameDataPtr OpenXrRenderLoop::GetNextFrameData() {
+  DVLOG(3) << __func__;
   mojom::XRFrameDataPtr frame_data = mojom::XRFrameData::New();
   frame_data->frame_id = next_frame_id_;
 
-  SwapChainInfo* swap_chain_info = nullptr;
-  if (XR_FAILED(openxr_->BeginFrame(&swap_chain_info))) {
+  if (XR_FAILED(openxr_->BeginFrame())) {
     return frame_data;
   }
-#if BUILDFLAG(IS_WIN)
-  texture_helper_.SetBackbuffer(swap_chain_info->d3d11_texture.get());
-#endif
-  if (!swap_chain_info->mailbox_holder.mailbox.IsZero()) {
-    frame_data->buffer_holder = swap_chain_info->mailbox_holder;
+
+  // TODO(https://crbug.com/1441072): Make SwapchainInfo purely internal to the
+  // graphics bindings so that this isn't necessary here.
+  const auto& swap_chain_info = graphics_binding_->GetActiveSwapchainImage();
+  if (!swap_chain_info.mailbox_holder.mailbox.IsZero()) {
+    frame_data->buffer_holder = swap_chain_info.mailbox_holder;
   }
 
   frame_data->time_delta =
@@ -124,27 +121,28 @@ void OpenXrRenderLoop::StartRuntime(
   DCHECK(instance_ != XR_NULL_HANDLE);
   DCHECK(!openxr_);
 
-  openxr_ = OpenXrApiWrapper::Create(instance_);
-  if (!openxr_) {
-    DVLOG(1) << __func__ << " Could not create OpenXrApiWrapper";
-    return std::move(start_runtime_callback).Run(false);
-  }
-
-  // TODO(https://crbug.com/1441073): Consolidate to a single, cross-platform
-  // GetGraphicsBinding method signature.
+  // TODO(https://crbug.com/1454938): Make the Windows Graphics Binding own the
+  // texture helper rather than need it passed in.
 #if BUILDFLAG(IS_WIN)
   graphics_binding_ = platform_helper_->GetGraphicsBinding(&texture_helper_);
 #elif BUILDFLAG(IS_ANDROID)
   graphics_binding_ = platform_helper_->GetGraphicsBinding();
 #endif
 
-  if (!graphics_binding_ || !graphics_binding_->Initialize()) {
-    DVLOG(1) << "Could not create or initialize graphics binding";
+  if (!graphics_binding_) {
+    DVLOG(1) << "Could not create graphics binding";
     // We aren't actually presenting yet; so ExitPresent won't clean us up.
     // Still call it to log the failure reason; but also explicitly call
     // StopRuntime, which should be resilient to duplicate calls.
     ExitPresent(ExitXrPresentReason::kStartRuntimeFailed);
     StopRuntime();
+    std::move(start_runtime_callback).Run(false);
+    return;
+  }
+
+  openxr_ = OpenXrApiWrapper::Create(instance_, graphics_binding_.get());
+  if (!openxr_) {
+    DVLOG(1) << __func__ << " Could not create OpenXrApiWrapper";
     std::move(start_runtime_callback).Run(false);
     return;
   }
@@ -156,8 +154,7 @@ void OpenXrRenderLoop::StartRuntime(
       &OpenXrRenderLoop::ExitPresent, weak_ptr_factory_.GetWeakPtr());
   VisibilityChangedCallback on_visibility_state_changed = base::BindRepeating(
       &OpenXrRenderLoop::SetVisibilityState, weak_ptr_factory_.GetWeakPtr());
-  if (XR_FAILED(openxr_->InitSession(enabled_features_, graphics_binding_.get(),
-                                     *extension_helper_,
+  if (XR_FAILED(openxr_->InitSession(enabled_features_, *extension_helper_,
                                      std::move(on_session_started_callback),
                                      std::move(on_session_ended_callback),
                                      std::move(on_visibility_state_changed)))) {
@@ -179,14 +176,26 @@ void OpenXrRenderLoop::OnOpenXrSessionStarted(
     // Still call it to log the failure reason; but also explicitly call
     // StopRuntime, which should be resilient to duplicate calls.
     ExitPresent(ExitXrPresentReason::kOpenXrStartFailed);
-    StopRuntime();
-    std::move(start_runtime_callback).Run(false);
+
+    // We're only called from the OpenXrApiWrapper, which StopRuntime will
+    // destroy. To prevent some re-entrant behavior, yield to let it finish
+    // anything it's doing from before it called us before we stop the runtime.
+    task_runner()->PostTask(FROM_HERE,
+                            base::BindOnce(&OpenXrRenderLoop::StopRuntime,
+                                           weak_ptr_factory_.GetWeakPtr()));
+
+    // Technically until the StopRuntime task is called we can't service another
+    // session request, which theoretically could come in once we run this
+    // callback. Post a task to run it so that it runs after StopRuntime to
+    // avoid this potential (albeit unlikely) race.
+    task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(
+                       [](StartRuntimeCallback start_runtime_callback) {
+                         std::move(start_runtime_callback).Run(false);
+                       },
+                       std::move(start_runtime_callback)));
     return;
   }
-
-#if BUILDFLAG(IS_WIN)
-  texture_helper_.SetDefaultSize(openxr_->GetSwapchainSize());
-#endif
 
   StartContextProviderIfNeeded(std::move(start_runtime_callback));
 }
@@ -297,8 +306,10 @@ bool OpenXrRenderLoop::IsUsingSharedImages() const {
 void OpenXrRenderLoop::SubmitFrame(int16_t frame_index,
                                    const gpu::MailboxHolder& mailbox,
                                    base::TimeDelta time_waited) {
+  DVLOG(3) << __func__ << " frame_index=" << frame_index;
   CHECK(!IsUsingSharedImages());
-  // TODO(alcooper): Finalize actual fallback path
+  DCHECK(BUILDFLAG(IS_ANDROID));
+  // TODO(https://crbug.com/1454942): Support non-shared buffer mode.
   SubmitFrameMissing(frame_index, mailbox.sync_token);
 }
 
@@ -306,6 +317,7 @@ void OpenXrRenderLoop::SubmitFrameDrawnIntoTexture(
     int16_t frame_index,
     const gpu::SyncToken& sync_token,
     base::TimeDelta time_waited) {
+  DVLOG(3) << __func__ << " frame_index=" << frame_index;
   gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
   gl->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
   const GLuint id = gl->CreateGpuFenceCHROMIUM();
@@ -325,70 +337,23 @@ void OpenXrRenderLoop::OnWebXrTokenSignaled(
     return;
   }
 
-#if BUILDFLAG(IS_WIN)
-  Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device =
-      texture_helper_.GetDevice();
-  Microsoft::WRL::ComPtr<ID3D11Device5> d3d11_device5;
-  HRESULT hr = d3d11_device.As(&d3d11_device5);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Unable to retrieve ID3D11Device5 interface " << std::hex
-                << hr;
+  if (!graphics_binding_->WaitOnFence(*gpu_fence)) {
     return;
   }
 
-  Microsoft::WRL::ComPtr<ID3D11Fence> d3d11_fence;
-  hr = d3d11_device5->OpenSharedFence(
-      gpu_fence->GetGpuFenceHandle().owned_handle.Get(),
-      IID_PPV_ARGS(&d3d11_fence));
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Unable to open a shared fence " << std::hex << hr;
-    return;
-  }
-
-  Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11_device_context;
-  d3d11_device5->GetImmediateContext(&d3d11_device_context);
-
-  Microsoft::WRL::ComPtr<ID3D11DeviceContext4> d3d11_device_context4;
-  hr = d3d11_device_context.As(&d3d11_device_context4);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Unable to retrieve ID3D11DeviceContext4 interface "
-                << std::hex << hr;
-    return;
-  }
-
-  hr = d3d11_device_context4->Wait(d3d11_fence.Get(), 1);
-  if (FAILED(hr)) {
-    DLOG(ERROR) << "Unable to Wait on D3D11 fence " << std::hex << hr;
-    return;
-  }
-#elif BUILDFLAG(IS_ANDROID)
-  std::unique_ptr<gl::GLFence> local_fence =
-      gl::GLFence::CreateFromGpuFence(*gpu_fence);
-  local_fence->ServerWait();
-#endif
-
+  // TODO(https://crbug.com/1454950): Unify OpenXr Rendering paths.
 #if BUILDFLAG(IS_WIN)
   SubmitFrameWithTextureHandle(frame_index, mojo::PlatformHandle(),
                                gpu::SyncToken());
 #elif BUILDFLAG(IS_ANDROID)
-  // TODO(alcooper): Finalize actual compositing path.
-  SubmitCompositedFrame();
+  MarkFrameSubmitted(frame_index);
+  graphics_binding_->Render();
+  MaybeCompositeAndSubmit();
 #endif
 
   // Calling SubmitFrameWithTextureHandle can cause openxr_ and
   // context_provider_ to become nullptr in ClearPendingFrameInternal if we
   // decide to stop the runtime.
-
-#if BUILDFLAG(IS_WIN)
-  if (openxr_) {
-    // In order for the fence to be respected by the system, it needs to stick
-    // around until the next time the texture comes up for use. To avoid needing
-    // to remember the swap chain index, use frame_index %
-    // color_swapchain_images_.size() to keep them separated from one another.
-    openxr_->StoreFence(std::move(d3d11_fence), frame_index);
-  }
-#endif
-
   if (context_provider_) {
     gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
     gl->DestroyGpuFenceCHROMIUM(id);

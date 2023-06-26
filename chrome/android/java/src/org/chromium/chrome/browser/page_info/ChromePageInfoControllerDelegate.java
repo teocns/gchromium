@@ -104,8 +104,7 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
         initOfflinePageParams();
         mOfflinePageLoadUrlDelegate = offlinePageLoadUrlDelegate;
 
-        TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile())
-                .notifyEvent(EventConstants.PAGE_INFO_OPENED);
+        TrackerFactory.getTrackerForProfile(mProfile).notifyEvent(EventConstants.PAGE_INFO_OPENED);
     }
 
     private void initOfflinePageParams() {
@@ -162,8 +161,7 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
      * {@inheritDoc}
      */
     @Override
-    @Nullable
-    public String getOfflinePageConnectionMessage() {
+    public @Nullable String getOfflinePageConnectionMessage() {
         if (mOfflinePageState == OfflinePageState.TRUSTED_OFFLINE_PAGE) {
             return String.format(mContext.getString(R.string.page_info_connection_offline),
                     mOfflinePageCreationDate);
@@ -193,8 +191,7 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
      * {@inheritDoc}
      */
     @Override
-    @Nullable
-    public String getPaintPreviewPageConnectionMessage() {
+    public @Nullable String getPaintPreviewPageConnectionMessage() {
         if (!isShowingPaintPreviewPage()) return null;
 
         return mContext.getString(R.string.page_info_connection_paint_preview);
@@ -202,7 +199,8 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
 
     @Override
     public void showCookieSettings() {
-        SiteSettingsHelper.showCategorySettings(mContext, SiteSettingsCategory.Type.COOKIES);
+        SiteSettingsHelper.showCategorySettings(
+                mContext, mProfile, SiteSettingsCategory.Type.COOKIES);
     }
 
     @Override
@@ -259,8 +257,8 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
      * {@inheritDoc}
      */
     @Override
-    @NonNull
-    public CookieControlsBridge createCookieControlsBridge(CookieControlsObserver observer) {
+    public @NonNull CookieControlsBridge createCookieControlsBridge(
+            CookieControlsObserver observer) {
         return new CookieControlsBridge(observer, mWebContents,
                 mProfile.isOffTheRecord() ? mProfile.getOriginalProfile() : null);
     }
@@ -269,8 +267,7 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
      * {@inheritDoc}
      */
     @Override
-    @NonNull
-    public BrowserContextHandle getBrowserContext() {
+    public @NonNull BrowserContextHandle getBrowserContext() {
         return mProfile;
     }
 
@@ -278,8 +275,7 @@ public class ChromePageInfoControllerDelegate extends PageInfoControllerDelegate
      * {@inheritDoc}
      */
     @Override
-    @NonNull
-    public SiteSettingsDelegate getSiteSettingsDelegate() {
+    public @NonNull SiteSettingsDelegate getSiteSettingsDelegate() {
         return new ChromeSiteSettingsDelegate(mContext, mProfile);
     }
 

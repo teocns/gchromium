@@ -1526,6 +1526,14 @@ void ServiceWorkerGlobalScope::StartFetchEvent(
 
   NoteNewFetchEvent(fetch_request);
 
+  if (params->race_network_request_loader_factory &&
+      params->request->service_worker_race_network_request_token) {
+    race_network_request_loader_factories_.insert(
+        String(params->request->service_worker_race_network_request_token
+                   ->ToString()),
+        std::move(params->race_network_request_loader_factory));
+  }
+
   Request* request = Request::Create(
       ScriptController()->GetScriptState(), std::move(params->request),
       Request::ForServiceWorkerFetchEvent::kTrue);
@@ -2638,6 +2646,21 @@ bool ServiceWorkerGlobalScope::IsInFencedFrame() const {
          mojom::blink::AncestorFrameType::kFencedFrame;
 }
 
+void ServiceWorkerGlobalScope::NotifyWebSocketActivity() {
+  CHECK(IsContextThread());
+  CHECK(event_queue_);
+
+  bool notify = To<ServiceWorkerGlobalScopeProxy>(ReportingProxy())
+                    .ShouldNotifyServiceWorkerOnWebSocketActivity(
+                        GetThread()->GetIsolate()->GetCurrentContext());
+
+  if (notify) {
+    // TODO(crbug/1399324): refactor with RAII pattern.
+    event_queue_->ResetIdleTimeout();
+    event_queue_->CheckEventQueue();
+  }
+}
+
 mojom::blink::ServiceWorkerFetchHandlerType
 ServiceWorkerGlobalScope::FetchHandlerType() {
   EventListenerVector* elv = GetEventListeners(event_type_names::kFetch);
@@ -2651,10 +2674,10 @@ ServiceWorkerGlobalScope::FetchHandlerType() {
 
   // TODO(crbug.com/1349613): revisit the way to implement this.
   // The following code returns kEmptyFetchHandler if all handlers are nop.
-  for (RegisteredEventListener& e : *elv) {
+  for (RegisteredEventListener* e : *elv) {
     EventTarget* et = EventTarget::Create(script_state);
     v8::Local<v8::Value> v =
-        To<JSBasedEventListener>(e.Callback())->GetListenerObject(*et);
+        To<JSBasedEventListener>(e->Callback())->GetListenerObject(*et);
     if (v.IsEmpty() || !v->IsFunction() ||
         !v.As<v8::Function>()->Experimental_IsNopFunction()) {
       return mojom::blink::ServiceWorkerFetchHandlerType::kNotSkippable;
@@ -2684,6 +2707,17 @@ bool ServiceWorkerGlobalScope::SetAttributeEventListener(
         WebFeature::kServiceWorkerEventHandlerModifiedAfterInitialization);
   }
   return WorkerGlobalScope::SetAttributeEventListener(event_type, listener);
+}
+
+absl::optional<mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>>
+ServiceWorkerGlobalScope::FindRaceNetworkRequestURLLoaderFactory(
+    const base::UnguessableToken& token) {
+  mojo::PendingRemote<network::mojom::blink::URLLoaderFactory> result =
+      race_network_request_loader_factories_.Take(String(token.ToString()));
+  if (result) {
+    return result;
+  }
+  return absl::nullopt;
 }
 
 }  // namespace blink

@@ -34,8 +34,6 @@ class QuadF;
 
 namespace v8 {
 class Function;
-template <typename T>
-class Local;
 }  // namespace v8
 
 namespace WTF {
@@ -376,18 +374,20 @@ void Data(perfetto::TracedValue context, DocumentLoader*, uint64_t identifier);
 }
 
 namespace inspector_timer_install_event {
-void Data(perfetto::TracedValue context,
-          ExecutionContext*,
-          int timer_id,
-          base::TimeDelta timeout,
-          bool single_shot);
+CORE_EXPORT void Data(perfetto::TracedValue context,
+                      ExecutionContext*,
+                      int timer_id,
+                      base::TimeDelta timeout,
+                      bool single_shot);
 }
 
 namespace inspector_timer_remove_event {
+CORE_EXPORT
 void Data(perfetto::TracedValue context, ExecutionContext*, int timer_id);
 }
 
 namespace inspector_timer_fire_event {
+CORE_EXPORT
 void Data(perfetto::TracedValue context, ExecutionContext*, int timer_id);
 }
 
@@ -500,9 +500,10 @@ void Data(perfetto::TracedValue context,
 namespace inspector_compile_script_event {
 
 struct V8ConsumeCacheResult {
-  V8ConsumeCacheResult(int cache_size, bool rejected);
+  V8ConsumeCacheResult(int cache_size, bool rejected, bool full);
   int cache_size;
   bool rejected;
+  bool full;
 };
 
 void Data(perfetto::TracedValue context,

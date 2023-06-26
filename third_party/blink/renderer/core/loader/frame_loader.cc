@@ -831,21 +831,6 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
           ? CSPDisposition::DO_NOT_CHECK
           : CSPDisposition::CHECK;
 
-  // If this is a subframe load to a uuid-in-package: URL, allow loading from a
-  // Web Bundle attached to the parent document.
-  if (url.Protocol() == "uuid-in-package") {
-    auto* parent_local_frame = DynamicTo<LocalFrame>(frame_->Tree().Parent());
-    if (parent_local_frame &&
-        parent_local_frame->DomWindow() == origin_window &&
-        origin_window->Fetcher()) {
-      origin_window->Fetcher()->AttachWebBundleTokenIfNeeded(resource_request);
-      // Report to the UseCounter of the parent frame (i.e. the frame that
-      // loaded a WebBundle).
-      origin_window->CountUse(
-          mojom::blink::WebFeature::kUuidInPackageUrlNavigation);
-    }
-  }
-
   // Warn if the resource URL's hostname contains IDNA deviation characters.
   // Only warn if the resource URL's origin is different than its requestor
   // (we don't want to warn for <img src="faß.de/image.img"> on faß.de).
@@ -1173,6 +1158,8 @@ void FrameLoader::CommitNavigation(
     policy_container = PolicyContainer::CreateFromWebPolicyContainer(
         std::move(navigation_params->policy_container));
   }
+  coop_forbids_document_to_be_cross_origin_isolated_ =
+      navigation_params->coop_forbids_document_to_be_cross_origin_isolated;
 
   base::flat_map<mojom::blink::RuntimeFeatureState, bool> override_values =
       navigation_params->modified_runtime_features;
@@ -1233,7 +1220,17 @@ void FrameLoader::StopAllLoaders(bool abort_client) {
   }
 
   frame_->GetDocument()->CancelParsing();
-  frame_->DomWindow()->navigation()->InformAboutCanceledNavigation();
+
+  // `abort_client` is false only when we are stopping all loading in
+  // preparation for a frame swap. When a swap occurs, we're stopping all
+  // loading in this particular LocalFrame, but the conceptual frame is
+  // committing and continuing loading. We shouldn't treat this as a navigation
+  // cancellation in web-observable ways, so the navigation API should not do
+  // its cancelled navigation steps (e.g., firing a navigateerror event).
+  if (abort_client) {
+    frame_->DomWindow()->navigation()->InformAboutCanceledNavigation();
+  }
+
   if (document_loader_)
     document_loader_->StopLoading();
   if (abort_client)
@@ -1408,14 +1405,6 @@ String FrameLoader::ApplyUserAgentOverride(const String& user_agent) const {
 
 String FrameLoader::UserAgent() const {
   return ApplyUserAgentOverride(Client()->UserAgent());
-}
-
-String FrameLoader::FullUserAgent() const {
-  return ApplyUserAgentOverride(Client()->FullUserAgent());
-}
-
-String FrameLoader::ReducedUserAgent() const {
-  return ApplyUserAgentOverride(Client()->ReducedUserAgent());
 }
 
 absl::optional<blink::UserAgentMetadata> FrameLoader::UserAgentMetadata()
@@ -1737,7 +1726,7 @@ void FrameLoader::ModifyRequestForCSP(
     }
 
     resource_request.SetHttpHeaderField(http_names::kUpgradeInsecureRequests,
-                                        "1");
+                                        AtomicString("1"));
   }
 
   MixedContentChecker::UpgradeInsecureRequest(

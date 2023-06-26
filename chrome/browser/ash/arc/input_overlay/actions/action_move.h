@@ -14,6 +14,8 @@ namespace arc::input_overlay {
 // UI specs.
 constexpr int kActionMoveMinRadius = 99;
 
+class TouchInjector;
+
 // ActionMoveKey transforms key/mouse events to touch events with touch
 // move involved.
 class ActionMove : public Action {
@@ -36,6 +38,7 @@ class ActionMove : public Action {
       DisplayOverlayController* display_overlay_controller) override;
   void UnbindInput(const InputElement& input_element) override;
   std::unique_ptr<ActionProto> ConvertToProtoIfCustomized() const override;
+  ActionType GetType() override;
 
   void set_move_distance(int move_distance) { move_distance_ = move_distance; }
   int move_distance() { return move_distance_; }

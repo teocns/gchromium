@@ -444,14 +444,14 @@ TEST_F(LayoutBoxTest, LocationContainerOfSVG) {
 
   // The foreign object's location is not affected by SVGRoot's writing-mode.
   EXPECT_FALSE(foreign->LocationContainer());
-  EXPECT_EQ(LayoutRect(44, 77, 100, 80), foreign->FrameRect());
+  EXPECT_EQ(LayoutSize(100, 80), foreign->Size());
   EXPECT_EQ(PhysicalOffset(44, 77), foreign->PhysicalLocation());
   // The writing mode style should be still be inherited.
   EXPECT_TRUE(foreign->HasFlippedBlocksWritingMode());
 
   // The child of the foreign object is affected by writing-mode.
   EXPECT_EQ(foreign, child->LocationContainer());
-  EXPECT_EQ(LayoutRect(0, 0, 33, 55), child->FrameRect());
+  EXPECT_EQ(LayoutSize(33, 55), child->Size());
   EXPECT_EQ(PhysicalOffset(67, 0), child->PhysicalLocation());
   EXPECT_TRUE(child->HasFlippedBlocksWritingMode());
 }
@@ -649,44 +649,6 @@ TEST_F(LayoutBoxTest, VisualOverflowRectWithOverflowClipMargin) {
   EXPECT_EQ(LayoutRect(0, 0, 110, 55), clip3->VisualOverflowRect());
 }
 
-TEST_F(LayoutBoxTest, LayoutOverflowRectWithOverflowClipMargin) {
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      .parent { width: 100px; height: 50px; overflow: clip; }
-      .parent2 { width: 100px; height: 50px; contain: paint; }
-      .child { position: relative; top: -5px; left: -6px; width: 110px;
-               height: 112px; }
-    </style>
-    <div id="clip1" style="overflow-clip-margin: 4px" class="parent">
-      <div class="child"></div>
-    </div>
-    <div id="clip2" style="overflow-clip-margin: 10px" class="parent">
-      <div class="child"></div>
-    </div>
-    <div id="clip3" style="overflow-clip-margin: 10px" class="parent2">
-      <div class="child"></div>
-    </div>
-  )HTML");
-
-  LayoutBox* clip1 = GetLayoutBoxByElementId("clip1");
-  EXPECT_FALSE(clip1->IsScrollContainer());
-  EXPECT_TRUE(clip1->ShouldClipOverflowAlongBothAxis());
-  EXPECT_EQ(LayoutRect(-4, -4, 108, 58),
-            clip1->LayoutOverflowRectForPropagation(clip1->Parent()));
-
-  LayoutBox* clip2 = GetLayoutBoxByElementId("clip2");
-  EXPECT_FALSE(clip2->IsScrollContainer());
-  EXPECT_TRUE(clip2->ShouldClipOverflowAlongBothAxis());
-  EXPECT_EQ(LayoutRect(-6, -5, 110, 65),
-            clip2->LayoutOverflowRectForPropagation(clip2->Parent()));
-
-  LayoutBox* clip3 = GetLayoutBoxByElementId("clip3");
-  EXPECT_FALSE(clip3->IsScrollContainer());
-  EXPECT_TRUE(clip3->ShouldClipOverflowAlongBothAxis());
-  EXPECT_EQ(LayoutRect(-6, -5, 110, 65),
-            clip3->LayoutOverflowRectForPropagation(clip3->Parent()));
-}
-
 // |NGInkOverflow| stopped storing visual overflow contained by |BorderBoxRect|
 // because they are not useful, and they are inconsistent when fully contained
 // and partially contained.
@@ -721,26 +683,33 @@ TEST_F(LayoutBoxTest, ContentsVisualOverflowPropagation) {
     </div>
   )HTML");
 
+  const int kCContentsLeft =
+      RuntimeEnabledFeatures::LayoutNGNoLocationEnabled() ? -10 : 0;
   auto* c = GetLayoutBoxByElementId("c");
   EXPECT_EQ(LayoutRect(0, 0, 100, 100), c->SelfVisualOverflowRect());
-  EXPECT_CONTENTS_VISUAL_OVERFLOW(LayoutRect(10, 20, 100, 100), c);
-  EXPECT_EQ(LayoutRect(0, 0, 110, 120), c->VisualOverflowRect());
+  EXPECT_CONTENTS_VISUAL_OVERFLOW(LayoutRect(kCContentsLeft, 20, 100, 100), c);
+  EXPECT_EQ(LayoutRect(kCContentsLeft, 0, 110, 120), c->VisualOverflowRect());
   // C and its parent b have the same blocks direction.
-  EXPECT_EQ(LayoutRect(0, 0, 110, 120), c->VisualOverflowRectForPropagation());
+  EXPECT_EQ(LayoutRect(kCContentsLeft, 0, 110, 120),
+            c->VisualOverflowRectForPropagation());
 
+  const int kDLeft =
+      RuntimeEnabledFeatures::LayoutNGNoLocationEnabled() ? 0 : -10;
   auto* d = GetLayoutBoxByElementId("d");
   EXPECT_EQ(LayoutRect(0, 0, 100, 100), d->SelfVisualOverflowRect());
   EXPECT_CONTENTS_VISUAL_OVERFLOW(LayoutRect(10, 20, 100, 100), d);
   EXPECT_EQ(LayoutRect(0, 0, 110, 120), d->VisualOverflowRect());
   // D and its parent b have different blocks direction.
-  EXPECT_EQ(LayoutRect(-10, 0, 110, 120),
+  EXPECT_EQ(LayoutRect(kDLeft, 0, 110, 120),
             d->VisualOverflowRectForPropagation());
 
   auto* b = GetLayoutBoxByElementId("b");
+  const int kBContentsLeft =
+      RuntimeEnabledFeatures::LayoutNGNoLocationEnabled() ? -130 : 0;
   EXPECT_EQ(LayoutRect(0, 0, 100, 100), b->SelfVisualOverflowRect());
   // Union of VisualOverflowRectForPropagations offset by locations of c and d.
-  EXPECT_CONTENTS_VISUAL_OVERFLOW(LayoutRect(30, 40, 200, 120), b);
-  EXPECT_EQ(LayoutRect(0, 0, 230, 160), b->VisualOverflowRect());
+  EXPECT_CONTENTS_VISUAL_OVERFLOW(LayoutRect(kBContentsLeft, 40, 200, 120), b);
+  EXPECT_EQ(LayoutRect(kBContentsLeft, 0, 230, 160), b->VisualOverflowRect());
   // B and its parent A have different blocks direction.
   EXPECT_EQ(LayoutRect(-130, 0, 230, 160),
             b->VisualOverflowRectForPropagation());
@@ -1907,6 +1876,221 @@ TEST_F(LayoutBoxTest, HitTestResizerStackedWithTextAreaChild) {
   EXPECT_EQ(GetDocument().getElementById("target"), HitTest(99, 99));
   EXPECT_TRUE(HitTest(1, 1)->IsDescendantOrShadowDescendantOf(
       GetDocument().getElementById("textarea")));
+}
+
+TEST_F(LayoutBoxTest, AnchorInFragmentedContainingBlock) {
+  ScopedCSSAnchorPositioningForTest enabled(true);
+
+  // Create a 3-column multicol layout with a fragmented containing block,
+  // and a fragmented anchor element that starts from the second fragment.
+  InsertStyleElement(R"CSS(
+    #multicol {
+      column-count: 3;
+      column-width: 90px;
+      column-gap: 10px;
+      width: 300px;
+      height: 100px;
+    }
+    #cb {
+      position: relative;
+      height: 300px;
+    }
+    #spacer {
+      height: 110px;
+    }
+    #anchor {
+      height: 120px;
+      anchor-name: --a;
+    }
+    #target {
+      position: absolute;
+    }
+  )CSS");
+  SetBodyInnerHTML(R"HTML(
+    <div id="multicol">
+      <div id="cb">
+        <div id="spacer"></div>
+        <div id="anchor"></div>
+        <div id="target" anchor="anchor"></div>
+      </div>
+    </div>
+  )HTML");
+
+  const LayoutBox* target = To<LayoutBox>(GetLayoutObjectByElementId("target"));
+  EXPECT_EQ(GetLayoutObjectByElementId("anchor"),
+            target->FindTargetAnchor(
+                *MakeGarbageCollected<ScopedCSSName>("--a", &GetDocument())));
+  EXPECT_EQ(GetLayoutObjectByElementId("anchor"),
+            target->AcceptableImplicitAnchor());
+}
+
+TEST_F(LayoutBoxTest, AnchorInInlineContainingBlock) {
+  ScopedCSSAnchorPositioningForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <div>
+      <span id="not-implicit-anchor">not implicit anchor</span>
+      <span style="position: relative">
+        <span id="anchor" style="anchor-name: --a">anchor</span>
+        <div id="target" anchor="not-implicit-anchor"
+             style="position: absolute; top: anchor(--a top)"></div>
+      </span>
+      some text
+    </div>
+  )HTML");
+
+  const LayoutBox* target = To<LayoutBox>(GetLayoutObjectByElementId("target"));
+  EXPECT_EQ(GetLayoutObjectByElementId("anchor"),
+            target->FindTargetAnchor(
+                *MakeGarbageCollected<ScopedCSSName>("--a", &GetDocument())));
+  EXPECT_FALSE(target->AcceptableImplicitAnchor());
+}
+
+TEST_F(LayoutBoxTest, AnchorInInlineContainingBlockWithNameConflicts) {
+  ScopedCSSAnchorPositioningForTest enabled(true);
+
+  SetBodyInnerHTML(R"HTML(
+    <div>
+      <span style="position: relative">
+        <span id="anchor1" style="anchor-name: --a">anchor</span>
+        <div id="target1" style="position: absolute;top: anchor(--a top)"></div>
+      </span>
+      <span style="position: relative">
+        <span id="anchor2" style="anchor-name: --a">anchor</span>
+        <div id="target2" style="position: absolute;top: anchor(--a top)"></div>
+      </span>
+      <span style="position: relative">
+        <span id="anchor3" style="anchor-name: --a">anchor</span>
+        <div id="target3" style="position: absolute;top: anchor(--a top)"></div>
+      </span>
+    </div>
+  )HTML");
+
+  const ScopedCSSName& anchor_name =
+      *MakeGarbageCollected<ScopedCSSName>("--a", &GetDocument());
+
+  const LayoutBox* target1 =
+      To<LayoutBox>(GetLayoutObjectByElementId("target1"));
+  EXPECT_EQ(GetLayoutObjectByElementId("anchor1"),
+            target1->FindTargetAnchor(anchor_name));
+
+  const LayoutBox* target2 =
+      To<LayoutBox>(GetLayoutObjectByElementId("target2"));
+  EXPECT_EQ(GetLayoutObjectByElementId("anchor2"),
+            target2->FindTargetAnchor(anchor_name));
+
+  const LayoutBox* target3 =
+      To<LayoutBox>(GetLayoutObjectByElementId("target3"));
+  EXPECT_EQ(GetLayoutObjectByElementId("anchor3"),
+            target3->FindTargetAnchor(anchor_name));
+}
+
+TEST_F(LayoutBoxTest, IsUserScrollable) {
+  SetBodyInnerHTML(R"HTML("
+    <style>
+      #target { width: 100px; height: 100px; overflow: auto; }
+    </style>
+    <div id="target">
+      <div id="content" style="height: 200px"></div>
+    </div>
+  )HTML");
+
+  auto* target_element = GetDocument().getElementById("target");
+  auto* target = target_element->GetLayoutBox();
+  EXPECT_TRUE(target->ScrollsOverflow());
+  EXPECT_TRUE(target->IsUserScrollable());
+
+  target_element->setAttribute(html_names::kStyleAttr, "overflow: hidden");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(target->ScrollsOverflow());
+  EXPECT_FALSE(target->IsUserScrollable());
+
+  target_element->setAttribute(html_names::kStyleAttr, "");
+  GetDocument().getElementById("content")->setAttribute(html_names::kStyleAttr,
+                                                        "height: 0");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(target->ScrollsOverflow());
+  EXPECT_FALSE(target->IsUserScrollable());
+}
+
+TEST_F(LayoutBoxTest, IsUserScrollableLayoutView) {
+  SetBodyInnerHTML(R"HTML("
+    <div id="content" style="height: 2000px"></div>
+  )HTML");
+
+  EXPECT_TRUE(GetLayoutView().ScrollsOverflow());
+  EXPECT_TRUE(GetLayoutView().IsUserScrollable());
+
+  GetDocument().body()->setAttribute(html_names::kStyleAttr,
+                                     "overflow: hidden");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(GetLayoutView().ScrollsOverflow());
+  EXPECT_FALSE(GetLayoutView().IsUserScrollable());
+
+  GetDocument().body()->setAttribute(html_names::kStyleAttr, "");
+  GetDocument().getElementById("content")->setAttribute(html_names::kStyleAttr,
+                                                        "height: 0");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(GetLayoutView().ScrollsOverflow());
+  EXPECT_FALSE(GetLayoutView().IsUserScrollable());
+}
+
+TEST_F(LayoutBoxTest, LogicalTopLogicalLeft) {
+  SetBodyInnerHTML(R"HTML("
+    <style>
+    .c { contain: layout; }
+    .t { width: 1px; height:1px; margin: 3px 5px 7px 11px; }
+    .htb { writing-mode: horizontal-tb; }
+    .vlr { writing-mode: vertical-lr; }
+    .vrl { writing-mode: vertical-rl; }
+    </style>
+    <div class="c htb"><div id="htb-htb" class="t htb"></div></div>
+    <div class="c htb"><div id="htb-vrl" class="t vrl"></div></div>
+    <div class="c htb"><div id="htb-vlr" class="t vlr"></div></div>
+    <div class="c vlr"><div id="vlr-htb" class="t htb"></div></div>
+    <div class="c vlr"><div id="vlr-vrl" class="t vrl"></div></div>
+    <div class="c vlr"><div id="vlr-vlr" class="t vlr"></div></div>
+    <div class="c vrl"><div id="vrl-htb" class="t htb"></div></div>
+    <div class="c vrl"><div id="vrl-vrl" class="t vrl"></div></div>
+    <div class="c vrl"><div id="vrl-vlr" class="t vlr"></div></div>
+  )HTML");
+  constexpr LayoutUnit kTopMargin(3);
+  constexpr LayoutUnit kRightMargin(5);
+  constexpr LayoutUnit kLeftMargin(11);
+
+  // Target DIVs are placed at (3, 11) from its container top-left.
+  LayoutBox* target = GetLayoutBoxByElementId("htb-htb");
+  EXPECT_EQ(kTopMargin, target->LogicalTop());
+  EXPECT_EQ(kLeftMargin, target->LogicalLeft());
+  target = GetLayoutBoxByElementId("htb-vrl");
+  EXPECT_EQ(kLeftMargin, target->LogicalTop());
+  EXPECT_EQ(kTopMargin, target->LogicalLeft());
+  target = GetLayoutBoxByElementId("htb-vlr");
+  EXPECT_EQ(kLeftMargin, target->LogicalTop());
+  EXPECT_EQ(kTopMargin, target->LogicalLeft());
+
+  // Container's writing-mode doesn't matter if it is vertical-lr.
+  target = GetLayoutBoxByElementId("vlr-htb");
+  EXPECT_EQ(kTopMargin, target->LogicalTop());
+  EXPECT_EQ(kLeftMargin, target->LogicalLeft());
+  target = GetLayoutBoxByElementId("vlr-vrl");
+  EXPECT_EQ(kLeftMargin, target->LogicalTop());
+  EXPECT_EQ(kTopMargin, target->LogicalLeft());
+  target = GetLayoutBoxByElementId("vlr-vlr");
+  EXPECT_EQ(kLeftMargin, target->LogicalTop());
+  EXPECT_EQ(kTopMargin, target->LogicalLeft());
+
+  // In a vertical-rl container, LogicalTop() and LogicalLeft() return
+  // flipped-block offsets.
+  target = GetLayoutBoxByElementId("vrl-htb");
+  EXPECT_EQ(kTopMargin, target->LogicalTop());
+  EXPECT_EQ(kRightMargin, target->LogicalLeft());
+  target = GetLayoutBoxByElementId("vrl-vrl");
+  EXPECT_EQ(kRightMargin, target->LogicalTop());
+  EXPECT_EQ(kTopMargin, target->LogicalLeft());
+  target = GetLayoutBoxByElementId("vrl-vlr");
+  EXPECT_EQ(kRightMargin, target->LogicalTop());
+  EXPECT_EQ(kTopMargin, target->LogicalLeft());
 }
 
 class LayoutBoxBackgroundPaintLocationTest : public RenderingTest,

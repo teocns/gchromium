@@ -171,11 +171,8 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         }
 
         public void onSmartClipDataExtracted(String text, String html, Rect clipRect) {
-            // The clipRect is in dip scale here. Add the contentOffset in same scale.
             RenderCoordinatesImpl coordinateSpace = getRenderCoordinates();
-            clipRect.offset(0,
-                    (int) (coordinateSpace.getContentOffsetYPix()
-                            / coordinateSpace.getDeviceScaleFactor()));
+            clipRect.offset(0, (int) coordinateSpace.getContentOffsetYPix());
             Bundle bundle = new Bundle();
             bundle.putString("url", getVisibleUrl().getSpec());
             bundle.putString("title", getTitle());
@@ -492,6 +489,12 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @Override
+    public void updateWebContentsVisibility(@Visibility int visibility) {
+        checkNotDestroyed();
+        WebContentsImplJni.get().updateWebContentsVisibility(mNativeWebContentsAndroid, visibility);
+    }
+
+    @Override
     public String getTitle() {
         checkNotDestroyed();
         return WebContentsImplJni.get().getTitle(mNativeWebContentsAndroid);
@@ -778,11 +781,9 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         if (mSmartClipCallback == null) return;
         checkNotDestroyed();
         RenderCoordinatesImpl coordinateSpace = getRenderCoordinates();
-        float dpi = coordinateSpace.getDeviceScaleFactor();
         y = y - (int) coordinateSpace.getContentOffsetYPix();
-        WebContentsImplJni.get().requestSmartClipExtract(mNativeWebContentsAndroid,
-                mSmartClipCallback, (int) (x / dpi), (int) (y / dpi), (int) (width / dpi),
-                (int) (height / dpi));
+        WebContentsImplJni.get().requestSmartClipExtract(
+                mNativeWebContentsAndroid, mSmartClipCallback, x, y, width, height);
     }
 
     @Override
@@ -1181,6 +1182,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         WebContentsImpl[] getInnerWebContents(long nativeWebContentsAndroid);
         @Visibility
         int getVisibility(long nativeWebContentsAndroid);
+        void updateWebContentsVisibility(long nativeWebContentsAndroid, int visibility);
         String getTitle(long nativeWebContentsAndroid);
         GURL getVisibleURL(long nativeWebContentsAndroid);
         int getVirtualKeyboardMode(long nativeWebContentsAndroid);

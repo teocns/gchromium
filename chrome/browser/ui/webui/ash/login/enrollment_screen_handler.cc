@@ -12,10 +12,8 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_functions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
 #include "chrome/browser/ash/login/help_app_launcher.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/signin_partition_manager.h"
@@ -63,8 +61,8 @@ constexpr char kOAUTHCodeCookie[] = "oauth_code";
 std::string EnrollmentModeToUIMode(policy::EnrollmentConfig::Mode mode) {
   switch (mode) {
     case policy::EnrollmentConfig::MODE_NONE:
-    case policy::EnrollmentConfig::OBSOLETE_MODE_ENROLLED_ROLLBACK:
-    case policy::EnrollmentConfig::MODE_OFFLINE_DEMO_DEPRECATED:
+    case policy::EnrollmentConfig::DEPRECATED_MODE_ENROLLED_ROLLBACK:
+    case policy::EnrollmentConfig::DEPRECATED_MODE_OFFLINE_DEMO:
       break;
     case policy::EnrollmentConfig::MODE_MANUAL:
     case policy::EnrollmentConfig::MODE_MANUAL_REENROLLMENT:
@@ -89,37 +87,6 @@ std::string EnrollmentModeToUIMode(policy::EnrollmentConfig::Mode mode) {
 
   NOTREACHED() << "Bad enrollment mode " << mode;
   return kEnrollmentModeUIManual;
-}
-
-constexpr struct {
-  const char* id;
-  int title_id;
-  int subtitle_id;
-  authpolicy::KerberosEncryptionTypes encryption_types;
-} kEncryptionTypes[] = {
-    {"strong", IDS_AD_ENCRYPTION_STRONG_TITLE,
-     IDS_AD_ENCRYPTION_STRONG_SUBTITLE,
-     authpolicy::KerberosEncryptionTypes::ENC_TYPES_STRONG},
-    {"all", IDS_AD_ENCRYPTION_ALL_TITLE, IDS_AD_ENCRYPTION_ALL_SUBTITLE,
-     authpolicy::KerberosEncryptionTypes::ENC_TYPES_ALL},
-    {"legacy", IDS_AD_ENCRYPTION_LEGACY_TITLE,
-     IDS_AD_ENCRYPTION_LEGACY_SUBTITLE,
-     authpolicy::KerberosEncryptionTypes::ENC_TYPES_LEGACY}};
-
-base::Value::List GetEncryptionTypesList() {
-  const authpolicy::KerberosEncryptionTypes default_types =
-      authpolicy::KerberosEncryptionTypes::ENC_TYPES_STRONG;
-  base::Value::List encryption_list;
-  for (const auto& enc_types : kEncryptionTypes) {
-    base::Value::Dict enc_option;
-    enc_option.Set("title", l10n_util::GetStringUTF16(enc_types.title_id));
-    enc_option.Set("subtitle",
-                   l10n_util::GetStringUTF16(enc_types.subtitle_id));
-    enc_option.Set("value", enc_types.id);
-    enc_option.Set("selected", default_types == enc_types.encryption_types);
-    encryption_list.Append(std::move(enc_option));
-  }
-  return encryption_list;
 }
 
 std::string GetFlowString(EnrollmentScreenView::FlowType type) {
@@ -154,9 +121,9 @@ std::string GetGaiaButtonsTypeString(
   switch (type) {
     case EnrollmentScreenView::GaiaButtonsType::kDefault:
       return "default";
-    case EnrollmentScreenView::GaiaButtonsType::kEnterprisePreffered:
+    case EnrollmentScreenView::GaiaButtonsType::kEnterprisePreferred:
       return "enterprise-preferred";
-    case EnrollmentScreenView::GaiaButtonsType::kKioskPreffered:
+    case EnrollmentScreenView::GaiaButtonsType::kKioskPreferred:
       return "kiosk-preferred";
   }
 }
@@ -220,6 +187,12 @@ void EnrollmentScreenHandler::ShowSigninScreen() {
 
 void EnrollmentScreenHandler::ReloadSigninScreen() {
   CallExternalAPI("doReload");
+}
+
+void EnrollmentScreenHandler::ResetEnrollmentScreen() {
+  // The empty string will be replaced by the correct initial step in the screen
+  // initialization code.
+  ShowStep(std::string());
 }
 
 void EnrollmentScreenHandler::ShowUserError(const std::string& email) {
@@ -301,12 +274,12 @@ void EnrollmentScreenHandler::ShowAuthError(
 }
 
 void EnrollmentScreenHandler::ShowOtherError(
-    EnterpriseEnrollmentHelper::OtherError error) {
+    EnrollmentLauncher::OtherError error) {
   switch (error) {
-    case EnterpriseEnrollmentHelper::OTHER_ERROR_DOMAIN_MISMATCH:
+    case EnrollmentLauncher::OTHER_ERROR_DOMAIN_MISMATCH:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_STATUS_LOCK_WRONG_USER, true);
       return;
-    case EnterpriseEnrollmentHelper::OTHER_ERROR_FATAL:
+    case EnrollmentLauncher::OTHER_ERROR_FATAL:
       ShowError(IDS_ENTERPRISE_ENROLLMENT_FATAL_ENROLLMENT_ERROR, true);
       return;
   }
@@ -515,7 +488,7 @@ void EnrollmentScreenHandler::DeclareLocalizedValues(
                IDS_ENTERPRISE_ENROLLMENT_ENROLL_ENTERPRISE);
   builder->Add("kioskEnrollmentButton", IDS_ENTERPRISE_ENROLLMENT_ENROLL_KIOSK);
 
-  builder->Add("enollmentInProgress",
+  builder->Add("enrollmentInProgress",
                IDS_ENTERPRISE_ENROLLMENT_SCREEN_PROGRESS_LABEL);
   builder->Add("oauthEnrollRetry", IDS_ENTERPRISE_ENROLLMENT_RETRY);
   builder->Add("oauthEnrollManualEnrollment",
@@ -570,19 +543,20 @@ void EnrollmentScreenHandler::DeclareLocalizedValues(
   builder->Add("TPMCheckSubtitle", IDS_TPM_CHECK_SUBTITLE);
   builder->Add("cancelButton", IDS_CANCEL);
 
-  // Skip Confirmation Dialogue strings
+  // Skip Confirmation Dialogue strings.
   builder->Add("skipConfirmationDialogTitle", IDS_SKIP_ENROLLMENT_DIALOG_TITLE);
   builder->Add("skipConfirmationDialogText", IDS_SKIP_ENROLLMENT_DIALOG_TEXT);
   builder->Add("skipConfirmationDialogEducationTitle",
                IDS_SKIP_ENROLLMENT_DIALOG_EDUCATION_TITLE);
   builder->Add("skipConfirmationDialogEducationText",
                IDS_SKIP_ENROLLMENT_DIALOG_EDUCATION_TEXT);
-  builder->Add("skipConfirmationgoBackButton",
+  builder->Add("skipConfirmationGoBackButton",
                IDS_SKIP_ENROLLMENT_DIALOG_GO_BACK_BUTTON);
   builder->Add("skipConfirmationSkipButton",
                IDS_SKIP_ENROLLMENT_DIALOG_SKIP_BUTTON);
 
   /* Active Directory strings */
+  // TODO(b/280560446) Remove once references in HTML/JS are removed.
   builder->Add("oauthEnrollAdMachineNameInput", IDS_AD_DEVICE_NAME_INPUT_LABEL);
   builder->Add("oauthEnrollAdDomainJoinWelcomeMessage",
                IDS_AD_DOMAIN_JOIN_WELCOME_MESSAGE);
@@ -627,7 +601,17 @@ void EnrollmentScreenHandler::DeclareJSCallbacks() {
 
 void EnrollmentScreenHandler::GetAdditionalParameters(
     base::Value::Dict* parameters) {
-  parameters->Set("encryptionTypesList", GetEncryptionTypesList());
+  // TODO(b/280560446) Remove this placeholder once
+  // chrome/browser/resources/chromeos/login/screens/common/offline_ad_login.js
+  // is removed (currently, some tests still depend on this list to be
+  // non-empty).
+  parameters->Set(
+      "encryptionTypesList",
+      base::Value::List().Append(base::Value::Dict()
+                                     .Set("title", "some title")
+                                     .Set("subtitle", "some subtitle")
+                                     .Set("value", 42)
+                                     .Set("selected", false)));
 }
 
 bool EnrollmentScreenHandler::IsOnEnrollmentScreen() {
@@ -783,8 +767,8 @@ void EnrollmentScreenHandler::HandleOnLearnMore() {
   help_app_->ShowHelpTopic(HelpAppLauncher::HELP_DEVICE_ATTRIBUTES);
 }
 
-void EnrollmentScreenHandler::ShowStep(const char* step) {
-  CallExternalAPI("showStep", std::string(step));
+void EnrollmentScreenHandler::ShowStep(const std::string& step) {
+  CallExternalAPI("showStep", step);
 }
 
 void EnrollmentScreenHandler::ShowError(int message_id, bool retry) {

@@ -21,10 +21,12 @@
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/app_list/search/local_images/annotation_storage.h"
+#include "chrome/browser/ash/app_list/search/local_images/search_utils.h"
+#include "chrome/browser/screen_ai/screen_ai_install_state.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
 #include "chromeos/services/machine_learning/public/mojom/image_content_annotation.mojom.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
-#include "components/services/screen_ai/public/cpp/screen_ai_install_state.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace app_list {
 namespace {
@@ -40,7 +42,8 @@ bool IsImage(const base::FilePath& path) {
   // Note: The UI design stipulates jpg, png, gif, and svg, but we use
   // the subset that ICA can handle.
   return extension == ".jpeg" || extension == ".jpg" || extension == ".png" ||
-         extension == ".JPEG" || extension == ".JPG" || extension == ".PNG";
+         extension == ".webp" || extension == ".JPEG" || extension == ".JPG" ||
+         extension == ".PNG" || extension == ".WEBP";
 }
 
 // Returns deleted files. Needs to be done in background.
@@ -54,10 +57,20 @@ std::set<base::FilePath> GetDeletedPaths(const std::vector<ImageInfo>& images) {
   return deleted_paths;
 }
 
+bool IsOcrServiceReady() {
+  return (
+      screen_ai::ScreenAIInstallState::GetInstance() &&
+      screen_ai::ScreenAIInstallState::GetInstance()->IsComponentAvailable());
+}
+
 }  // namespace
 
-ImageAnnotationWorker::ImageAnnotationWorker(const base::FilePath& root_path)
+ImageAnnotationWorker::ImageAnnotationWorker(const base::FilePath& root_path,
+                                             bool use_ocr,
+                                             bool use_ica)
     : root_path_(root_path),
+      use_ica_(use_ica),
+      use_ocr_(use_ocr),
       task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
@@ -74,9 +87,29 @@ void ImageAnnotationWorker::Initialize(AnnotationStorage* annotation_storage) {
   on_file_change_callback_ = base::BindRepeating(
       &ImageAnnotationWorker::OnFileChange, weak_ptr_factory_.GetWeakPtr());
 
-  if (!use_fake_annotator_for_tests_) {
-    screen_ai_service_router_.LaunchIfNotRunning();
+  VLOG(1) << "Initializing DLCs.";
+  if (use_ocr_) {
+    DVLOG(1) << "Initializing OCR DLC.";
+    if (IsOcrServiceReady()) {
+      EnsureOcrAnnotatorIsConnected();
+    } else {
+      // DLC downloader cannot run from current sequence.
+      content::GetUIThreadTaskRunner()->PostTask(
+          FROM_HERE, base::BindOnce([]() {
+            // Screen AI Install State may be unavailable for tests.
+            if (screen_ai::ScreenAIInstallState::GetInstance()) {
+              screen_ai::ScreenAIInstallState::GetInstance()
+                  ->DownloadComponent();
+            }
+          }));
+    }
   }
+
+  if (use_ica_) {
+    DVLOG(1) << "Initializing ICA DLC.";
+    EnsureIcaAnnotatorIsConnected();
+  }
+
   base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ImageAnnotationWorker::OnDlcInstalled,
@@ -85,9 +118,11 @@ void ImageAnnotationWorker::Initialize(AnnotationStorage* annotation_storage) {
 }
 
 void ImageAnnotationWorker::OnDlcInstalled() {
-  if (!use_fake_annotator_for_tests_ &&
-      screen_ai::ScreenAIInstallState::GetInstance()->get_state() !=
-          screen_ai::ScreenAIInstallState::State::kReady) {
+  bool ocr_dlc_installed = IsOcrServiceReady();
+  if ((use_ocr_ && !ocr_dlc_installed) || (use_ica_ && !ica_dlc_initialized_)) {
+    DVLOG(1) << "DLC is not ready. OCR: " << ocr_dlc_installed << "/"
+             << use_ocr_ << " ICA: " << ica_dlc_initialized_ << "/" << use_ica_
+             << " Waiting.";
     // It is expected to be ready on a first try. Also, it is not a time
     // sensitive task, so we do not need to implement a full-fledged observer.
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
@@ -98,10 +133,8 @@ void ImageAnnotationWorker::OnDlcInstalled() {
     return;
   }
 
-  if (!use_fake_annotator_for_tests_) {
-    EnsureIcaAnnotatorIsConnected();
-    EnsureOcrAnnotatorIsConnected();
-
+  if (use_ica_ || use_ocr_) {
+    VLOG(1) << "DLCs are ready. Watching for file changes.";
     file_watcher_ = std::make_unique<base::FilePathWatcher>();
 
     DVLOG(1) << "Start WatchWithOptions " << root_path_;
@@ -119,11 +152,12 @@ void ImageAnnotationWorker::OnDlcInstalled() {
       base::BindOnce(
           [](base::FilePath root_path)
               -> std::unique_ptr<base::FileEnumerator> {
+            DVLOG(1) << "Commencing start up indexing. ";
             return std::make_unique<base::FileEnumerator>(
                 root_path,
                 /*recursive=*/true, base::FileEnumerator::FILES,
                 // There is an image extension test down the pipe.
-                "*.[j,p,J,P][p,n,P,N]*[g,G]",
+                "*.[j,p,J,P,w,W][p,n,P,N,e,E]*[g,G,p,P]",
                 base::FileEnumerator::FolderSearchPolicy::ALL);
           },
           root_path_),
@@ -165,6 +199,7 @@ void ImageAnnotationWorker::EnsureOcrAnnotatorIsConnected() {
     return;
   }
 
+  DCHECK(IsOcrServiceReady());
   screen_ai_service_router_.BindScreenAIAnnotator(
       screen_ai_annotator_.BindNewPipeAndPassReceiver());
   screen_ai_annotator_.reset_on_disconnect();
@@ -176,26 +211,32 @@ void ImageAnnotationWorker::ConnectToImageAnnotator() {
   auto config = chromeos::machine_learning::mojom::ImageAnnotatorConfig::New();
   config->locale = "en-US";
 
-  DVLOG(1) << "Bind ICA.";
-  bool model_callback_done = false;
+  DVLOG(1) << "Binding ICA.";
   ml_service_->LoadImageAnnotator(
       std::move(config), image_content_annotator_.BindNewPipeAndPassReceiver(),
       base::BindOnce(
-          [](bool* model_callback_done,
+          [](bool* ica_dlc_initialized,
              const chromeos::machine_learning::mojom::LoadModelResult result) {
-            DCHECK_EQ(result,
-                      chromeos::machine_learning::mojom::LoadModelResult::OK);
-            *model_callback_done = true;
-            DVLOG(1) << "Bind is done.";
+            DVLOG(1) << result;
+            if (result ==
+                chromeos::machine_learning::mojom::LoadModelResult::OK) {
+              *ica_dlc_initialized = true;
+              DVLOG(1) << "ICA bind is done.";
+            } else {
+              LOG(ERROR) << "Failed to bind ICA.";
+              *ica_dlc_initialized = false;
+            }
           },
-          &model_callback_done));
+          &ica_dlc_initialized_));
 }
 
 void ImageAnnotationWorker::OnFileChange(const base::FilePath& path,
                                          bool error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (DirectoryExists(path) || !IsImage(path) || error) {
+  if (DirectoryExists(path) || !IsImage(path) ||
+      ica_being_processed_images.contains(path) ||
+      ocr_being_processed_images.contains(path) || error) {
     return;
   }
 
@@ -232,22 +273,33 @@ void ImageAnnotationWorker::ProcessImage(
     DVLOG(1) << "CompareModifiedTime: "
              << stored_annotations_with_this_path.size() << " same? "
              << (file_info->last_modified ==
-                 stored_annotations_with_this_path[0].last_modified);
+                 stored_annotations_with_this_path[0].last_modified)
+             << " is_ignored: "
+             << stored_annotations_with_this_path[0].is_ignored;
     // Annotations are updated on a file change and have the file's last
     // modified time. So skip inserting the image annotations if the file
     // has not changed since the last update.
-    if (file_info->last_modified ==
-        stored_annotations_with_this_path[0].last_modified) {
+    if (stored_annotations_with_this_path[0].is_ignored ||
+        file_info->last_modified ==
+            stored_annotations_with_this_path[0].last_modified) {
       return;
     }
   }
 
   DVLOG(1) << "Processing new " << image_path << " "
            << file_info->last_modified;
-  ImageInfo image_info({}, image_path, file_info->last_modified);
+  ImageInfo image_info({}, image_path, file_info->last_modified,
+                       /*is_ignored=*/0);
 
-  auto callback =
-      !use_fake_annotator_for_tests_
+  if (use_ica_) {
+    ica_being_processed_images.insert(image_path);
+  }
+  if (use_ocr_) {
+    ocr_being_processed_images.insert(image_path);
+  }
+
+  auto run_image_annotator =
+      use_ica_ || use_ocr_
           ? base::BindOnce(&ImageAnnotationWorker::RunImageAnnotator,
                            weak_ptr_factory_.GetWeakPtr(),
                            std::move(image_info))
@@ -273,7 +325,7 @@ void ImageAnnotationWorker::ProcessImage(
             return mapped_region;
           },
           image_path),
-      std::move(callback));
+      std::move(run_image_annotator));
 }
 
 void ImageAnnotationWorker::RunImageAnnotator(
@@ -285,17 +337,21 @@ void ImageAnnotationWorker::RunImageAnnotator(
 
   annotation_storage_->Remove(image_info.path);
 
-  EnsureOcrAnnotatorIsConnected();
-  ash::image_util::DecodeImageFile(
-      base::BindOnce(&ImageAnnotationWorker::OnDecodeImageFile,
-                     weak_ptr_factory_.GetWeakPtr(), image_info),
-      image_info.path);
+  if (use_ocr_) {
+    EnsureOcrAnnotatorIsConnected();
+    ash::image_util::DecodeImageFile(
+        base::BindOnce(&ImageAnnotationWorker::OnDecodeImageFile,
+                       weak_ptr_factory_.GetWeakPtr(), image_info),
+        image_info.path);
+  }
 
-  EnsureIcaAnnotatorIsConnected();
-  image_content_annotator_->AnnotateEncodedImage(
-      std::move(mapped_region.region),
-      base::BindOnce(&ImageAnnotationWorker::OnPerformIca,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(image_info)));
+  if (use_ica_) {
+    EnsureIcaAnnotatorIsConnected();
+    image_content_annotator_->AnnotateEncodedImage(
+        std::move(mapped_region.region),
+        base::BindOnce(&ImageAnnotationWorker::OnPerformIca,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(image_info)));
+  }
 }
 
 void ImageAnnotationWorker::OnPerformIca(
@@ -315,6 +371,7 @@ void ImageAnnotationWorker::OnPerformIca(
   }
   if (!image_info.annotations.empty()) {
     annotation_storage_->Insert(image_info);
+    ica_being_processed_images.erase(image_info.path);
   }
 }
 
@@ -350,20 +407,17 @@ void ImageAnnotationWorker::OnPerformOcr(
   for (const auto& text_line : visual_annotation->lines) {
     for (const auto& word : text_line->words) {
       DVLOG(1) << word->word;
-      // TODO(b/279852430): Implement a proper word filter.
-      if (word->word.size() >= 3) {
-        image_info.annotations.insert(word->word);
+      auto lower_case_word = base::ToLowerASCII(word->word);
+      if (lower_case_word.size() > 3 && !IsStopWord(lower_case_word) &&
+          base::IsAsciiAlpha(lower_case_word[0])) {
+        image_info.annotations.insert(std::move(lower_case_word));
       }
     }
   }
   if (!image_info.annotations.empty()) {
     annotation_storage_->Insert(image_info);
+    ocr_being_processed_images.erase(image_info.path);
   }
-}
-
-void ImageAnnotationWorker::UseFakeAnnotatorForTests() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  use_fake_annotator_for_tests_ = true;
 }
 
 void ImageAnnotationWorker::RunFakeImageAnnotator(

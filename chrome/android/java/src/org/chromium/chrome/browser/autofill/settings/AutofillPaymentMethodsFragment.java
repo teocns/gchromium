@@ -5,8 +5,6 @@
 package org.chromium.chrome.browser.autofill.settings;
 
 import static org.chromium.chrome.browser.autofill.AutofillUiUtils.getCardIcon;
-import static org.chromium.chrome.browser.autofill.AutofillUiUtils.getSettingsPageIconHeightId;
-import static org.chromium.chrome.browser.autofill.AutofillUiUtils.getSettingsPageIconWidthId;
 
 import android.content.Context;
 import android.graphics.PorterDuff;
@@ -27,6 +25,7 @@ import androidx.preference.PreferenceScreen;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillEditorBase;
+import org.chromium.chrome.browser.autofill.AutofillUiUtils;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.device_reauth.DeviceAuthRequester;
@@ -142,30 +141,37 @@ public class AutofillPaymentMethodsFragment
         if (ChromeFeatureList.isEnabled(
                     ChromeFeatureList.AUTOFILL_ENABLE_PAYMENTS_MANDATORY_REAUTH)) {
             if (mReauthenticatorBridge == null) {
-                // The DeviceAuthRequester value also determines canUseAuthentication() underlying
-                // logic. Here we set a value to ensure it checks biometric only (exclude screen
-                // lock).
-                // TODO(crbug.com/1434875): Update when we split canUseAuthentication() function.
                 mReauthenticatorBridge = ReauthenticatorBridge.create(
                         DeviceAuthRequester.PAYMENT_METHODS_REAUTH_IN_SETTINGS);
             }
-            // We don't show the Reauth toggle when Autofill credit card is disabled or the device
-            // doesn't have biometric auth.
-            if (PersonalDataManager.isAutofillCreditCardEnabled()
-                    && mReauthenticatorBridge.canUseAuthentication()) {
-                ChromeSwitchPreference mandatoryReauthSwitch =
-                        new ChromeSwitchPreference(getStyledContext(), null);
-                mandatoryReauthSwitch.setTitle(
-                        R.string.autofill_settings_page_enable_payment_method_mandatory_reauth_label);
-                mandatoryReauthSwitch.setSummary(
-                        R.string.autofill_settings_page_enable_payment_method_mandatory_reauth_sublabel);
-                mandatoryReauthSwitch.setChecked(
-                        PersonalDataManager.isAutofillPaymentMethodsMandatoryReauthEnabled());
-                mandatoryReauthSwitch.setKey(PREF_MANDATORY_REAUTH);
-                mandatoryReauthSwitch.setOnPreferenceChangeListener(
-                        this::onMandatoryReauthSwitchToggled);
-                getPreferenceScreen().addPreference(mandatoryReauthSwitch);
-            }
+            ChromeSwitchPreference mandatoryReauthSwitch =
+                    new ChromeSwitchPreference(getStyledContext(), null);
+            mandatoryReauthSwitch.setTitle(
+                    R.string.autofill_settings_page_enable_payment_method_mandatory_reauth_label);
+            mandatoryReauthSwitch.setSummary(
+                    R.string.autofill_settings_page_enable_payment_method_mandatory_reauth_sublabel);
+            mandatoryReauthSwitch.setKey(PREF_MANDATORY_REAUTH);
+            // We always display the toggle, but the toggle is only enabled when Autofill credit
+            // card is enabled AND the device supports biometric auth or screen lock. If either of
+            // these is not met, we will grey out the toggle.
+            boolean enableReauthSwitch = PersonalDataManager.isAutofillCreditCardEnabled()
+                    && mReauthenticatorBridge.canUseAuthenticationWithBiometricOrScreenLock();
+            mandatoryReauthSwitch.setEnabled(enableReauthSwitch);
+            mandatoryReauthSwitch.setOnPreferenceChangeListener(
+                    this::onMandatoryReauthSwitchToggled);
+            getPreferenceScreen().addPreference(mandatoryReauthSwitch);
+
+            // Every {@link SwitchPreferenceCompat} on a {@link PreferenceScreen} has a pref that is
+            // automatically added to the {@link SharedPreferences}. When a switch is added, by
+            // default its checked state is reset to the saved pref value irrespective of whether or
+            // not the switch's checked state was set before adding the switch. Setting the checked
+            // state after adding the switch updates the underlying pref as well.
+            // If a user opts in to mandatory reauth during the checkout flow, since the switch's
+            // underlying pref is still false, the switch does not reflect the opt-in. Set switch's
+            // checked state after adding it to the screen so the underlying pref value is also
+            // updated and is in sync with the mandatory reauth user pref.
+            mandatoryReauthSwitch.setChecked(
+                    PersonalDataManager.isPaymentMethodsMandatoryReauthEnabled());
         }
 
         for (CreditCard card : PersonalDataManager.getInstance().getCreditCardsForSettings()) {
@@ -182,20 +188,18 @@ public class AutofillPaymentMethodsFragment
                             ChromeFeatureList.AUTOFILL_ENABLE_VIRTUAL_CARD_METADATA)) {
                 card_pref.setSummary(R.string.autofill_virtual_card_enrolled_text);
             } else {
-                card_pref.setSummary(
-                        card.getFormattedExpirationDateWithTwoDigitYear(getActivity()));
+                card_pref.setSummary(card.getFormattedExpirationDate(getActivity()));
             }
 
             // Set card icon. It can be either a custom card art or a network icon.
             card_pref.setIcon(getCardIcon(getStyledContext(), card.getCardArtUrl(),
-                    card.getIssuerIconDrawableId(), getSettingsPageIconWidthId(),
-                    getSettingsPageIconHeightId(), R.dimen.card_art_corner_radius,
+                    card.getIssuerIconDrawableId(), AutofillUiUtils.CardIconSize.LARGE,
                     ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE)));
 
             if (card.getIsLocal()) {
                 if (ChromeFeatureList.isEnabled(
                             ChromeFeatureList.AUTOFILL_ENABLE_PAYMENTS_MANDATORY_REAUTH)
-                        && PersonalDataManager.isAutofillPaymentMethodsMandatoryReauthEnabled()) {
+                        && PersonalDataManager.isPaymentMethodsMandatoryReauthEnabled()) {
                     // When mandatory reauth is enabled, we require additional authentication before
                     // user can view/edit local card.
                     card_pref.setOnPreferenceClickListener(
@@ -299,13 +303,21 @@ public class AutofillPaymentMethodsFragment
     /** Handle preference changes from mandatory reauth toggle */
     private boolean onMandatoryReauthSwitchToggled(Preference preference, Object newValue) {
         assert preference.getKey().equals(PREF_MANDATORY_REAUTH);
-        // We require user authentication every time user trys to change this
+
+        ChromeSwitchPreference mandatoryReauthSwitch = (ChromeSwitchPreference) preference;
+        // If the user preference update is successful, toggle the switch to the success state.
+        boolean userIntendedState = !mandatoryReauthSwitch.isChecked();
+        // We require user authentication every time user tries to change this
         // preference. Set useLastValidAuth=false to skip the grace period.
         mReauthenticatorBridge.reauthenticate(success -> {
             if (success) {
                 // Only set the preference to new value when user passes the
                 // authentication.
                 PersonalDataManager.setAutofillPaymentMethodsMandatoryReauth((boolean) newValue);
+
+                // When the preference is updated, the page is expected to refresh and show the
+                // updated preference. Fallback if the page does not load.
+                mandatoryReauthSwitch.setChecked(userIntendedState);
             }
         }, /*useLastValidAuth=*/false);
         // Returning false here holds the toggle to still display the old value while

@@ -19,6 +19,7 @@
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/system_ui/arc_system_ui_bridge.h"
 #include "ash/constants/app_types.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/accelerators.h"
@@ -40,12 +41,12 @@
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shelf_ui_info.h"
 #include "ash/public/cpp/split_view_test_api.h"
-#include "ash/public/cpp/style/dark_light_mode_controller.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/screen_rotation_animator.h"
 #include "ash/shell.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/wm_event.h"
@@ -67,8 +68,10 @@
 #include "base/scoped_observation.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece_forward.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -88,6 +91,9 @@
 #include "chrome/browser/ash/borealis/borealis_installer.h"
 #include "chrome/browser/ash/borealis/borealis_metrics.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_installer.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_service.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_util.h"
 #include "chrome/browser/ash/crosapi/automation_ash.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
@@ -144,11 +150,11 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
+#include "chrome/browser/ui/views/bruschetta/bruschetta_installer_view.h"
 #include "chrome/browser/ui/views/crostini/crostini_uninstaller_view.h"
 #include "chrome/browser/ui/views/plugin_vm/plugin_vm_installer_view.h"
 #include "chrome/browser/ui/webui/ash/crostini_installer/crostini_installer_dialog.h"
 #include "chrome/browser/ui/webui/ash/crostini_installer/crostini_installer_ui.h"
-#include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/extensions/api/autotest_private.h"
@@ -162,6 +168,7 @@
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_service.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/printing/printer_configuration.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -217,6 +224,7 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/ime/ash/ime_bridge.h"
+#include "ui/base/ime/ash/input_method_manager.h"
 #include "ui/base/ime/ash/text_input_method.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/compositor/compositor.h"
@@ -249,6 +257,14 @@ namespace extensions {
 namespace {
 
 using chromeos::PrinterClass;
+
+// Features used for testing `isFeatureEnabled`.
+BASE_FEATURE(kEnabledFeatureForTest,
+             "EnabledFeatureForTest",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kDisabledFeatureForTest,
+             "DisabledFeatureForTest",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 constexpr char kCrostiniNotAvailableForCurrentUserError[] =
     "Crostini is not available for the current user";
@@ -619,10 +635,8 @@ chromeos::WindowStateType GetExpectedWindowState(
     case api::autotest_private::WMEventType::kWmeventFullscreen:
       return chromeos::WindowStateType::kFullscreen;
     case api::autotest_private::WMEventType::kWmeventSnapPrimary:
-    case api::autotest_private::WMEventType::kWmeventSnapLeft:
       return chromeos::WindowStateType::kPrimarySnapped;
     case api::autotest_private::WMEventType::kWmeventSnapSecondary:
-    case api::autotest_private::WMEventType::kWmeventSnapRight:
       return chromeos::WindowStateType::kSecondarySnapped;
     case api::autotest_private::WMEventType::kWmeventFloat:
       return chromeos::WindowStateType::kFloated;
@@ -643,10 +657,8 @@ ash::WMEventType ToWMEventType(api::autotest_private::WMEventType event_type) {
     case api::autotest_private::WMEventType::kWmeventFullscreen:
       return ash::WMEventType::WM_EVENT_FULLSCREEN;
     case api::autotest_private::WMEventType::kWmeventSnapPrimary:
-    case api::autotest_private::WMEventType::kWmeventSnapLeft:
       return ash::WMEventType::WM_EVENT_SNAP_PRIMARY;
     case api::autotest_private::WMEventType::kWmeventSnapSecondary:
-    case api::autotest_private::WMEventType::kWmeventSnapRight:
       return ash::WMEventType::WM_EVENT_SNAP_SECONDARY;
     case api::autotest_private::WMEventType::kWmeventFloat:
       return ash::WMEventType::WM_EVENT_FLOAT;
@@ -1961,6 +1973,12 @@ AutotestPrivateSetPlayStoreEnabledFunction::Run() {
     // currently.
     profile->GetPrefs()->SetBoolean(arc::prefs::kArcLocationServiceEnabled,
                                     true);
+    // Since we are settings location to enabled, we don't have to sync this
+    // settings from android.
+    if (base::FeatureList::IsEnabled(ash::features::kCrosPrivacyHub)) {
+      profile->GetPrefs()->SetBoolean(
+          arc::prefs::kArcInitialLocationSettingSyncRequired, false);
+    }
     return RespondNow(NoArguments());
   } else {
     return RespondNow(Error("ARC is not available for the current user"));
@@ -2022,6 +2040,8 @@ AutotestPrivateGetLacrosInfoFunction::ToLacrosState(
   switch (state) {
     case crosapi::BrowserManager::State::NOT_INITIALIZED:
       return api::autotest_private::LacrosState::kNotInitialized;
+    case crosapi::BrowserManager::State::RELOADING:
+      return api::autotest_private::LacrosState::kReloading;
     case crosapi::BrowserManager::State::MOUNTING:
       return api::autotest_private::LacrosState::kMounting;
     case crosapi::BrowserManager::State::UNAVAILABLE:
@@ -2030,6 +2050,8 @@ AutotestPrivateGetLacrosInfoFunction::ToLacrosState(
       return api::autotest_private::LacrosState::kStopped;
     case crosapi::BrowserManager::State::CREATING_LOG_FILE:
       return api::autotest_private::LacrosState::kCreatingLogFile;
+    case crosapi::BrowserManager::State::PRE_LAUNCHED:
+      return api::autotest_private::LacrosState::kPreLaunched;
     case crosapi::BrowserManager::State::STARTING:
       return api::autotest_private::LacrosState::kStarting;
     case crosapi::BrowserManager::State::RUNNING:
@@ -3945,6 +3967,7 @@ ExtensionFunction::ResponseAction AutotestPrivateGetShelfItemsFunction::Run() {
     result_item.status = GetShelfItemStatus(item.status);
     result_item.shows_tooltip = item.shows_tooltip;
     result_item.pinned_by_policy = item.pinned_by_policy;
+    result_item.pin_state_forced_by_type = item.pin_state_forced_by_type;
     result_item.has_notification = item.has_notification;
     result_items.emplace_back(std::move(result_item));
   }
@@ -4726,11 +4749,7 @@ AutotestPrivateSetAppWindowStateFunction::Run() {
   if (params->change.event_type ==
           api::autotest_private::WMEventType::kWmeventSnapPrimary ||
       params->change.event_type ==
-          api::autotest_private::WMEventType::kWmeventSnapSecondary ||
-      params->change.event_type ==
-          api::autotest_private::WMEventType::kWmeventSnapLeft ||
-      params->change.event_type ==
-          api::autotest_private::WMEventType::kWmeventSnapRight) {
+          api::autotest_private::WMEventType::kWmeventSnapSecondary) {
     const ash::WindowSnapWMEvent event(
         ToWMEventType(params->change.event_type));
     ash::WindowState::Get(window)->OnWMEvent(&event);
@@ -5965,6 +5984,45 @@ void AutotestPrivateWaitForAmbientPhotoAnimationFunction::Timeout() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateWaitForAmbientVideoFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateWaitForAmbientVideoFunction::
+    AutotestPrivateWaitForAmbientVideoFunction() = default;
+
+AutotestPrivateWaitForAmbientVideoFunction::
+    ~AutotestPrivateWaitForAmbientVideoFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateWaitForAmbientVideoFunction::Run() {
+  absl::optional<api::autotest_private::WaitForAmbientVideo::Params> params =
+      api::autotest_private::WaitForAmbientVideo::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  // Wait for video playback to start in ambient mode.
+  ash::AutotestAmbientApi().WaitForVideoToStart(
+      base::Seconds(params->timeout),
+      /*on_complete=*/
+      base::BindOnce(
+          &AutotestPrivateWaitForAmbientVideoFunction::RespondWithSuccess,
+          this),
+      /*on_error=*/
+      base::BindOnce(
+          &AutotestPrivateWaitForAmbientVideoFunction::RespondWithError, this));
+
+  return did_respond() ? AlreadyResponded() : RespondLater();
+}
+
+void AutotestPrivateWaitForAmbientVideoFunction::RespondWithSuccess() {
+  Respond(NoArguments());
+}
+
+void AutotestPrivateWaitForAmbientVideoFunction::RespondWithError(
+    std::string error_message) {
+  Respond(Error(std::move(error_message)));
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // AutotestPrivateDisableSwitchAccessDialogFunction
 //////////////////////////////////////////////////////////////////////////////
 
@@ -6257,10 +6315,11 @@ AutotestPrivateForceAutoThemeModeFunction::Run() {
       api::autotest_private::ForceAutoThemeMode::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  ash::DarkLightModeController* dark_light_mode_controller =
-      ash::DarkLightModeController::Get();
+  ash::DarkLightModeControllerImpl* dark_light_mode_controller =
+      ash::Shell::Get()->dark_light_mode_controller();
   DCHECK(dark_light_mode_controller);
 
+  dark_light_mode_controller->SetAutoScheduleEnabled(false);
   dark_light_mode_controller->SetDarkModeEnabledForTest(
       params->dark_mode_enabled);
   return RespondNow(NoArguments());
@@ -6552,6 +6611,167 @@ void AutotestPrivateStopFrameCountingFunction::OnDataReceived(
 
   Respond(ArgumentList(
       api::autotest_private::StopFrameCounting::Results::Create(result)));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateBruschettaInstallFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateInstallBruschettaFunction::
+    AutotestPrivateInstallBruschettaFunction() = default;
+
+AutotestPrivateInstallBruschettaFunction::
+    ~AutotestPrivateInstallBruschettaFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateInstallBruschettaFunction::Run() {
+  // This API is available only on test images.
+  base::SysInfo::CrashIfChromeOSNonTestImage();
+
+  absl::optional<api::autotest_private::RemoveBruschetta::Params> params =
+      api::autotest_private::RemoveBruschetta::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+
+  BruschettaInstallerView::Show(profile,
+                                bruschetta::MakeBruschettaId(params->vm_name));
+
+  auto* view = BruschettaInstallerView::GetActiveViewForTesting();
+  if (!view) {
+    return RespondNow(Error("Couldn't open BruschettaInstallerView"));
+  }
+
+  view->set_finish_callback_for_testing(base::BindOnce(
+      &AutotestPrivateInstallBruschettaFunction::OnInstallerFinish, this));
+
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&AutotestPrivateInstallBruschettaFunction::ClickAccept, this));
+
+  return RespondLater();
+}
+
+void AutotestPrivateInstallBruschettaFunction::ClickAccept() {
+  auto* view = BruschettaInstallerView::GetActiveViewForTesting();
+  if (view) {
+    view->Accept();
+  } else {
+    Respond(Error("BruschettaInstallerView was closed unexpectedly"));
+  }
+}
+
+void AutotestPrivateInstallBruschettaFunction::OnInstallerFinish(
+    bruschetta::BruschettaInstallResult result) {
+  if (result == bruschetta::BruschettaInstallResult::kSuccess) {
+    Respond(NoArguments());
+  } else {
+    Respond(Error(base::UTF16ToUTF8(base::StringPiece16(
+        bruschetta::BruschettaInstallResultString(result)))));
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateBruschettaRemoveFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateRemoveBruschettaFunction::
+    AutotestPrivateRemoveBruschettaFunction() = default;
+
+AutotestPrivateRemoveBruschettaFunction::
+    ~AutotestPrivateRemoveBruschettaFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateRemoveBruschettaFunction::Run() {
+  // This API is available only on test images.
+  base::SysInfo::CrashIfChromeOSNonTestImage();
+
+  absl::optional<api::autotest_private::RemoveBruschetta::Params> params =
+      api::autotest_private::RemoveBruschetta::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+
+  auto* service = bruschetta::BruschettaService::GetForProfile(profile);
+  if (!service) {
+    return RespondNow(Error("Couldn't get BruschettaService instance"));
+  }
+
+  service->RemoveVm(
+      bruschetta::MakeBruschettaId(params->vm_name),
+      base::BindOnce(&AutotestPrivateRemoveBruschettaFunction::OnRemoveVm,
+                     this));
+
+  return RespondLater();
+}
+
+void AutotestPrivateRemoveBruschettaFunction::OnRemoveVm(bool success) {
+  if (success) {
+    Respond(NoArguments());
+  } else {
+    Respond(Error("Failed to uninstall bruschetta"));
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateIsFeatureEnabledFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateIsFeatureEnabledFunction::
+    AutotestPrivateIsFeatureEnabledFunction() = default;
+
+AutotestPrivateIsFeatureEnabledFunction::
+    ~AutotestPrivateIsFeatureEnabledFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateIsFeatureEnabledFunction::Run() {
+  absl::optional<api::autotest_private::IsFeatureEnabled::Params> params =
+      api::autotest_private::IsFeatureEnabled::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  // base::FeatureList does not allow lookup by string name. Use an allowlist
+  // of features instead.
+  static const base::Feature* const kAllowList[] = {
+      // clang-format off
+      &ash::features::kPrivacyIndicators,
+      &ash::features::kQsRevamp,
+      &ash::features::kVideoConference,
+      &chromeos::features::kJelly,
+      &kDisabledFeatureForTest,
+      &kEnabledFeatureForTest,
+      // clang-format on
+  };
+  auto* const* it = base::ranges::find(kAllowList, params->feature_name,
+                                       &base::Feature::name);
+  if (it == std::end(kAllowList)) {
+    std::string error = base::StrCat(
+        {"feature ", params->feature_name,
+         " is not on allowlist, see "
+         "AutotestPrivateIsFeatureEnabledFunction::Run() to update the list"});
+    return RespondNow(Error(error));
+  }
+  bool enabled = base::FeatureList::IsEnabled(**it);
+  return RespondNow(WithArguments(enabled));
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// AutotestPrivateGetCurrentInputMethodDescriptorFunction
+//////////////////////////////////////////////////////////////////////////////
+
+AutotestPrivateGetCurrentInputMethodDescriptorFunction::
+    AutotestPrivateGetCurrentInputMethodDescriptorFunction() = default;
+
+AutotestPrivateGetCurrentInputMethodDescriptorFunction::
+    ~AutotestPrivateGetCurrentInputMethodDescriptorFunction() = default;
+
+ExtensionFunction::ResponseAction
+AutotestPrivateGetCurrentInputMethodDescriptorFunction::Run() {
+  auto* manager = ash::input_method::InputMethodManager::Get();
+  ash::input_method::InputMethodDescriptor descriptor =
+      manager->GetActiveIMEState()->GetCurrentInputMethod();
+
+  base::Value::Dict dict;
+  dict.Set("keyboardLayout", descriptor.keyboard_layout());
+  return RespondNow(WithArguments(std::move(dict)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

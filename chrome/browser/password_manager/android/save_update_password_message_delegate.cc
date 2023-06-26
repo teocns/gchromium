@@ -5,6 +5,7 @@
 #include "chrome/browser/password_manager/android/save_update_password_message_delegate.h"
 #include <utility>
 
+#include "base/android/jni_android.h"
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -91,15 +92,35 @@ bool UPMExploratoryStringsEnabledWithSupportedParam() {
   return string_version == 2 || string_version == 3;
 }
 
+void TryToShowPasswordMigrationWarning(
+    base::RepeatingCallback<void(gfx::NativeWindow, Profile*)> callback,
+    raw_ptr<content::WebContents> web_contents) {
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::
+              kUnifiedPasswordManagerLocalPasswordsMigrationWarning)) {
+    // TODO(crbug.com/1439853): Check if the bottom sheet was shown a month ago
+    // or more.
+
+    callback.Run(
+        web_contents->GetTopLevelNativeWindow(),
+        Profile::FromBrowserContext(web_contents->GetBrowserContext()));
+  }
+}
+
 }  // namespace
 
 SaveUpdatePasswordMessageDelegate::SaveUpdatePasswordMessageDelegate()
     : SaveUpdatePasswordMessageDelegate(
-          base::BindRepeating(PasswordEditDialogBridge::Create)) {}
+          base::BindRepeating(PasswordEditDialogBridge::Create),
+          base::BindRepeating(&local_password_migration::ShowWarning)) {}
 
 SaveUpdatePasswordMessageDelegate::SaveUpdatePasswordMessageDelegate(
-    PasswordEditDialogFactory password_edit_dialog_factory)
-    : password_edit_dialog_factory_(std::move(password_edit_dialog_factory)) {}
+    PasswordEditDialogFactory password_edit_dialog_factory,
+    base::RepeatingCallback<void(gfx::NativeWindow, Profile*)>
+        create_migration_warning_callback)
+    : password_edit_dialog_factory_(std::move(password_edit_dialog_factory)),
+      create_migration_warning_callback_(
+          std::move(create_migration_warning_callback)) {}
 
 SaveUpdatePasswordMessageDelegate::~SaveUpdatePasswordMessageDelegate() {
   DCHECK(web_contents_ == nullptr);
@@ -157,13 +178,9 @@ void SaveUpdatePasswordMessageDelegate::DisplaySaveUpdatePasswordPromptInternal(
   }
 
   if (account_info.has_value()) {
-    if (!account_info->CanHaveEmailAddressDisplayed() &&
-        base::FeatureList::IsEnabled(
-            chrome::android::kHideNonDisplayableAccountEmail)) {
-      account_email_ = account_info.value().full_name;
-    } else {
-      account_email_ = account_info.value().email;
-    }
+    account_email_ = account_info->CanHaveEmailAddressDisplayed()
+                         ? account_info.value().email
+                         : account_info.value().full_name;
   } else {
     account_email_ = std::string();
   }
@@ -466,6 +483,9 @@ void SaveUpdatePasswordMessageDelegate::HandleMessageDismissed(
     RecordSaveUpdateUIDismissalReason(
         GetSaveUpdatePasswordMessageDismissReason(dismiss_reason));
   }
+
+  TryToShowPasswordMigrationWarning(create_migration_warning_callback_,
+                                    web_contents_);
   ClearState();
 }
 
@@ -504,6 +524,9 @@ void SaveUpdatePasswordMessageDelegate::HandleDialogDismissed(
     RecordSaveUpdateUIDismissalReason(
         GetPasswordEditDialogDismissReason(dialog_accepted));
   }
+
+  TryToShowPasswordMigrationWarning(create_migration_warning_callback_,
+                                    web_contents_);
 
   password_edit_dialog_.reset();
   ClearState();

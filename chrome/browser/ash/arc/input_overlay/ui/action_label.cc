@@ -11,6 +11,7 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ash/arc/input_overlay/constants.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/action_view.h"
+#include "chrome/browser/ash/arc/input_overlay/ui/ui_utils.h"
 #include "chrome/browser/ash/arc/input_overlay/util.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
@@ -54,35 +55,7 @@ constexpr float kHaloInset = -5;
 constexpr float kHaloThickness = 3;
 
 // TODO(b/241966781): remove this and replace it with image asset.
-constexpr char kMouseCursorLock[] = "mouse cursor lock (esc)";
-constexpr char kUnknownBind[] = "?";
-
-// Arrow symbols for arrow keys.
-constexpr char kLeftArrow[] = "←";
-constexpr char kUpArrow[] = "↑";
-constexpr char kRightArrow[] = "→";
-constexpr char kDownArrow[] = "↓";
-constexpr char kBackQuote[] = "`";
-constexpr char kMinus[] = "-";
-constexpr char kEqual[] = "=";
-constexpr char kBracketLeft[] = "[";
-constexpr char kBracketRight[] = "]";
-constexpr char kBackSlash[] = "\\";
-constexpr char kSemicolon[] = ";";
-constexpr char kQuote[] = "'";
-constexpr char kComma[] = ",";
-constexpr char kPeriod[] = ".";
-constexpr char kSlash[] = "/";
-constexpr char kBackSpace[] = "⌫";
-constexpr char kEnter[] = "↵";
-constexpr char kSpace[] = "␣";
-constexpr char kEscape[] = "esc";
-
-// Modifier keys.
-constexpr char kAlt[] = "alt";
-constexpr char kCtrl[] = "ctrl";
-constexpr char kShift[] = "shift";
-constexpr char kCap[] = "cap";
+constexpr char16_t kMouseCursorLock[] = u"mouse cursor lock (esc)";
 
 bool IsLeft(TapLabelPosition position) {
   return position == TapLabelPosition::kTopLeft ||
@@ -104,18 +77,14 @@ bool IsBottom(TapLabelPosition position) {
 
 class ActionLabelTap : public ActionLabel {
  public:
-  ActionLabelTap(int radius,
-                 MouseAction mouse_action,
-                 TapLabelPosition label_position)
-      : ActionLabel(radius, mouse_action), label_position_(label_position) {
+  ActionLabelTap(MouseAction mouse_action, TapLabelPosition label_position)
+      : ActionLabel(mouse_action), label_position_(label_position) {
     DCHECK(mouse_action == MouseAction::PRIMARY_CLICK ||
            mouse_action == MouseAction::SECONDARY_CLICK);
   }
 
-  ActionLabelTap(int radius,
-                 const std::string& text,
-                 TapLabelPosition label_position)
-      : ActionLabel(radius, text), label_position_(label_position) {}
+  ActionLabelTap(const std::u16string& text, TapLabelPosition label_position)
+      : ActionLabel(text), label_position_(label_position) {}
 
   ~ActionLabelTap() override = default;
 
@@ -213,9 +182,9 @@ class ActionLabelTap : public ActionLabel {
 
 class ActionLabelMove : public ActionLabel {
  public:
-  ActionLabelMove(int radius, const std::string& text, int index)
-      : ActionLabel(radius, text, index) {}
-  ActionLabelMove(int radius, MouseAction mouse) : ActionLabel(radius, mouse) {}
+  ActionLabelMove(const std::u16string& text, size_t index)
+      : ActionLabel(text, index) {}
+  explicit ActionLabelMove(MouseAction mouse) : ActionLabel(mouse) {}
 
   ~ActionLabelMove() override = default;
 
@@ -242,83 +211,9 @@ class ActionLabelMove : public ActionLabel {
 
 }  // namespace
 
-std::string GetDisplayText(const ui::DomCode code) {
-  switch (code) {
-    case ui::DomCode::NONE:
-      return kUnknownBind;
-    case ui::DomCode::ARROW_LEFT:
-      return kLeftArrow;
-    case ui::DomCode::ARROW_RIGHT:
-      return kRightArrow;
-    case ui::DomCode::ARROW_UP:
-      return kUpArrow;
-    case ui::DomCode::ARROW_DOWN:
-      return kDownArrow;
-    case ui::DomCode::BACKQUOTE:
-      return kBackQuote;
-    case ui::DomCode::MINUS:
-      return kMinus;
-    case ui::DomCode::EQUAL:
-      return kEqual;
-    case ui::DomCode::BRACKET_LEFT:
-      return kBracketLeft;
-    case ui::DomCode::BRACKET_RIGHT:
-      return kBracketRight;
-    case ui::DomCode::BACKSLASH:
-      return kBackSlash;
-    case ui::DomCode::SEMICOLON:
-      return kSemicolon;
-    case ui::DomCode::QUOTE:
-      return kQuote;
-    case ui::DomCode::COMMA:
-      return kComma;
-    case ui::DomCode::PERIOD:
-      return kPeriod;
-    case ui::DomCode::SLASH:
-      return kSlash;
-    case ui::DomCode::BACKSPACE:
-      return kBackSpace;
-    case ui::DomCode::ENTER:
-      return kEnter;
-    case ui::DomCode::ESCAPE:
-      return kEscape;
-    // Modifier keys.
-    case ui::DomCode::ALT_LEFT:
-    case ui::DomCode::ALT_RIGHT:
-      return kAlt;
-    case ui::DomCode::CONTROL_LEFT:
-    case ui::DomCode::CONTROL_RIGHT:
-      return kCtrl;
-    case ui::DomCode::SHIFT_LEFT:
-    case ui::DomCode::SHIFT_RIGHT:
-      return kShift;
-    case ui::DomCode::CAPS_LOCK:
-      return kCap;
-    case ui::DomCode::SPACE:
-      return kSpace;
-    default:
-      std::string dom_code_string =
-          ui::KeycodeConverter::DomCodeToCodeString(code);
-      if (base::StartsWith(dom_code_string, "Key",
-                           base::CompareCase::SENSITIVE)) {
-        return base::ToLowerASCII(dom_code_string.substr(3));
-      }
-      if (base::StartsWith(dom_code_string, "Digit",
-                           base::CompareCase::SENSITIVE)) {
-        return dom_code_string.substr(5);
-      }
-      // TODO(cuicuiruan): better display for number pad. Current it shows in
-      // the format of "numpad1" since the number keys on number pad are not
-      // considered the same as numbers on the main keyboard.
-      auto lower = base::ToLowerASCII(dom_code_string);
-      return lower;
-  }
-}
-
 std::vector<ActionLabel*> ActionLabel::Show(views::View* parent,
                                             ActionType action_type,
                                             const InputElement& input_element,
-                                            int radius,
                                             TapLabelPosition label_position) {
   std::vector<ActionLabel*> labels;
   gfx::Size touch_point_size;
@@ -329,16 +224,14 @@ std::vector<ActionLabel*> ActionLabel::Show(views::View* parent,
         DCHECK_EQ(1u, input_element.keys().size());
         labels.emplace_back(
             parent->AddChildView(std::make_unique<ActionLabelTap>(
-                radius, GetDisplayText(input_element.keys()[0]),
-                label_position)));
+                GetDisplayText(input_element.keys()[0]), label_position)));
       } else if (IsMouseBound(input_element)) {
         labels.emplace_back(
             parent->AddChildView(std::make_unique<ActionLabelTap>(
-                radius, input_element.mouse_action(), label_position)));
+                input_element.mouse_action(), label_position)));
       } else {
-        labels.emplace_back(
-            parent->AddChildView(std::make_unique<ActionLabelTap>(
-                radius, kUnknownBind, label_position)));
+        labels.emplace_back(parent->AddChildView(
+            std::make_unique<ActionLabelTap>(kUnknownBind, label_position)));
       }
       touch_point_size = TouchPoint::GetSize(ActionType::TAP);
       break;
@@ -347,18 +240,17 @@ std::vector<ActionLabel*> ActionLabel::Show(views::View* parent,
       if (IsKeyboardBound(input_element)) {
         const auto& keys = input_element.keys();
         for (size_t i = 0; i < kActionMoveKeysSize; i++) {
-          labels.emplace_back(
-              parent->AddChildView(std::make_unique<ActionLabelMove>(
-                  radius, GetDisplayText(keys[i]), i)));
+          labels.emplace_back(parent->AddChildView(
+              std::make_unique<ActionLabelMove>(GetDisplayText(keys[i]), i)));
         }
       } else if (IsMouseBound(input_element)) {
         labels.emplace_back(parent->AddChildView(
-            std::make_unique<ActionLabelMove>(radius, kMouseCursorLock, 0)));
+            std::make_unique<ActionLabelMove>(kMouseCursorLock, 0)));
         NOTIMPLEMENTED();
       } else {
         for (size_t i = 0; i < kActionMoveKeysSize; i++) {
           labels.emplace_back(parent->AddChildView(
-              std::make_unique<ActionLabelMove>(radius, kUnknownBind, i)));
+              std::make_unique<ActionLabelMove>(kUnknownBind, i)));
         }
       }
       touch_point_size = TouchPoint::GetSize(ActionType::MOVE);
@@ -385,27 +277,30 @@ void ActionLabel::Init() {
                              CalculateAccessibleName());
 }
 
-ActionLabel::ActionLabel(int radius, MouseAction mouse_action)
-    : radius_(radius), mouse_action_(mouse_action) {}
+ActionLabel::ActionLabel(MouseAction mouse_action)
+    : mouse_action_(mouse_action) {}
 
-ActionLabel::ActionLabel(int radius, const std::string& text)
-    : views::LabelButton(views::Button::PressedCallback(),
-                         base::UTF8ToUTF16(text)),
-      radius_(radius) {}
-
-ActionLabel::ActionLabel(int radius, const std::string& text, int index)
-    : views::LabelButton(views::Button::PressedCallback(),
-                         base::UTF8ToUTF16(text)),
-      radius_(radius),
+ActionLabel::ActionLabel(const std::u16string& text, size_t index)
+    : views::LabelButton(views::Button::PressedCallback(), text),
       index_(index) {
   DCHECK(index_ >= 0 && index_ < kActionMoveKeysSize);
 }
 
 ActionLabel::~ActionLabel() = default;
 
-void ActionLabel::SetTextActionLabel(const std::string& text) {
-  label()->SetText(base::UTF8ToUTF16(text));
+void ActionLabel::SetTextActionLabel(const std::u16string& text) {
+  label()->SetText(text);
   SetAccessibleName(CalculateAccessibleName());
+
+  if (!IsBeta()) {
+    return;
+  }
+
+  if (text == kUnknownBind) {
+    SetToEditUnbindInput();
+  } else {
+    SetToEditDefault();
+  }
 }
 
 void ActionLabel::SetImageActionLabel(MouseAction mouse_action) {
@@ -426,10 +321,15 @@ void ActionLabel::SetDisplayMode(DisplayMode mode) {
       break;
     case DisplayMode::kEdit:
       SetToEditMode();
-      SetFocusBehavior(FocusBehavior::ALWAYS);
-      static_cast<ActionView*>(parent())->ShowInfoMsg(
-          l10n_util::GetStringUTF8(IDS_INPUT_OVERLAY_EDIT_INSTRUCTIONS_ALPHAV2),
-          this);
+      if (IsBeta()) {
+        SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+      } else {
+        SetFocusBehavior(FocusBehavior::ALWAYS);
+        static_cast<ActionView*>(parent())->ShowInfoMsg(
+            l10n_util::GetStringUTF8(
+                IDS_INPUT_OVERLAY_EDIT_INSTRUCTIONS_ALPHAV2),
+            this);
+      }
       break;
     case DisplayMode::kEditedSuccess:
       SetToEditFocus();
@@ -490,7 +390,7 @@ bool ActionLabel::OnKeyPressed(const ui::KeyEvent& event) {
   DCHECK(parent());
   auto code = event.code();
   auto* parent_view = static_cast<ActionView*>(parent());
-  if (base::UTF8ToUTF16(GetDisplayText(code)) == GetText() ||
+  if (GetDisplayText(code) == GetText() ||
       parent_view->ShouldShowErrorMsg(code)) {
     return true;
   }
@@ -573,9 +473,10 @@ void ActionLabel::SetToEditMode() {
   auto* focus_ring = views::FocusRing::Get(this);
   focus_ring->SetHaloInset(kHaloInset);
   focus_ring->SetHaloThickness(kHaloThickness);
-  focus_ring->SetHasFocusPredicate([](views::View* view) {
-    return view->IsMouseHovered() || view->HasFocus();
-  });
+  focus_ring->SetHasFocusPredicate(
+      base::BindRepeating([](const views::View* view) {
+        return view->IsMouseHovered() || view->HasFocus();
+      }));
 
   SetEnabledTextColors(kTextColorDefault);
 
@@ -648,7 +549,7 @@ void ActionLabel::SetBackgroundForEdit() {
 }
 
 bool ActionLabel::IsInputUnbound() {
-  return base::UTF16ToUTF8(GetText()) == kUnknownBind;
+  return GetText().compare(kUnknownBind) == 0;
 }
 
 std::u16string ActionLabel::CalculateAccessibleName() {
@@ -658,20 +559,9 @@ std::u16string ActionLabel::CalculateAccessibleName() {
     return base::UTF8ToUTF16(GetClassName());
   }
 
-  std::u16string name =
-      l10n_util::GetStringUTF16(IDS_INPUT_OVERLAY_KEYMAPPING_KEY).append(u" ");
-  const std::string text = base::UTF16ToUTF8(label()->GetText());
-  if (text.compare(kSpace) == 0) {
-    name.append(l10n_util::GetStringUTF16(IDS_INPUT_OVERLAY_KEY_LABEL_SPACE));
-  } else if (text.compare(kEnter) == 0) {
-    name.append(l10n_util::GetStringUTF16(IDS_INPUT_OVERLAY_KEY_LABEL_ENTER));
-  } else if (text.compare(kBackSpace) == 0) {
-    name.append(
-        l10n_util::GetStringUTF16(IDS_INPUT_OVERLAY_KEY_LABEL_BACKSPACE));
-  } else {
-    name.append(label()->GetText());
-  }
-  return name;
+  return l10n_util::GetStringUTF16(IDS_INPUT_OVERLAY_KEYMAPPING_KEY)
+      .append(u" ")
+      .append(GetDisplayTextAccessibleName(label()->GetText()));
 }
 
 BEGIN_METADATA(ActionLabel, views::LabelButton)

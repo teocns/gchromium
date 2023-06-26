@@ -8,14 +8,12 @@
 #include <memory>
 
 #include "base/compiler_specific.h"
-#include "base/memory/raw_ptr.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
 
 class AutocompleteResult;
 class OmniboxClient;
-class OmniboxEditModel;
-class OmniboxEditModelDelegate;
 class OmniboxView;
 struct AutocompleteMatch;
 
@@ -23,17 +21,7 @@ struct AutocompleteMatch;
 // omnibox, including `AutocompleteController` and `OmniboxEditModel`.
 class OmniboxController : public AutocompleteController::Observer {
  public:
-  // Used by the omnibox which uses `OmniboxView` and whose
-  // `AutocompleteController` instance is created and observed here.
-  OmniboxController(OmniboxView* view,
-                    OmniboxEditModelDelegate* edit_model_delegate,
-                    std::unique_ptr<OmniboxClient> client);
-  // Used by the realbox which does not use `OmniboxView` and observes and
-  // passes its own instance of `AutocompleteController`.
-  OmniboxController(
-      OmniboxEditModelDelegate* edit_model_delegate,
-      std::unique_ptr<AutocompleteController> autocomplete_controller,
-      std::unique_ptr<OmniboxClient> client);
+  OmniboxController(OmniboxView* view, std::unique_ptr<OmniboxClient> client);
   ~OmniboxController() override;
   OmniboxController(const OmniboxController&) = delete;
   OmniboxController& operator=(const OmniboxController&) = delete;
@@ -45,18 +33,29 @@ class OmniboxController : public AutocompleteController::Observer {
   void OnResultChanged(AutocompleteController* controller,
                        bool default_match_changed) override;
 
-  OmniboxEditModel* edit_model() const { return edit_model_.get(); }
+  OmniboxClient* client() { return client_.get(); }
 
-  void SetEditModel(std::unique_ptr<OmniboxEditModel> edit_model);
+  OmniboxEditModel* edit_model() { return edit_model_.get(); }
+
+  void SetEditModelForTesting(std::unique_ptr<OmniboxEditModel> edit_model) {
+    edit_model_ = std::move(edit_model);
+  }
 
   AutocompleteController* autocomplete_controller() {
     return autocomplete_controller_.get();
   }
 
-  void set_autocomplete_controller(
+  void SetAutocompleteControllerForTesting(
       std::unique_ptr<AutocompleteController> autocomplete_controller) {
     autocomplete_controller_ = std::move(autocomplete_controller);
   }
+
+  const AutocompleteResult& result() const {
+    return autocomplete_controller_->result();
+  }
+
+  // Returns whether `AutocompleteController` is currently processing a query.
+  bool query_in_progress() const { return !autocomplete_controller_->done(); }
 
   // Set |current_match_| to an invalid value, indicating that we do not yet
   // have a valid match for the current text in the omnibox.
@@ -66,18 +65,6 @@ class OmniboxController : public AutocompleteController::Observer {
 
   // Turns off keyword mode for the current match.
   void ClearPopupKeywordMode() const;
-
-  const AutocompleteResult& result() const {
-    return autocomplete_controller_->result();
-  }
-
- protected:
-  // Used by other constructors.
-  OmniboxController(
-      OmniboxView* view,
-      OmniboxEditModelDelegate* edit_model_delegate,
-      std::unique_ptr<AutocompleteController> autocomplete_controller,
-      std::unique_ptr<OmniboxClient> client);
 
  private:
   // Stores the bitmap in the OmniboxPopupModel.

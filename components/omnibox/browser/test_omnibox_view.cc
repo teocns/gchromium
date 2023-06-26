@@ -26,11 +26,6 @@ OmniboxView::State TestOmniboxView::CreateState(std::string text,
   return state;
 }
 
-void TestOmniboxView::SetEditModel(
-    std::unique_ptr<OmniboxEditModel> edit_model) {
-  controller_->SetEditModel(std::move(edit_model));
-}
-
 std::u16string TestOmniboxView::GetText() const {
   return text_;
 }
@@ -103,11 +98,11 @@ bool TestOmniboxView::OnAfterPossibleChange(bool allow_keyword_ui_change) {
 }
 
 gfx::NativeView TestOmniboxView::GetNativeView() const {
-  return nullptr;
+  return gfx::NativeView();
 }
 
 gfx::NativeView TestOmniboxView::GetRelativeWindowForPopup() const {
-  return nullptr;
+  return gfx::NativeView();
 }
 
 bool TestOmniboxView::IsImeComposing() const {

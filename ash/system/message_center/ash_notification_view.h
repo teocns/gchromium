@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "ui/message_center/message_center.h"
@@ -139,6 +140,10 @@ class ASH_EXPORT AshNotificationView
 
   void set_is_animating(bool is_animating) { is_animating_ = is_animating; }
   bool is_animating() { return is_animating_; }
+
+  AshNotificationExpandButton* expand_button_for_test() {
+    return expand_button_;
+  }
 
   // View containing all grouped notifications, propagates size changes
   // to the parent notification view.
@@ -298,22 +303,45 @@ class ASH_EXPORT AshNotificationView
   void AttachBinaryImageAsDropData(ui::OSExchangeData* data);
 
   // Owned by views hierarchy.
-  views::View* main_view_ = nullptr;
-  views::View* main_right_view_ = nullptr;
-  RoundedImageView* app_icon_view_ = nullptr;
-  AshNotificationExpandButton* expand_button_ = nullptr;
-  views::View* left_content_ = nullptr;
-  views::Label* message_label_in_expanded_state_ = nullptr;
-  views::ScrollView* grouped_notifications_scroll_view_ = nullptr;
-  views::View* grouped_notifications_container_ = nullptr;
-  views::View* collapsed_summary_view_ = nullptr;
-  message_center::NotificationControlButtonsView* control_buttons_view_ =
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::View* main_view_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::View* main_right_view_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION RoundedImageView* app_icon_view_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION AshNotificationExpandButton* expand_button_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::View* left_content_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::Label* message_label_in_expanded_state_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::ScrollView* grouped_notifications_scroll_view_ =
       nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::View* grouped_notifications_container_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::View* collapsed_summary_view_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION message_center::NotificationControlButtonsView*
+      control_buttons_view_ = nullptr;
   raw_ptr<views::LabelButton, ExperimentalAsh> turn_off_notifications_button_ =
       nullptr;
   raw_ptr<views::LabelButton, ExperimentalAsh> inline_settings_cancel_button_ =
       nullptr;
-  views::View* snooze_button_spacer_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::View* snooze_button_spacer_ = nullptr;
   raw_ptr<IconButton, ExperimentalAsh> snooze_button_ = nullptr;
 
   // These views below are dynamically created inside view hierarchy.

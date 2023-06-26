@@ -12,6 +12,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/cloud_upload_resources.h"
 #include "chrome/grit/cloud_upload_resources_map.h"
+#include "chrome/grit/generated_resources.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui.h"
@@ -32,14 +33,53 @@ CloudUploadUI::CloudUploadUI(content::WebUI* web_ui)
       Profile::FromWebUI(web_ui), chrome::kChromeUICloudUploadHost);
 
   static constexpr webui::LocalizedString kStrings[] = {
+      // Dialog buttons.
       {"cancel", IDS_CANCEL},
+      {"close", IDS_CLOSE},
+      {"done", IDS_DONE},
+      {"open", IDS_OFFICE_FILE_HANDLER_OPEN_BUTTON},
+      {"install", IDS_INSTALL},
+      {"installing", IDS_OFFICE_INSTALL_PWA_INSTALLING_BUTTON},
+      {"installed", IDS_OFFICE_INSTALL_PWA_INSTALLED_BUTTON},
+      {"cancelSetup", IDS_OFFICE_CANCEL_SETUP_CANCEL_BUTTON},
+      {"continueSetup", IDS_OFFICE_CANCEL_SETUP_CONTINUE_BUTTON},
+      {"animationPlayText", IDS_OOBE_PLAY_ANIMATION_MESSAGE},
+      {"animationPauseText", IDS_OOBE_PAUSE_ANIMATION_MESSAGE},
+      // Connect To OneDrive dialog.
+      {"connectToOneDriveTitle", IDS_CONNECT_TO_ONEDRIVE_TITLE},
+      {"connectToOneDriveBodyText", IDS_CONNECT_TO_ONEDRIVE_BODY_TEXT},
+      {"cantConnectOneDrive", IDS_CANT_CONNECT_ONEDRIVE},
+      {"connectOneDrive", IDS_CONNECT_ONEDRIVE},
+      {"oneDriveConnectedTitle", IDS_ONEDRIVE_CONNECTED_TITLE},
+      {"oneDriveConnectedBodyText", IDS_ONEDRIVE_CONNECTED_BODY_TEXT},
+      // File Handler selection dialog.
+      {"fileHandlerTitle", IDS_OFFICE_FILE_HANDLER_TITLE},
+      {"word", IDS_OFFICE_FILE_HANDLER_FILE_TYPE_WORD},
+      {"excel", IDS_OFFICE_FILE_HANDLER_FILE_TYPE_EXCEL},
+      {"powerPoint", IDS_OFFICE_FILE_HANDLER_FILE_TYPE_POWERPOINT},
+      {"googleDocs", IDS_OFFICE_FILE_HANDLER_APP_GOOGLE_DOCS},
+      {"googleSheets", IDS_OFFICE_FILE_HANDLER_APP_GOOGLE_SHEETS},
+      {"googleSlides", IDS_OFFICE_FILE_HANDLER_APP_GOOGLE_SLIDES},
+      {"microsoft365", IDS_OFFICE_FILE_HANDLER_APP_MICROSOFT},
+      {"otherApps", IDS_OFFICE_FILE_HANDLER_APP_OTHERS},
+      {"googleDriveStorage", IDS_OFFICE_FILE_HANDLER_STORAGE_GOOGLE},
+      {"oneDriveStorage", IDS_OFFICE_FILE_HANDLER_STORAGE_MICROSOFT},
+      // Install PWA dialog.
+      {"installPWATitle", IDS_OFFICE_INSTALL_PWA_TITLE},
+      {"installPWABodyText", IDS_OFFICE_INSTALL_PWA_BODY_TEXT},
+      // Cancel setup dialog.
+      {"cancelSetupTitle", IDS_OFFICE_CANCEL_SETUP_TITLE},
+      {"cancelSetupBodyText", IDS_OFFICE_CANCEL_SETUP_BODY_TEXT},
+      // OneDrive setup complete dialog.
+      {"oneDriveSetupCompleteTitle", IDS_OFFICE_ONEDRIVE_SETUP_COMPLETE_TITLE},
+      {"oneDriveSetupCompleteBodyText",
+       IDS_OFFICE_ONEDRIVE_SETUP_COMPLETE_BODY_TEXT},
   };
   source->AddLocalizedStrings(kStrings);
   source->AddBoolean("isJellyEnabled", chromeos::features::IsJellyEnabled());
   webui::SetupWebUIDataSource(
       source, base::make_span(kCloudUploadResources, kCloudUploadResourcesSize),
       IDR_CLOUD_UPLOAD_MAIN_HTML);
-  source->DisableTrustedTypesCSP();
   // Required for lottie animations.
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::WorkerSrc,

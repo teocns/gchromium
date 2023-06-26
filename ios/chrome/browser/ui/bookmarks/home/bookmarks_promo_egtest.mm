@@ -62,6 +62,16 @@ using chrome_test_util::SecondarySignInButton;
              [self isRunningTest:@selector(testPromoViewBody)]) {
     config.features_enabled.push_back(
         bookmarks::kEnableBookmarksAccountStorage);
+  } else if ([self isRunningTest:@selector(testPromoViewBodyLegacy)] ||
+             [self isRunningTest:@selector
+                   (testSignInPromoWithIdentitiesUsingPrimaryButton)] ||
+             [self isRunningTest:@selector
+                   (testSignInPromoWithIdentitiesUsingSecondaryButton)] ||
+             [self isRunningTest:@selector
+                   (testSignInPromoWithNoIdentitiesUsingPrimaryButton)]) {
+    // TODO(crbug.com/1455018): Re-enable the flag for non-legacy tests.
+    config.features_disabled.push_back(
+        bookmarks::kEnableBookmarksAccountStorage);
   }
   return config;
 }
@@ -110,7 +120,11 @@ using chrome_test_util::SecondarySignInButton;
   [SigninEarlGreyUI
       verifySigninPromoVisibleWithMode:SigninPromoViewModeNoAccounts];
   NSString* body = l10n_util::GetNSString(IDS_IOS_SIGNIN_PROMO_BOOKMARKS);
+  NSString* primaryButtonText =
+      l10n_util::GetNSString(IDS_IOS_CONSISTENCY_PROMO_SIGN_IN);
   [[EarlGrey selectElementWithMatcher:grey_text(body)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+  [[EarlGrey selectElementWithMatcher:grey_text(primaryButtonText)]
       assertWithMatcher:grey_sufficientlyVisible()];
 }
 

@@ -96,10 +96,6 @@ const std::string GetOnlineWallpaperKey(ash::WallpaperInfo info) {
                                   : base::UnguessableToken::Create().ToString();
 }
 
-scoped_refptr<base::RefCountedMemory> GetPreviewWallpaper() {
-  return WallpaperController::Get()->GetPreviewImage();
-}
-
 std::string GetJpegDataUrl(const unsigned char* data, size_t size) {
   std::string output = "data:image/jpeg;base64,";
   base::Base64EncodeAppend(base::make_span(data, size), &output);
@@ -160,15 +156,7 @@ void PersonalizationAppWallpaperProviderImpl::BindInterface(
 
 void PersonalizationAppWallpaperProviderImpl::GetWallpaperAsJpegBytes(
     content::WebUIDataSource::GotDataCallback callback) {
-  // |GetWallpaperAsJpegBytes| is called in the hot path of switching wallpaper
-  // on the UI thread right after user makes a new selection. Make sure to do
-  // resizing and encoding on a task runner to avoid locking up the UI as the
-  // user's wallpaper is being set.
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&GetPreviewWallpaper), std::move(callback));
+  WallpaperController::Get()->LoadPreviewImage(std::move(callback));
 }
 
 bool PersonalizationAppWallpaperProviderImpl::IsEligibleForGooglePhotos() {
@@ -439,6 +427,7 @@ void PersonalizationAppWallpaperProviderImpl::OnWallpaperResized() {
     case ash::WallpaperType::kDefault:
     case ash::WallpaperType::kDevice:
     case ash::WallpaperType::kOneShot:
+    case ash::WallpaperType::kOobe:
     case ash::WallpaperType::kPolicy:
     case ash::WallpaperType::kThirdParty:
       NotifyWallpaperChanged(
@@ -1020,9 +1009,12 @@ void PersonalizationAppWallpaperProviderImpl::FindImageMetadataInCollection(
       bool is_same_unit_id = info.unit_id.has_value() &&
                              proto_image.unit_id() == info.unit_id.value();
       bool is_same_url = info.location.rfind(proto_image.image_url(), 0) == 0;
-      if (is_same_url || is_same_unit_id) {
+      if (is_same_url) {
         backend_image = &proto_image;
         break;
+      }
+      if (is_same_unit_id) {
+        backend_image = &proto_image;
       }
     }
   }

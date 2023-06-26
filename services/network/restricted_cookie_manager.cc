@@ -851,9 +851,10 @@ void RestrictedCookieManager::CookiesEnabledFor(
 
 void RestrictedCookieManager::InstallReceiver(
     mojo::PendingReceiver<mojom::RestrictedCookieManager> pending_receiver,
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
     base::OnceClosure on_disconnect_callback) {
   DCHECK(!receiver_.is_bound());
-  receiver_.Bind(std::move(pending_receiver));
+  receiver_.Bind(std::move(pending_receiver), std::move(task_runner));
   receiver_.set_disconnect_handler(std::move(on_disconnect_callback));
 }
 
@@ -914,12 +915,8 @@ net::CookieSettingOverrides RestrictedCookieManager::GetCookieSettingOverrides(
 void RestrictedCookieManager::OnCookiesAccessed(
     mojom::CookieAccessDetailsPtr details) {
   cookie_access_details_.push_back(std::move(details));
-  if (base::FeatureList::IsEnabled(features::kLessChattyNetworkService)) {
-    if (!cookies_access_timer_.IsRunning()) {
-      cookies_access_timer_.Reset();
-    }
-  } else {
-    cookie_observer_->OnCookiesAccessed(std::move(cookie_access_details_));
+  if (!cookies_access_timer_.IsRunning()) {
+    cookies_access_timer_.Reset();
   }
 }
 

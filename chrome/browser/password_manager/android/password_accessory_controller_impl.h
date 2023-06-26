@@ -25,10 +25,12 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
 
 class ManualFillingController;
 class AllPasswordsBottomSheetController;
+class Profile;
 
 // Use either PasswordAccessoryController::GetOrCreate or
 // PasswordAccessoryController::GetIfExisting to obtain instances of this class.
@@ -41,6 +43,8 @@ class PasswordAccessoryControllerImpl
   using PasswordDriverSupplierForFocusedFrame =
       base::RepeatingCallback<password_manager::PasswordManagerDriver*(
           content::WebContents*)>;
+  using ShowMigrationWarningCallback =
+      base::RepeatingCallback<void(gfx::NativeWindow, Profile*)>;
 
   PasswordAccessoryControllerImpl(const PasswordAccessoryControllerImpl&) =
       delete;
@@ -65,6 +69,8 @@ class PasswordAccessoryControllerImpl
       bool is_manual_generation_available) override;
   void OnGenerationRequested(
       autofill::password_generation::PasswordGenerationType type) override;
+  void UpdateCredManReentryUi(
+      autofill::mojom::FocusedFieldType focused_field_type) override;
 
   // Like |CreateForWebContents|, it creates the controller and attaches it to
   // the given |web_contents|. Upon creation, a |credential_cache| is required
@@ -79,9 +85,10 @@ class PasswordAccessoryControllerImpl
   static void CreateForWebContentsForTesting(
       content::WebContents* web_contents,
       password_manager::CredentialCache* credential_cache,
-      base::WeakPtr<ManualFillingController> mf_controller,
+      base::WeakPtr<ManualFillingController> manual_filling_controller,
       password_manager::PasswordManagerClient* password_client,
-      PasswordDriverSupplierForFocusedFrame driver_supplier);
+      PasswordDriverSupplierForFocusedFrame driver_supplier,
+      ShowMigrationWarningCallback show_migration_warning_callback);
 
   // Returns true if the current site attached to `web_contents_` has a SECURE
   // security level.
@@ -101,9 +108,10 @@ class PasswordAccessoryControllerImpl
   PasswordAccessoryControllerImpl(
       content::WebContents* web_contents,
       password_manager::CredentialCache* credential_cache,
-      base::WeakPtr<ManualFillingController> mf_controller,
+      base::WeakPtr<ManualFillingController> manual_filling_controller,
       password_manager::PasswordManagerClient* password_client,
-      PasswordDriverSupplierForFocusedFrame driver_supplier);
+      PasswordDriverSupplierForFocusedFrame driver_supplier,
+      ShowMigrationWarningCallback show_migration_warning_callback);
 
  private:
   friend class content::WebContentsUserData<PasswordAccessoryControllerImpl>;
@@ -175,7 +183,7 @@ class PasswordAccessoryControllerImpl
       credential_cache_ = nullptr;
 
   // The password accessory controller object to forward client requests to.
-  base::WeakPtr<ManualFillingController> mf_controller_;
+  base::WeakPtr<ManualFillingController> manual_filling_controller_;
 
   // The password manager client is used to update the save passwords status
   // for the currently focused origin.
@@ -211,6 +219,10 @@ class PasswordAccessoryControllerImpl
   // Security level used for testing only.
   security_state::SecurityLevel security_level_for_testing_ =
       security_state::NONE;
+
+  // Callback attempting to display the migration warning when invoked.
+  // Used to facilitate injecting a mock bridge in tests.
+  ShowMigrationWarningCallback show_migration_warning_callback_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

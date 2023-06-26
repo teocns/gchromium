@@ -54,6 +54,7 @@
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/widget.mojom-blink.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/script/script_evaluation_params.mojom-blink-forward.h"
@@ -251,6 +252,9 @@ class CORE_EXPORT WebLocalFrameImpl final
       int composition_end,
       const WebVector<ui::ImeTextSpan>& ime_text_spans) override;
   void ExtendSelectionAndDelete(int before, int after) override;
+  void ExtendSelectionAndReplace(int before,
+                                 int after,
+                                 const WebString& replacement_text) override;
   void MoveRangeSelectionExtent(const gfx::Point&) override;
   void ReplaceSelection(const WebString&) override;
   void DeleteSurroundingText(int before, int after) override;
@@ -307,8 +311,7 @@ class CORE_EXPORT WebLocalFrameImpl final
   uint32_t PrintBegin(const WebPrintParams&,
                       const WebNode& constrain_to_node) override;
   bool WillPrintSoon() override;
-  float GetPrintPageShrink(uint32_t page) override;
-  float PrintPage(uint32_t page_to_print, cc::PaintCanvas*) override;
+  void PrintPage(uint32_t page_to_print, cc::PaintCanvas*) override;
   void PrintEnd() override;
   void DispatchAfterPrintEvent() override;
   bool GetPrintPresetOptionsForPlugin(const WebNode&,
@@ -384,8 +387,8 @@ class CORE_EXPORT WebLocalFrameImpl final
           soft_navigation_heuristics_task_id) override;
   void SetIsNotOnInitialEmptyDocument() override;
   bool IsOnInitialEmptyDocument() override;
-  void WillPotentiallyStartOutermostMainFrameNavigation(
-      const WebURL&) const override;
+  void MaybeStartOutermostMainFrameNavigation(
+      const WebVector<WebURL>& urls) const override;
   bool WillStartNavigation(const WebNavigationInfo&) override;
   void DidDropNavigation() override;
   void DownloadURL(
@@ -399,6 +402,9 @@ class CORE_EXPORT WebLocalFrameImpl final
 
   const mojom::blink::BackForwardCacheNotRestoredReasonsPtr&
   GetNotRestoredReasons();
+
+  void SetLCPPHint(
+      const mojom::LCPCriticalPathPredictorNavigationTimeHintPtr&) override;
 
   void InitializeCoreFrame(
       Page&,
@@ -414,7 +420,9 @@ class CORE_EXPORT WebLocalFrameImpl final
       const StorageKey& storage_key,
       const KURL& creator_base_url,
       network::mojom::blink::WebSandboxFlags sandbox_flags =
-          network::mojom::blink::WebSandboxFlags::kNone);
+          network::mojom::blink::WebSandboxFlags::kNone,
+      bool coop_forbids_initial_empty_document_to_be_cross_origin_isolated =
+          true);
   LocalFrame* GetFrame() const { return frame_.Get(); }
 
   void WillBeDetached();
@@ -431,7 +439,8 @@ class CORE_EXPORT WebLocalFrameImpl final
       network::mojom::blink::WebSandboxFlags,
       const DocumentToken& document_token,
       std::unique_ptr<WebPolicyContainer>,
-      const WebURL& creator_base_url);
+      const WebURL& creator_base_url,
+      bool coop_forbids_initial_empty_document_to_be_cross_origin_isolated);
   static WebLocalFrameImpl* CreateProvisional(
       WebLocalFrameClient*,
       InterfaceRegistry*,
@@ -630,7 +639,9 @@ class CORE_EXPORT WebLocalFrameImpl final
       ukm::SourceId document_ukm_source_id,
       const KURL& creator_base_url,
       network::mojom::blink::WebSandboxFlags sandbox_flags =
-          network::mojom::blink::WebSandboxFlags::kNone);
+          network::mojom::blink::WebSandboxFlags::kNone,
+      bool coop_forbids_initial_empty_document_to_be_cross_origin_isolated =
+          true);
 
   // This function converts mojom::BackForwardCacheNotRestoredReasonsPtr to
   // mojom::blink::BackForwardCacheNotRestoredReasonsPtr.

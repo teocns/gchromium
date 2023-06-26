@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {fakePointingSticks, fakePointingSticks2, SettingsPerDevicePointingStickElement} from 'chrome://os-settings/chromeos/os_settings.js';
+import {fakePointingSticks, fakePointingSticks2, SettingsPerDevicePointingStickElement} from 'chrome://os-settings/os_settings.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
@@ -49,10 +49,10 @@ suite('<settings-per-device-pointing-stick>', function() {
           const name =
               subsections[i]!.shadowRoot!.querySelector('h2')!.textContent;
           if (fakePointingSticks[i]!.isExternal) {
-            assertEquals(fakePointingSticks[i]!.name, name);
+            assertEquals(fakePointingSticks[i]!.name, name!.trim());
           } else {
             assertTrue(subsections[i]!.i18nExists('builtInPointingStickName'));
-            assertEquals('Built-in TrackPoint', name);
+            assertEquals('Built-in TrackPoint', name!.trim());
           }
         }
       });

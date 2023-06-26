@@ -5,6 +5,9 @@
 #ifndef UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_TOPLEVEL_WINDOW_H_
 #define UI_OZONE_PLATFORM_WAYLAND_HOST_WAYLAND_TOPLEVEL_WINDOW_H_
 
+#include <memory>
+#include <ostream>
+
 #include "base/memory/raw_ptr.h"
 #include "build/chromeos_buildflags.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
@@ -75,6 +78,7 @@ class WaylandToplevelWindow : public WaylandWindow,
                     int32_t width,
                     int32_t height) override;
   void TooltipHidden() override;
+  WaylandToplevelWindow* AsWaylandToplevelWindow() override;
 
   // Configure related:
   void HandleToplevelConfigure(int32_t width,
@@ -103,6 +107,7 @@ class WaylandToplevelWindow : public WaylandWindow,
                    const base::TimeDelta hide_delay) override;
   void HideTooltip() override;
   void PropagateBufferScale(float new_scale) override;
+  void OnRotateFocus(uint32_t serial, uint32_t direction, bool restart);
 
   // WmDragHandler overrides:
   bool ShouldReleaseCaptureForDrag(ui::OSExchangeData* data) const override;
@@ -129,6 +134,8 @@ class WaylandToplevelWindow : public WaylandWindow,
   // `SetUpShellIntegration()`.
   void SetZOrderLevel(ZOrderLevel order) override;
   ZOrderLevel GetZOrderLevel() const override;
+  void SetShape(std::unique_ptr<ShapeRects> native_shape,
+                const gfx::Transform& transform) override;
   std::string GetWindowUniqueId() const override;
   // SetUseNativeFrame and ShouldUseNativeFrame decide on
   // xdg-decoration mode for a window.
@@ -154,6 +161,7 @@ class WaylandToplevelWindow : public WaylandWindow,
       bool allow_system_drag) override;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   void SetImmersiveFullscreenStatus(bool status) override;
+  void SetTopInset(int height) override;
 #endif
   void ShowSnapPreview(WaylandWindowSnapDirection snap,
                        bool allow_haptic_feedback) override;
@@ -186,6 +194,8 @@ class WaylandToplevelWindow : public WaylandWindow,
 
   // SystemModalExtension:
   void SetSystemModal(bool modal) override;
+
+  void DumpState(std::ostream& out) const override;
 
  private:
   // WaylandWindow protected overrides:

@@ -127,6 +127,54 @@ CSSFontSelector* CreateCSSFontSelectorFor(Document& document) {
   return MakeGarbageCollected<CSSFontSelector>(document);
 }
 
+enum RuleSetFlags {
+  kFontFaceRules = 1 << 0,
+  kKeyframesRules = 1 << 1,
+  kFullRecalcRules = 1 << 2,
+  kPropertyRules = 1 << 3,
+  kCounterStyleRules = 1 << 4,
+  kLayerRules = 1 << 5,
+  kFontPaletteValuesRules = 1 << 6,
+  kPositionFallbackRules = 1 << 7,
+  kFontFeatureValuesRules = 1 << 8
+};
+
+const unsigned kRuleSetFlagsAll = ~0u;
+
+unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
+  unsigned flags = 0;
+  for (auto& rule_set : rule_sets) {
+    if (!rule_set->KeyframesRules().empty()) {
+      flags |= kKeyframesRules;
+    }
+    if (!rule_set->FontFaceRules().empty()) {
+      flags |= kFontFaceRules;
+    }
+    if (!rule_set->FontPaletteValuesRules().empty()) {
+      flags |= kFontPaletteValuesRules;
+    }
+    if (!rule_set->FontFeatureValuesRules().empty()) {
+      flags |= kFontFeatureValuesRules;
+    }
+    if (rule_set->NeedsFullRecalcForRuleSetInvalidation()) {
+      flags |= kFullRecalcRules;
+    }
+    if (!rule_set->PropertyRules().empty()) {
+      flags |= kPropertyRules;
+    }
+    if (!rule_set->CounterStyleRules().empty()) {
+      flags |= kCounterStyleRules;
+    }
+    if (rule_set->HasCascadeLayers()) {
+      flags |= kLayerRules;
+    }
+    if (!rule_set->PositionFallbackRules().empty()) {
+      flags |= kPositionFallbackRules;
+    }
+  }
+  return flags;
+}
+
 }  // namespace
 
 StyleEngine::StyleEngine(Document& document)
@@ -167,6 +215,9 @@ StyleEngine::StyleEngine(Document& document)
       WebThemeEngineHelper::GetNativeThemeEngine()->GetForcedColors();
   UpdateForcedBackgroundColor();
   UpdateColorScheme();
+
+  // Mostly for the benefit of unit tests.
+  UpdateViewportSize();
 }
 
 StyleEngine::~StyleEngine() = default;
@@ -440,7 +491,6 @@ void StyleEngine::DocumentRulesSelectorsChanged() {
       global_rule_set_->DocumentRulesSelectorsRuleSet();
   DCHECK_NE(old_rule_set, new_rule_set);
 
-  const unsigned changed_rule_flags = 0;
   HeapHashSet<Member<RuleSet>> changed_rule_sets;
   if (old_rule_set) {
     changed_rule_sets.insert(old_rule_set);
@@ -449,6 +499,7 @@ void StyleEngine::DocumentRulesSelectorsChanged() {
     changed_rule_sets.insert(new_rule_set);
   }
 
+  const unsigned changed_rule_flags = GetRuleSetFlags(changed_rule_sets);
   InvalidateForRuleSetChanges(GetDocument(), changed_rule_sets,
                               changed_rule_flags, kInvalidateAllScopes);
 
@@ -2134,14 +2185,6 @@ void StyleEngine::CollectFeaturesTo(RuleFeatureSet& features) {
   CollectScopedStyleFeaturesTo(features);
 }
 
-void StyleEngine::EnsureUAStyleForXrOverlay() {
-  DCHECK(global_rule_set_);
-  if (CSSDefaultStyleSheets::Instance().EnsureDefaultStyleSheetForXrOverlay()) {
-    global_rule_set_->MarkDirty();
-    UpdateActiveStyle();
-  }
-}
-
 void StyleEngine::EnsureUAStyleForFullscreen() {
   DCHECK(global_rule_set_);
   if (global_rule_set_->HasFullscreenUAStyle()) {
@@ -2251,58 +2294,6 @@ void StyleEngine::ViewportStyleSettingChanged() {
         style_change_reason::kActiveStylesheetsUpdate));
   }
 }
-
-namespace {
-
-enum RuleSetFlags {
-  kFontFaceRules = 1 << 0,
-  kKeyframesRules = 1 << 1,
-  kFullRecalcRules = 1 << 2,
-  kPropertyRules = 1 << 3,
-  kCounterStyleRules = 1 << 4,
-  kLayerRules = 1 << 5,
-  kFontPaletteValuesRules = 1 << 6,
-  kPositionFallbackRules = 1 << 7,
-  kFontFeatureValuesRules = 1 << 8
-};
-
-const unsigned kRuleSetFlagsAll = ~0u;
-
-unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
-  unsigned flags = 0;
-  for (auto& rule_set : rule_sets) {
-    if (!rule_set->KeyframesRules().empty()) {
-      flags |= kKeyframesRules;
-    }
-    if (!rule_set->FontFaceRules().empty()) {
-      flags |= kFontFaceRules;
-    }
-    if (!rule_set->FontPaletteValuesRules().empty()) {
-      flags |= kFontPaletteValuesRules;
-    }
-    if (!rule_set->FontFeatureValuesRules().empty()) {
-      flags |= kFontFeatureValuesRules;
-    }
-    if (rule_set->NeedsFullRecalcForRuleSetInvalidation()) {
-      flags |= kFullRecalcRules;
-    }
-    if (!rule_set->PropertyRules().empty()) {
-      flags |= kPropertyRules;
-    }
-    if (!rule_set->CounterStyleRules().empty()) {
-      flags |= kCounterStyleRules;
-    }
-    if (rule_set->HasCascadeLayers()) {
-      flags |= kLayerRules;
-    }
-    if (!rule_set->PositionFallbackRules().empty()) {
-      flags |= kPositionFallbackRules;
-    }
-  }
-  return flags;
-}
-
-}  // namespace
 
 void StyleEngine::InvalidateForRuleSetChanges(
     TreeScope& tree_scope,
@@ -2426,8 +2417,9 @@ void StyleEngine::ApplyUserRuleSetChanges(
   if (changed_rule_flags & kLayerRules) {
     // Rebuild cascade layer map in all cases, because a newly inserted
     // sub-layer can precede an original layer in the final ordering.
+    LayerMap mapping_unused;
     user_cascade_layer_map_ =
-        MakeGarbageCollected<CascadeLayerMap>(new_style_sheets);
+        MakeGarbageCollected<CascadeLayerMap>(new_style_sheets, mapping_unused);
 
     if (resolver_) {
       resolver_->InvalidateMatchedPropertiesCache();
@@ -2583,6 +2575,33 @@ void StyleEngine::ApplyRuleSetChanges(
       rebuild_cascade_layer_map = (changed_rule_flags & kLayerRules) ||
                                   scoped_resolver->HasCascadeLayerMap();
       scoped_resolver->ResetStyle();
+    }
+  }
+
+  if (RuntimeEnabledFeatures::CSSSuperRulesetsEnabled()) {
+    if (new_style_sheets.size() <= 1) {
+      // Superrulesets are disabled, or we don't need one.
+      if (scoped_resolver) {
+        scoped_resolver->ClearSuperRuleset();
+      }
+    } else {
+      scoped_resolver = &tree_scope.EnsureScopedStyleResolver();
+      if (change == kActiveSheetsAppended &&
+          scoped_resolver->HasSuperRuleset()) {
+        // We can use the existing superruleset, just append the new ones.
+        for (wtf_size_t i = old_style_sheets.size();
+             i < new_style_sheets.size(); ++i) {
+          scoped_resolver->AppendToSuperRuleset(new_style_sheets[i]);
+        }
+      } else {
+        if (append_start_index > 0 && !scoped_resolver->HasSuperRuleset()) {
+          // The cascade layer map is built from a normal RuleSet,
+          // which is now being absorbed into (replaced by) the superruleset,
+          // so we can't just refresh the layer map; it needs a full update.
+          rebuild_cascade_layer_map = true;
+        }
+        scoped_resolver->RebuildSuperRuleset(new_style_sheets);
+      }
     }
   }
 
@@ -3017,42 +3036,40 @@ void StyleEngine::UpdateStyleForNonEligibleContainer(Element& container) {
   // This may be due to legacy layout fallback, inline box, table box, etc.
   // Also, if we could not predict that the LayoutObject would not be created,
   // like if the parent LayoutObject returns false for IsChildAllowed.
-  auto* cq_data = container.GetContainerQueryData();
+  ContainerQueryData* cq_data = container.GetContainerQueryData();
   if (!cq_data) {
     return;
   }
 
   StyleRecalcChange change;
-  if (ContainerQueryEvaluator* evaluator =
-          cq_data->GetContainerQueryEvaluator()) {
-    ContainerQueryEvaluator::Change query_change =
-        evaluator->SizeContainerChanged(GetDocument(), container,
-                                        PhysicalSize(), kPhysicalAxisNone);
-    switch (query_change) {
-      case ContainerQueryEvaluator::Change::kNone:
-        DCHECK(cq_data->SkippedStyleRecalc());
+  ContainerQueryEvaluator& evaluator =
+      container.EnsureContainerQueryEvaluator();
+  ContainerQueryEvaluator::Change query_change =
+      evaluator.SizeContainerChanged(PhysicalSize(), kPhysicalAxisNone);
+  switch (query_change) {
+    case ContainerQueryEvaluator::Change::kNone:
+      DCHECK(cq_data->SkippedStyleRecalc());
+      break;
+    case ContainerQueryEvaluator::Change::kNearestContainer:
+      if (!IsShadowHost(container)) {
+        change = change.ForceRecalcSizeContainer();
         break;
-      case ContainerQueryEvaluator::Change::kNearestContainer:
-        if (!IsShadowHost(container)) {
-          change = change.ForceRecalcSizeContainer();
-          break;
-        }
-        // Since the nearest container is found in shadow-including ancestors
-        // and not in flat tree ancestors, and style recalc traversal happens in
-        // flat tree order, we need to invalidate inside flat tree descendant
-        // containers if such containers are inside shadow trees.
-        //
-        // See also StyleRecalcChange::FlagsForChildren where we turn
-        // kRecalcContainer into kRecalcDescendantContainers when traversing
-        // past a shadow host.
-        [[fallthrough]];
-      case ContainerQueryEvaluator::Change::kDescendantContainers:
-        change = change.ForceRecalcDescendantSizeContainers();
-        break;
-    }
-    if (query_change != ContainerQueryEvaluator::Change::kNone) {
-      container.ComputedStyleRef().ClearCachedPseudoElementStyles();
-    }
+      }
+      // Since the nearest container is found in shadow-including ancestors
+      // and not in flat tree ancestors, and style recalc traversal happens in
+      // flat tree order, we need to invalidate inside flat tree descendant
+      // containers if such containers are inside shadow trees.
+      //
+      // See also StyleRecalcChange::FlagsForChildren where we turn
+      // kRecalcContainer into kRecalcDescendantContainers when traversing
+      // past a shadow host.
+      [[fallthrough]];
+    case ContainerQueryEvaluator::Change::kDescendantContainers:
+      change = change.ForceRecalcDescendantSizeContainers();
+      break;
+  }
+  if (query_change != ContainerQueryEvaluator::Change::kNone) {
+    container.ComputedStyleRef().ClearCachedPseudoElementStyles();
   }
 
   DecrementSkippedContainerRecalc();
@@ -3081,14 +3098,12 @@ void StyleEngine::UpdateStyleAndLayoutTreeForContainer(
 
   StyleRecalcChange change;
 
-  auto* cq_data = container.GetContainerQueryData();
-  DCHECK(cq_data);
-  auto* evaluator = cq_data->GetContainerQueryEvaluator();
-  DCHECK(evaluator);
-
   ContainerQueryEvaluator::Change query_change =
-      evaluator->SizeContainerChanged(GetDocument(), container, physical_size,
-                                      physical_axes);
+      container.EnsureContainerQueryEvaluator().SizeContainerChanged(
+          physical_size, physical_axes);
+
+  ContainerQueryData* cq_data = container.GetContainerQueryData();
+  CHECK(cq_data);
 
   switch (query_change) {
     case ContainerQueryEvaluator::Change::kNone:
@@ -3137,6 +3152,7 @@ void StyleEngine::UpdateStyleAndLayoutTreeForContainer(
   if (cq_data->SkippedStyleRecalc()) {
     DecrementSkippedContainerRecalc();
   }
+  UpdateViewportSize();
   RecalcStyleForContainer(container, change);
 
   if (container.NeedsReattachLayoutTree()) {
@@ -3181,13 +3197,7 @@ void StyleEngine::RecalcStyle(StyleRecalcChange change,
   Element* parent = FlatTreeTraversal::ParentElement(root_element);
 
   SelectorFilterRootScope filter_scope(parent);
-  StyleRecalcChange sibling_change =
-      root_element.RecalcStyle(change, style_recalc_context);
-
-  if (sibling_change.RecalcSiblingDescendants()) {
-    root_element.RecalcSubsequentSiblingStyles(change.Combine(sibling_change),
-                                               style_recalc_context);
-  }
+  root_element.RecalcStyle(change, style_recalc_context);
 
   for (ContainerNode* ancestor = root_element.GetStyleRecalcParent(); ancestor;
        ancestor = ancestor->GetStyleRecalcParent()) {
@@ -3323,6 +3333,7 @@ void StyleEngine::UpdateStyleAndLayoutTree() {
   UpdateViewportStyle();
 
   if (GetDocument().documentElement()) {
+    UpdateViewportSize();
     NthIndexCache nth_index_cache(GetDocument());
     if (NeedsStyleRecalc()) {
       TRACE_EVENT0("blink,blink_style", "Document::recalcStyle");
@@ -3948,6 +3959,11 @@ const CSSValue* StyleEngine::GetCachedFillOrClipPathURIValue(
 
 void StyleEngine::BaseURLChanged() {
   fill_or_clip_path_uri_value_cache_.clear();
+}
+
+void StyleEngine::UpdateViewportSize() {
+  viewport_size_ =
+      CSSToLengthConversionData::ViewportSize(GetDocument().GetLayoutView());
 }
 
 }  // namespace blink

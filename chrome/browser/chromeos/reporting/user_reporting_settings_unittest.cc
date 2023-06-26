@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/callback_list.h"
+#include "base/functional/callback_helpers.h"
 #include "base/test/bind.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -37,7 +38,7 @@ class UserReportingSettingsTest : public ::testing::Test {
 
   ::content::BrowserTaskEnvironment task_environment_;
   TestingProfileManager profile_manager_{TestingBrowserProcess::GetGlobal()};
-  raw_ptr<TestingProfile> profile_;
+  raw_ptr<TestingProfile, DanglingUntriaged> profile_;
   std::unique_ptr<UserReportingSettings> user_reporting_settings_;
 };
 
@@ -50,6 +51,8 @@ TEST_F(UserReportingSettingsTest, InvalidIntegerPrefPath) {
   bool out_bool_value;
   ASSERT_FALSE(
       user_reporting_settings_->GetBoolean(kSettingPath, &out_bool_value));
+  ASSERT_FALSE(user_reporting_settings_->GetReportingEnabled(kSettingPath,
+                                                             &out_bool_value));
   const base::Value::List* out_list_value = nullptr;
   ASSERT_FALSE(
       user_reporting_settings_->GetList(kSettingPath, &out_list_value));
@@ -110,6 +113,20 @@ TEST_F(UserReportingSettingsTest, GetBoolean) {
   EXPECT_TRUE(out_value);
 }
 
+TEST_F(UserReportingSettingsTest, GetReportingEnabled_Boolean) {
+  profile_->GetTestingPrefService()->registry()->RegisterBooleanPref(
+      kSettingPath, /*default_value=*/false);
+  bool out_value = true;
+  ASSERT_TRUE(
+      user_reporting_settings_->GetReportingEnabled(kSettingPath, &out_value));
+  EXPECT_FALSE(out_value);
+
+  // Update setting value and ensure the next fetch returns the updated value.
+  profile_->GetPrefs()->SetBoolean(kSettingPath, true);
+  ASSERT_TRUE(user_reporting_settings_->GetBoolean(kSettingPath, &out_value));
+  EXPECT_TRUE(out_value);
+}
+
 TEST_F(UserReportingSettingsTest, GetInteger) {
   profile_->GetTestingPrefService()->registry()->RegisterIntegerPref(
       kSettingPath, /*default_value=*/0);
@@ -141,6 +158,24 @@ TEST_F(UserReportingSettingsTest, GetList) {
   ASSERT_THAT(out_value, NotNull());
   ASSERT_THAT(out_value->size(), Eq(1uL));
   EXPECT_THAT(out_value->front().GetString(), Eq(kListSettingItem));
+}
+
+TEST_F(UserReportingSettingsTest, GetReportingEnabled_List) {
+  profile_->GetTestingPrefService()->registry()->RegisterListPref(
+      kSettingPath, /*default_value=*/base::Value::List());
+  bool out_value = true;
+  ASSERT_TRUE(
+      user_reporting_settings_->GetReportingEnabled(kSettingPath, &out_value));
+  EXPECT_FALSE(out_value);
+
+  // Update setting value and ensure the next fetch returns the updated value.
+  static constexpr char kListSettingItem[] = "item";
+  base::Value::List new_value;
+  new_value.Append(kListSettingItem);
+  profile_->GetPrefs()->SetList(kSettingPath, std::move(new_value));
+  ASSERT_TRUE(
+      user_reporting_settings_->GetReportingEnabled(kSettingPath, &out_value));
+  EXPECT_TRUE(out_value);
 }
 
 TEST_F(UserReportingSettingsTest, ObserveBooleanSetting) {
@@ -205,6 +240,21 @@ TEST_F(UserReportingSettingsTest, MultipleSettingObservers) {
   // Update setting value and ensure both callbacks were triggered.
   profile_->GetPrefs()->SetBoolean(kSettingPath, true);
   ASSERT_THAT(callback_trigger_count, Eq(2));
+}
+
+TEST_F(UserReportingSettingsTest, OnProfileDestruction) {
+  profile_->GetTestingPrefService()->registry()->RegisterBooleanPref(
+      kSettingPath, /*default_value=*/false);
+  const auto callback_subscription =
+      user_reporting_settings_->AddSettingsObserver(kSettingPath,
+                                                    base::DoNothing());
+  ASSERT_TRUE(
+      user_reporting_settings_->IsObservingSettingsForTest(kSettingPath));
+
+  // Delete profile and ensure the setting is no longer observed.
+  profile_manager_.DeleteAllTestingProfiles();
+  EXPECT_FALSE(
+      user_reporting_settings_->IsObservingSettingsForTest(kSettingPath));
 }
 
 }  // namespace

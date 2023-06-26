@@ -73,12 +73,6 @@ bool IsDeviceBlocked(const char* field, const std::string& block_list) {
 
 }  // namespace
 
-#if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kAndroidFrameDeadline,
-             "AndroidFrameDeadline",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
-
 #if BUILDFLAG(ENABLE_VALIDATING_COMMAND_DECODER)
 // Use the passthrough command decoder by default.  This can be overridden with
 // the --use-cmd-decoder=passthrough or --use-cmd-decoder=validating flags.
@@ -86,7 +80,7 @@ BASE_FEATURE(kAndroidFrameDeadline,
 // platforms that would otherwise not default to using EGL bindings.
 BASE_FEATURE(kDefaultPassthroughCommandDecoder,
              "DefaultPassthroughCommandDecoder",
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -125,8 +119,7 @@ bool IsAndroidFrameDeadlineEnabled() {
       base::android::BuildInfo::GetInstance()->is_at_least_t() &&
       gfx::AChoreographerCompat33::Get().supported &&
       gfx::SurfaceControl::SupportsSetFrameTimeline() &&
-      gfx::SurfaceControl::SupportsSetEnableBackPressure() &&
-      base::FeatureList::IsEnabled(kAndroidFrameDeadline);
+      gfx::SurfaceControl::SupportsSetEnableBackPressure();
   return enabled;
 #else
   return false;

@@ -331,16 +331,6 @@ void OffscreenCanvasRenderingContext2D::SnapshotStateForFilter() {
   GetState().SetFontForFilter(AccessFont());
 }
 
-void OffscreenCanvasRenderingContext2D::ValidateStateStackWithCanvas(
-    const cc::PaintCanvas* canvas) const {
-#if DCHECK_IS_ON()
-  if (canvas) {
-    DCHECK_EQ(static_cast<size_t>(canvas->getSaveCount()),
-              state_stack_.size() + 1);
-  }
-#endif
-}
-
 void OffscreenCanvasRenderingContext2D::LoseContext(LostContextMode lost_mode) {
   if (context_lost_mode_ != kNotLostContext)
     return;
@@ -532,15 +522,15 @@ void OffscreenCanvasRenderingContext2D::setFontKerning(
   if (!GetState().HasRealizedFont())
     setFont(font());
   FontDescription::Kerning kerning;
-  String font_kerning = font_kerning_string.LowerASCII();
-  if (font_kerning == kAutoKerningString)
+  if (font_kerning_string == kAutoKerningString) {
     kerning = FontDescription::kAutoKerning;
-  else if (font_kerning == kNoneKerningString)
+  } else if (font_kerning_string == kNoneKerningString) {
     kerning = FontDescription::kNoneKerning;
-  else if (font_kerning == kNormalKerningString)
+  } else if (font_kerning_string == kNormalKerningString) {
     kerning = FontDescription::kNormalKerning;
-  else
+  } else {
     return;
+  }
 
   if (GetState().GetFontKerning() == kerning)
     return;
@@ -595,23 +585,23 @@ void OffscreenCanvasRenderingContext2D::setFontVariantCaps(
   if (!GetState().HasRealizedFont())
     setFont(font());
   FontDescription::FontVariantCaps variant_caps;
-  String variant_caps_lower = font_variant_caps_string.LowerASCII();
-  if (variant_caps_lower == kNormalVariantString)
+  if (font_variant_caps_string == kNormalVariantString) {
     variant_caps = FontDescription::kCapsNormal;
-  else if (variant_caps_lower == kSmallCapsVariantString)
+  } else if (font_variant_caps_string == kSmallCapsVariantString) {
     variant_caps = FontDescription::kSmallCaps;
-  else if (variant_caps_lower == kAllSmallCapsVariantString)
+  } else if (font_variant_caps_string == kAllSmallCapsVariantString) {
     variant_caps = FontDescription::kAllSmallCaps;
-  else if (variant_caps_lower == kPetiteVariantString)
+  } else if (font_variant_caps_string == kPetiteVariantString) {
     variant_caps = FontDescription::kPetiteCaps;
-  else if (variant_caps_lower == kAllPetiteVariantString)
+  } else if (font_variant_caps_string == kAllPetiteVariantString) {
     variant_caps = FontDescription::kAllPetiteCaps;
-  else if (variant_caps_lower == kUnicaseVariantString)
+  } else if (font_variant_caps_string == kUnicaseVariantString) {
     variant_caps = FontDescription::kUnicase;
-  else if (variant_caps_lower == kTitlingCapsVariantString)
+  } else if (font_variant_caps_string == kTitlingCapsVariantString) {
     variant_caps = FontDescription::kTitlingCaps;
-  else
+  } else {
     return;
+  }
 
   if (GetState().GetFontVariantCaps() == variant_caps)
     return;
@@ -683,8 +673,7 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
 
   TextDirection direction = ToTextDirection(GetState().GetDirection());
   bool is_rtl = direction == TextDirection::kRtl;
-  TextRun text_run(text, 0, 0, TextRun::kAllowTrailingExpansion, direction,
-                   false);
+  TextRun text_run(text, direction, false);
   text_run.SetNormalizeSpace(true);
   // Draw the item text at the correct point.
   gfx::PointF location(x, y + GetFontBaseline(*font_data));
@@ -731,8 +720,7 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
       [this, text = std::move(text), direction, location](
           cc::PaintCanvas* paint_canvas,
           const cc::PaintFlags* flags) /* draw lambda */ {
-        TextRun text_run(text, 0, 0, TextRun::kAllowTrailingExpansion,
-                         direction, false);
+        TextRun text_run(text, direction, false);
         text_run.SetNormalizeSpace(true);
         TextRunPaintInfo text_run_paint_info(text_run);
         this->AccessFont().DrawBidiText(

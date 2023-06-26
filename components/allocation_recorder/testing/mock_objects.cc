@@ -4,13 +4,12 @@
 
 #include "components/allocation_recorder/testing/mock_objects.h"
 
-namespace allocation_recorder::testing {
-namespace crashpad {}  // namespace crashpad
-
-namespace crash_handler {
+namespace allocation_recorder::testing::crash_handler {
 
 StreamDataSourceFactoryMock::StreamDataSourceFactoryMock() = default;
 StreamDataSourceFactoryMock::~StreamDataSourceFactoryMock() = default;
 
-}  // namespace crash_handler
-}  // namespace allocation_recorder::testing
+AllocationRecorderHolderMock::AllocationRecorderHolderMock() = default;
+AllocationRecorderHolderMock::~AllocationRecorderHolderMock() = default;
+
+}  // namespace allocation_recorder::testing::crash_handler

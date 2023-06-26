@@ -28,7 +28,10 @@
 #include "chrome/browser/ash/policy/remote_commands/crd_uma_logger.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service_factory.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/common/pref_names.h"
 #include "components/policy/proto/device_management_backend.pb.h"
+#include "components/prefs/pref_service.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/oauth2_access_token_manager.h"
 #include "remoting/host/chromeos/features.h"
@@ -154,6 +157,11 @@ void OnCrdSessionFinished(CrdSessionType crd_session_type,
                           base::TimeDelta session_duration) {
   CrdUmaLogger(crd_session_type, user_session_type)
       .LogSessionDuration(session_duration);
+}
+
+bool IsKioskSession(UserSessionType session_type) {
+  return session_type == UserSessionType::AUTO_LAUNCHED_KIOSK_SESSION ||
+         session_type == UserSessionType::MANUALLY_LAUNCHED_KIOSK_SESSION;
 }
 
 }  // namespace
@@ -284,12 +292,6 @@ bool DeviceCommandStartCrdSessionJob::ParseCommandPayload(
   curtain_local_user_session_ =
       (crd_session_type == CrdSessionType::REMOTE_ACCESS_SESSION);
 
-  if (base::FeatureList::IsEnabled(
-          remoting::features::kForceCrdAdminRemoteAccess)) {
-    CRD_LOG(WARNING) << "Forcing remote access";
-    curtain_local_user_session_ = true;
-  }
-
   if (curtain_local_user_session_ &&
       !base::FeatureList::IsEnabled(
           remoting::features::kEnableCrdAdminRemoteAccess)) {
@@ -383,6 +385,10 @@ void DeviceCommandStartCrdSessionJob::StartCrdHostAndGetCode(
   parameters.show_confirmation_dialog = ShouldShowConfirmationDialog();
   parameters.curtain_local_user_session = curtain_local_user_session_;
   parameters.admin_email = admin_email_;
+  parameters.allow_troubleshooting_tools = ShouldAllowTroubleshootingTools();
+  parameters.show_troubleshooting_tools = ShouldShowTroubleshootingTools();
+  parameters.allow_reconnections = ShouldAllowReconnections();
+  parameters.allow_file_transfer = ShouldAllowFileTransfer();
 
   delegate_->StartCrdHostAndGetCode(
       parameters,
@@ -544,6 +550,36 @@ bool DeviceCommandStartCrdSessionJob::ShouldTerminateUponInput() const {
       NOTREACHED();
       return true;
   }
+}
+
+bool DeviceCommandStartCrdSessionJob::ShouldAllowReconnections() const {
+  if (!base::FeatureList::IsEnabled(
+          remoting::features::kEnableCrdAdminRemoteAccessV2)) {
+    return false;
+  }
+
+  // Curtained off sessions support reconnections if Chrome restarts.
+  return curtain_local_user_session_;
+}
+
+bool DeviceCommandStartCrdSessionJob::ShouldShowTroubleshootingTools() const {
+  return IsKioskSession(GetCurrentUserSessionType());
+}
+
+bool DeviceCommandStartCrdSessionJob::ShouldAllowTroubleshootingTools() const {
+  return IsKioskSession(GetCurrentUserSessionType()) &&
+         CHECK_DEREF(ProfileManager::GetActiveUserProfile()->GetPrefs())
+             .GetBoolean(prefs::kKioskTroubleshootingToolsEnabled);
+}
+
+bool DeviceCommandStartCrdSessionJob::ShouldAllowFileTransfer() const {
+  if (!IsKioskSession(GetCurrentUserSessionType())) {
+    return false;
+  }
+
+  // TODO(b/284944528): Add check here for policy.
+  return base::FeatureList::IsEnabled(
+      remoting::features::kEnableCrdFileTransferForKiosk);
 }
 
 DeviceCommandStartCrdSessionJob::ErrorCallback

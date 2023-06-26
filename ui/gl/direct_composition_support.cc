@@ -30,7 +30,7 @@ bool g_supports_overlays = false;
 // Whether the GPU can support hardware overlays or not.
 bool g_supports_hardware_overlays = false;
 // Whether the DecodeSwapChain is disabled or not.
-bool g_decode_swap_chain_disabled = false;
+bool g_disable_decode_swap_chain = false;
 // Whether to force the nv12 overlay support.
 bool g_force_nv12_overlay_support = false;
 // Whether software overlays have been disabled.
@@ -105,7 +105,7 @@ int g_num_monitors = 0;
 bool g_system_hdr_enabled = false;
 
 // Global direct composition device.
-IDCompositionDevice2* g_dcomp_device = nullptr;
+IDCompositionDevice3* g_dcomp_device = nullptr;
 // Whether swap chain present failed and direct composition should be disabled.
 bool g_direct_composition_swap_chain_failed = false;
 
@@ -420,13 +420,13 @@ void InitializeDirectComposition(GLDisplayEGL* display) {
     return;
   }
 
-  using PFN_DCOMPOSITION_CREATE_DEVICE2 = HRESULT(WINAPI*)(
+  using PFN_DCOMPOSITION_CREATE_DEVICE3 = HRESULT(WINAPI*)(
       IUnknown * renderingDevice, REFIID iid, void** dcompositionDevice);
-  PFN_DCOMPOSITION_CREATE_DEVICE2 create_device_function =
-      reinterpret_cast<PFN_DCOMPOSITION_CREATE_DEVICE2>(
-          ::GetProcAddress(dcomp_module, "DCompositionCreateDevice2"));
-  if (!create_device_function) {
-    DLOG(ERROR) << "GetProcAddress failed for DCompositionCreateDevice2";
+  PFN_DCOMPOSITION_CREATE_DEVICE3 create_device3_function =
+      reinterpret_cast<PFN_DCOMPOSITION_CREATE_DEVICE3>(
+          ::GetProcAddress(dcomp_module, "DCompositionCreateDevice3"));
+  if (!create_device3_function) {
+    DLOG(ERROR) << "GetProcAddress failed for DCompositionCreateDevice3";
     return;
   }
 
@@ -435,17 +435,17 @@ void InitializeDirectComposition(GLDisplayEGL* display) {
 
   Microsoft::WRL::ComPtr<IDCompositionDesktopDevice> desktop_device;
   HRESULT hr =
-      create_device_function(dxgi_device.Get(), IID_PPV_ARGS(&desktop_device));
+      create_device3_function(dxgi_device.Get(), IID_PPV_ARGS(&desktop_device));
   if (FAILED(hr)) {
-    DLOG(ERROR) << "DCompositionCreateDevice2 failed with error 0x" << std::hex
+    DLOG(ERROR) << "DCompositionCreateDevice3 failed with error 0x" << std::hex
                 << hr;
     return;
   }
 
-  Microsoft::WRL::ComPtr<IDCompositionDevice2> dcomp_device;
+  Microsoft::WRL::ComPtr<IDCompositionDevice3> dcomp_device;
   hr = desktop_device.As(&dcomp_device);
   if (FAILED(hr)) {
-    DLOG(ERROR) << "Failed to retrieve IDCompositionDevice2 with error 0x"
+    DLOG(ERROR) << "Failed to retrieve IDCompositionDevice3 with error 0x"
                 << std::hex << hr;
     return;
   }
@@ -461,7 +461,7 @@ void ShutdownDirectComposition() {
   }
 }
 
-IDCompositionDevice2* GetDirectCompositionDevice() {
+IDCompositionDevice3* GetDirectCompositionDevice() {
   return g_dcomp_device;
 }
 
@@ -494,25 +494,17 @@ bool DirectCompositionHardwareOverlaysSupported() {
 }
 
 bool DirectCompositionDecodeSwapChainSupported() {
-  if (!g_decode_swap_chain_disabled) {
+  if (!g_disable_decode_swap_chain) {
     UpdateOverlaySupport();
     return GetDirectCompositionSDROverlayFormat() == DXGI_FORMAT_NV12;
   }
   return false;
 }
 
-void DisableDirectCompositionDecodeSwapChain() {
-  g_decode_swap_chain_disabled = true;
-}
-
 void DisableDirectCompositionOverlays() {
   SetSupportsOverlays(false);
   DirectCompositionOverlayCapsMonitor::GetInstance()
       ->NotifyOverlayCapsChanged();
-}
-
-void DisableDirectCompositionSoftwareOverlays() {
-  g_disable_sw_overlays = true;
 }
 
 bool DirectCompositionScaledOverlaysSupported() {
@@ -563,27 +555,6 @@ int GetDirectCompositionNumMonitors() {
   if (g_num_monitors == 0)
     UpdateMonitorInfo();
   return g_num_monitors;
-}
-
-gfx::Size GetMonitorSize(HWND window) {
-  if (GetDirectCompositionNumMonitors() == 1) {
-    // Only one monitor. Return the size of this monitor.
-    return GetDirectCompositionPrimaryMonitorSize();
-  } else {
-    gfx::Size monitor_size;
-    // Get the monitor on which the window handle of interest is displayed.
-    HMONITOR monitor =
-        window ? MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST) : nullptr;
-    if (monitor) {
-      MONITORINFO monitor_info;
-      monitor_info.cbSize = sizeof(monitor_info);
-      if (GetMonitorInfo(monitor, &monitor_info)) {
-        monitor_size = gfx::Rect(monitor_info.rcMonitor).size();
-      }
-    }
-
-    return monitor_size;
-  }
 }
 
 bool DirectCompositionSystemHDREnabled() {
@@ -748,7 +719,9 @@ UINT GetDXGIWaitableSwapChainMaxQueuedFrames() {
 void SetDirectCompositionOverlayWorkarounds(
     const DirectCompositionOverlayWorkarounds& workarounds) {
   // This has to be set before initializing overlay caps.
-  DCHECK(!OverlayCapsValid());
+  CHECK(!OverlayCapsValid());
+  g_disable_sw_overlays = workarounds.disable_sw_video_overlays;
+  g_disable_decode_swap_chain = workarounds.disable_decode_swap_chain;
   g_enable_bgra8_overlays_with_yuv_overlay_support =
       workarounds.enable_bgra8_overlays_with_yuv_overlay_support;
   g_force_nv12_overlay_support = workarounds.force_nv12_overlay_support;

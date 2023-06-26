@@ -28,6 +28,8 @@ export class SvgWrapper extends LitElement {
     svg {
       display: block;
       fill: currentColor;
+      stroke: currentColor;
+      stroke-width: 0;
     }
   `;
 
@@ -35,7 +37,7 @@ export class SvgWrapper extends LitElement {
     name: {type: String},
   };
 
-  name = null;
+  name: string|null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();

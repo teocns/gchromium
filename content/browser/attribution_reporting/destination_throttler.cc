@@ -53,10 +53,10 @@ class DestinationThrottler::SourceSiteData {
       : destinations_(policy.max_total) {}
   ~SourceSiteData() = default;
 
-  SourceSiteData(SourceSiteData&) = delete;
-  SourceSiteData& operator=(SourceSiteData&) = delete;
+  SourceSiteData(SourceSiteData&&) noexcept = default;
+  SourceSiteData& operator=(SourceSiteData&&) noexcept = default;
 
-  bool UpdateAndGetAllowed(
+  Result UpdateAndGetResult(
       const attribution_reporting::DestinationSet& destinations,
       const net::SchemefulSite& reporting_site,
       const Policy& policy) {
@@ -65,8 +65,9 @@ class DestinationThrottler::SourceSiteData {
     auto& reporting_set = reporting_destinations_[reporting_site];
 
     // First detect whether we have capacity for _all_ the destinations.
-    if (!HasCapacity(destinations, reporting_set, policy)) {
-      return false;
+    Result throttle_result = HasCapacity(destinations, reporting_set, policy);
+    if (throttle_result != Result::kAllowed) {
+      return throttle_result;
     }
 
     // Mutate the data structure only after guaranteeing capacity to avoid
@@ -80,7 +81,7 @@ class DestinationThrottler::SourceSiteData {
       }
       reporting_set.insert(it);
     }
-    return true;
+    return throttle_result;
   }
 
   bool AllEntriesOlderThan(base::TimeTicks time) const {
@@ -88,9 +89,9 @@ class DestinationThrottler::SourceSiteData {
   }
 
  private:
-  bool HasCapacity(const attribution_reporting::DestinationSet& destinations,
-                   const DestinationSubset& reporting_set,
-                   const Policy& policy) {
+  Result HasCapacity(const attribution_reporting::DestinationSet& destinations,
+                     const DestinationSubset& reporting_set,
+                     const Policy& policy) {
     int all_capacity = policy.max_total - destinations_.size();
     int reporting_capacity =
         policy.max_per_reporting_site - reporting_set.size();
@@ -103,7 +104,16 @@ class DestinationThrottler::SourceSiteData {
         reporting_capacity--;
       }
     }
-    return all_capacity >= 0 && reporting_capacity >= 0;
+    if (all_capacity >= 0 && reporting_capacity >= 0) {
+      return Result::kAllowed;
+    }
+    if (all_capacity < 0 && reporting_capacity < 0) {
+      return Result::kHitBothLimits;
+    }
+    if (all_capacity < 0) {
+      return Result::kHitGlobalLimit;
+    }
+    return Result::kHitReportingLimit;
   }
 
   void EvictEntriesOlderThan(base::TimeTicks time) {
@@ -125,19 +135,41 @@ class DestinationThrottler::SourceSiteData {
   std::map<net::SchemefulSite, DestinationSubset> reporting_destinations_;
 };
 
+bool DestinationThrottler::Policy::Validate() const {
+  if (max_per_reporting_site <= 0) {
+    return false;
+  }
+
+  if (max_total < max_per_reporting_site) {
+    return false;
+  }
+
+  if (!rate_limit_window.is_positive()) {
+    return false;
+  }
+
+  return true;
+}
+
+bool DestinationThrottler::Policy::operator==(const Policy& other) const {
+  return max_total == other.max_total &&
+         max_per_reporting_site == other.max_per_reporting_site &&
+         rate_limit_window == other.rate_limit_window;
+}
+
 DestinationThrottler::DestinationThrottler(Policy policy)
     : policy_(std::move(policy)) {}
 
 DestinationThrottler::~DestinationThrottler() = default;
 
-bool DestinationThrottler::UpdateAndGetAllowed(
+DestinationThrottler::Result DestinationThrottler::UpdateAndGetResult(
     const attribution_reporting::DestinationSet& destinations,
     const net::SchemefulSite& source_site,
     const net::SchemefulSite& reporting_site) {
   CleanUpOldEntries();
   auto it = source_site_data_.try_emplace(source_site, policy_);
-  return it.first->second.UpdateAndGetAllowed(destinations, reporting_site,
-                                              policy_);
+  return it.first->second.UpdateAndGetResult(destinations, reporting_site,
+                                             policy_);
 }
 
 void DestinationThrottler::CleanUpOldEntries() {

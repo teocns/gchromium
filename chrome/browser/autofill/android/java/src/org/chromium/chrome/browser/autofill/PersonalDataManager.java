@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.autofill;
 
 import android.content.Context;
-import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.text.format.DateUtils;
 
@@ -33,7 +32,6 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -143,6 +141,190 @@ public class PersonalDataManager {
         private String mLabel;
         private String mLanguageCode;
 
+        /**
+         * Builder for the {@link AutofillProfile}.
+         */
+        public static final class Builder {
+            private String mGUID = "";
+            private boolean mIsLocal = true;
+            private @Source int mSource = Source.LOCAL_OR_SYNCABLE;
+            private ValueWithStatus mHonorificPrefix = ValueWithStatus.EMPTY;
+            private ValueWithStatus mFullName = ValueWithStatus.EMPTY;
+            private ValueWithStatus mCompanyName = ValueWithStatus.EMPTY;
+            private ValueWithStatus mStreetAddress = ValueWithStatus.EMPTY;
+            private ValueWithStatus mRegion = ValueWithStatus.EMPTY;
+            private ValueWithStatus mLocality = ValueWithStatus.EMPTY;
+            private ValueWithStatus mDependentLocality = ValueWithStatus.EMPTY;
+            private ValueWithStatus mPostalCode = ValueWithStatus.EMPTY;
+            private ValueWithStatus mSortingCode = ValueWithStatus.EMPTY;
+            private ValueWithStatus mCountryCode = ValueWithStatus.EMPTY;
+            private ValueWithStatus mPhoneNumber = ValueWithStatus.EMPTY;
+            private ValueWithStatus mEmailAddress = ValueWithStatus.EMPTY;
+            private String mLabel = "";
+            private String mLanguageCode = "";
+
+            public Builder setGUID(String guid) {
+                mGUID = guid;
+                return this;
+            }
+
+            public Builder setIsLocal(boolean isLocal) {
+                mIsLocal = isLocal;
+                return this;
+            }
+
+            public Builder setSource(@Source int source) {
+                mSource = source;
+                return this;
+            }
+
+            public Builder setHonorificPrefix(String honorificPrefix) {
+                mHonorificPrefix =
+                        new ValueWithStatus(honorificPrefix, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setHonorificPrefix(
+                    String honorificPrefix, @VerificationStatus int status) {
+                mHonorificPrefix = new ValueWithStatus(honorificPrefix, status);
+                return this;
+            }
+
+            public Builder setFullName(String fullName) {
+                mFullName = new ValueWithStatus(fullName, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setFullName(String fullName, @VerificationStatus int status) {
+                mFullName = new ValueWithStatus(fullName, status);
+                return this;
+            }
+
+            public Builder setCompanyName(String companyName) {
+                mCompanyName = new ValueWithStatus(companyName, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setCompanyName(String companyName, @VerificationStatus int status) {
+                mCompanyName = new ValueWithStatus(companyName, status);
+                return this;
+            }
+
+            public Builder setStreetAddress(String streetAddress) {
+                mStreetAddress =
+                        new ValueWithStatus(streetAddress, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setStreetAddress(String streetAddress, @VerificationStatus int status) {
+                mStreetAddress = new ValueWithStatus(streetAddress, status);
+                return this;
+            }
+
+            public Builder setRegion(String region) {
+                mRegion = new ValueWithStatus(region, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setRegion(String region, @VerificationStatus int status) {
+                mRegion = new ValueWithStatus(region, status);
+                return this;
+            }
+
+            public Builder setLocality(String locality) {
+                mLocality = new ValueWithStatus(locality, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setLocality(String locality, @VerificationStatus int status) {
+                mLocality = new ValueWithStatus(locality, status);
+                return this;
+            }
+
+            public Builder setDependentLocality(String dependentLocality) {
+                mDependentLocality =
+                        new ValueWithStatus(dependentLocality, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setDependentLocality(
+                    String dependentLocality, @VerificationStatus int status) {
+                mDependentLocality = new ValueWithStatus(dependentLocality, status);
+                return this;
+            }
+
+            public Builder setPostalCode(String postalCode) {
+                mPostalCode = new ValueWithStatus(postalCode, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setPostalCode(String postalCode, @VerificationStatus int status) {
+                mPostalCode = new ValueWithStatus(postalCode, status);
+                return this;
+            }
+
+            public Builder setSortingCode(String sortingCode) {
+                mSortingCode = new ValueWithStatus(sortingCode, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setSortingCode(String sortingCode, @VerificationStatus int status) {
+                mSortingCode = new ValueWithStatus(sortingCode, status);
+                return this;
+            }
+
+            public Builder setCountryCode(String countryCode) {
+                mCountryCode = new ValueWithStatus(countryCode, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setCountryCode(String countryCode, @VerificationStatus int status) {
+                mCountryCode = new ValueWithStatus(countryCode, status);
+                return this;
+            }
+
+            public Builder setPhoneNumber(String phoneNumber) {
+                mPhoneNumber = new ValueWithStatus(phoneNumber, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setPhoneNumber(String phoneNumber, @VerificationStatus int status) {
+                mPhoneNumber = new ValueWithStatus(phoneNumber, status);
+                return this;
+            }
+
+            public Builder setEmailAddress(String emailAddress) {
+                mEmailAddress = new ValueWithStatus(emailAddress, VerificationStatus.USER_VERIFIED);
+                return this;
+            }
+
+            public Builder setEmailAddress(String emailAddress, @VerificationStatus int status) {
+                mEmailAddress = new ValueWithStatus(emailAddress, status);
+                return this;
+            }
+
+            public Builder setLabel(String label) {
+                mLabel = label;
+                return this;
+            }
+
+            public Builder setLanguageCode(String languageCode) {
+                mLanguageCode = languageCode;
+                return this;
+            }
+
+            public AutofillProfile build() {
+                return new AutofillProfile(mGUID, mIsLocal, mSource, mHonorificPrefix, mFullName,
+                        mCompanyName, mStreetAddress, mRegion, mLocality, mDependentLocality,
+                        mPostalCode, mSortingCode, mCountryCode, mPhoneNumber, mEmailAddress,
+                        mLanguageCode);
+            }
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+
         @CalledByNative("AutofillProfile")
         private static AutofillProfile create(String guid, boolean isLocal, @Source int source,
                 String honorificPrefix, @VerificationStatus int honorificPrefixStatus,
@@ -198,76 +380,6 @@ public class PersonalDataManager {
             mLanguageCode = languageCode;
         }
 
-        @VisibleForTesting
-        AutofillProfile(String guid, boolean isLocal, ValueWithStatus honorificPrefix,
-                ValueWithStatus fullName, ValueWithStatus companyName,
-                ValueWithStatus streetAddress, ValueWithStatus region, ValueWithStatus locality,
-                ValueWithStatus dependentLocality, ValueWithStatus postalCode,
-                ValueWithStatus sortingCode, ValueWithStatus countryCode,
-                ValueWithStatus phoneNumber, ValueWithStatus emailAddress, String languageCode) {
-            this(guid, isLocal, Source.LOCAL_OR_SYNCABLE, honorificPrefix, fullName, companyName,
-                    streetAddress, region, locality, dependentLocality, postalCode, sortingCode,
-                    countryCode, phoneNumber, emailAddress, languageCode);
-        }
-        /**
-         * Builds a profile with the given values, assuming those are reviewed by the user and thus
-         * are marked {@link VerificationStatus.USER_VERIFIED}.
-         */
-        public AutofillProfile(String guid, boolean isLocal, @Source int source,
-                String honorificPrefix, String fullName, String companyName, String streetAddress,
-                String region, String locality, String dependentLocality, String postalCode,
-                String sortingCode, String countryCode, String phoneNumber, String emailAddress,
-                String languageCode) {
-            this(guid, isLocal, source,
-                    new ValueWithStatus(honorificPrefix, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(fullName, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(companyName, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(streetAddress, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(region, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(locality, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(dependentLocality, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(postalCode, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(sortingCode, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(countryCode, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(phoneNumber, VerificationStatus.USER_VERIFIED),
-                    new ValueWithStatus(emailAddress, VerificationStatus.USER_VERIFIED),
-                    languageCode);
-        }
-
-        /**
-         * Builds a profile with the {@link Source.LOCAL_OR_SYNCABLE} source and with given user
-         * verified values.
-         * TODO(crbug.com/1441905): Remove the origin parameter once the constructor
-         * is not used by the internal code anymore.
-         */
-        public AutofillProfile(String guid, String origin, boolean isLocal, String honorificPrefix,
-                String fullName, String companyName, String streetAddress, String region,
-                String locality, String dependentLocality, String postalCode, String sortingCode,
-                String countryCode, String phoneNumber, String emailAddress, String languageCode) {
-            this(guid, isLocal, Source.LOCAL_OR_SYNCABLE, honorificPrefix, fullName, companyName,
-                    streetAddress, region, locality, dependentLocality, postalCode, sortingCode,
-                    countryCode, phoneNumber, emailAddress, languageCode);
-        }
-
-        /**
-         * Builds an empty local profile with country code from the default locale.
-         * All other fields are empty strings with {@link VerificationStatus.NO_STATUS},
-         * because JNI does not handle null strings.
-         */
-        public AutofillProfile() {
-            this("" /* guid */, true /* isLocal */, Source.LOCAL_OR_SYNCABLE,
-                    ValueWithStatus.EMPTY /* honorificPrefix */,
-                    ValueWithStatus.EMPTY /* fullName */, ValueWithStatus.EMPTY /* companyName */,
-                    ValueWithStatus.EMPTY /* streetAddress */, ValueWithStatus.EMPTY /* region */,
-                    ValueWithStatus.EMPTY /* locality */,
-                    ValueWithStatus.EMPTY /* dependentLocality */,
-                    ValueWithStatus.EMPTY /* postalCode */, ValueWithStatus.EMPTY /* sortingCode */,
-                    new ValueWithStatus(Locale.getDefault().getCountry(),
-                            VerificationStatus.USER_VERIFIED) /* country */,
-                    ValueWithStatus.EMPTY /* phoneNumber */,
-                    ValueWithStatus.EMPTY /* emailAddress */, "" /* languageCode */);
-        }
-
         /* Builds an AutofillProfile that is an exact copy of the one passed as parameter. */
         public AutofillProfile(AutofillProfile profile) {
             mGUID = profile.getGUID();
@@ -298,28 +410,9 @@ public class PersonalDataManager {
             mLabel = profile.getLabel();
         }
 
-        /** TODO(estade): remove this constructor. */
-        @VisibleForTesting
-        public AutofillProfile(String guid, String honorificPrefix, String fullName,
-                String companyName, String streetAddress, String region, String locality,
-                String dependentLocality, String postalCode, String sortingCode, String countryCode,
-                String phoneNumber, String emailAddress, String languageCode) {
-            this(guid, true /* isLocal */, Source.LOCAL_OR_SYNCABLE, honorificPrefix, fullName,
-                    companyName, streetAddress, region, locality, dependentLocality, postalCode,
-                    sortingCode, countryCode, phoneNumber, emailAddress, languageCode);
-        }
-
         @CalledByNative("AutofillProfile")
         public String getGUID() {
             return mGUID;
-        }
-
-        /**
-         * TODO(crbug.com/1441905): Remove this getter once it is not used by the
-         * internal code anymore.
-         */
-        public String getOrigin() {
-            return "";
         }
 
         @CalledByNative("AutofillProfile")
@@ -686,12 +779,6 @@ public class PersonalDataManager {
         }
 
         public String getFormattedExpirationDate(Context context) {
-            return getMonth()
-                    + context.getResources().getString(R.string.autofill_expiration_date_separator)
-                    + getYear();
-        }
-
-        public String getFormattedExpirationDateWithTwoDigitYear(Context context) {
             String twoDigityear = getYear().substring(2);
             return getMonth()
                     + context.getResources().getString(R.string.autofill_expiration_date_separator)
@@ -1335,7 +1422,7 @@ public class PersonalDataManager {
     /**
      * @return Whether the Autofill feature for payment methods mandatory reauth is enabled.
      */
-    public static boolean isAutofillPaymentMethodsMandatoryReauthEnabled() {
+    public static boolean isPaymentMethodsMandatoryReauthEnabled() {
         return getPrefService().getBoolean(Pref.AUTOFILL_PAYMENT_METHODS_MANDATORY_REAUTH);
     }
 
@@ -1421,23 +1508,16 @@ public class PersonalDataManager {
      * @param context required to get resources.
      * @param customImageUrl  URL of the image. If the image is available, it is returned, otherwise
      *         it is fetched from this URL.
-     * @param widthId Resource id of the width spec.
-     * @param heightId Resource id of the height spec.
-     * @param cornerRadiusId Resource id of the corner radius spec.
+     * @param cardIconSpecs {@code CardIconSpecs} instance containing the specs for the card icon.
      * @return Bitmap if found in the local cache, else return null.
      */
     public Bitmap getCustomImageForAutofillSuggestionIfAvailable(
-            Context context, GURL customImageUrl, int widthId, int heightId, int cornerRadiusId) {
-        Resources res = context.getResources();
-        int width = res.getDimensionPixelSize(widthId);
-        int height = res.getDimensionPixelSize(heightId);
-        float cornerRadius = res.getDimension(cornerRadiusId);
-
+            GURL customImageUrl, AutofillUiUtils.CardIconSpecs cardIconSpecs) {
         // TODO(crbug.com/1313616): The Capital One icon for virtual cards is available in a single
         // size via a static URL. Cache this image at different sizes so it can be used by different
         // surfaces.
-        GURL urlToCache =
-                AutofillUiUtils.getCreditCardIconUrlWithParams(customImageUrl, width, height);
+        GURL urlToCache = AutofillUiUtils.getCreditCardIconUrlWithParams(
+                customImageUrl, cardIconSpecs.getWidth(), cardIconSpecs.getHeight());
         GURL urlToFetch = customImageUrl.getSpec().equals(AutofillUiUtils.CAPITAL_ONE_ICON_URL)
                 ? customImageUrl
                 : urlToCache;
@@ -1455,8 +1535,7 @@ public class PersonalDataManager {
             // When adding new sizes for card icons, check if the corner radius needs to be added as
             // a suffix for caching (crbug.com/1431283).
             mCreditCardArtImages.put(urlToCache.getSpec(),
-                    AutofillUiUtils.resizeAndAddRoundedCornersAndGreyBorder(bitmap, width, height,
-                            cornerRadius,
+                    AutofillUiUtils.resizeAndAddRoundedCornersAndGreyBorder(bitmap, cardIconSpecs,
                             ChromeFeatureList.isEnabled(
                                     ChromeFeatureList
                                             .AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES)));

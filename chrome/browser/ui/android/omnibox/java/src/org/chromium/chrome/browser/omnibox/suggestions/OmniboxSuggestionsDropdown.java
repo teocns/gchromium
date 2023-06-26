@@ -30,6 +30,7 @@ import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
+import org.chromium.chrome.browser.omnibox.OmniboxMetrics;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownEmbedder.OmniboxAlignment;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
@@ -79,8 +80,8 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         int HANDLED_INITIAL_SIZING = 3;
     }
 
-    @InitialResizeState
-    private int mInitialResizeState = InitialResizeState.WAITING_FOR_FIRST_MEASURE;
+    private @InitialResizeState int mInitialResizeState =
+            InitialResizeState.WAITING_FOR_FIRST_MEASURE;
     private int mWidthMeasureSpec;
     private int mHeightMeasureSpec;
 
@@ -214,6 +215,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         setFocusable(true);
         setFocusableInTouchMode(true);
         setRecycledViewPool(recycledViewPool);
+        setId(R.id.omnibox_suggestions_dropdown);
 
         // By default RecyclerViews come with item animators.
         setItemAnimator(null);
@@ -361,7 +363,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         try (TraceEvent tracing = TraceEvent.scoped("OmniboxSuggestionsList.Measure");
-                TimingMetric metric = SuggestionsMetrics.recordSuggestionListMeasureTime()) {
+                TimingMetric metric = OmniboxMetrics.recordSuggestionListMeasureTime()) {
             OmniboxAlignment omniboxAlignment = mEmbedder.getCurrentAlignment();
             maybeUpdateLayoutParams(omniboxAlignment.top);
             boolean useAlignmentSpecifiedHeight = OmniboxFeatures.omniboxConsumesImeInsets();
@@ -457,7 +459,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         try (TraceEvent tracing = TraceEvent.scoped("OmniboxSuggestionsList.Layout");
-                TimingMetric metric = SuggestionsMetrics.recordSuggestionListLayoutTime()) {
+                TimingMetric metric = OmniboxMetrics.recordSuggestionListLayoutTime()) {
             super.onLayout(changed, l, t, r, b);
         }
     }

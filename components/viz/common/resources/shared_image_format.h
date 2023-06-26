@@ -11,6 +11,7 @@
 
 #include "base/check.h"
 #include "components/viz/common/resources/resource_format.h"
+#include "components/viz/common/viz_resource_format_export.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "mojo/public/cpp/bindings/union_traits.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -27,7 +28,7 @@ class MultiplanarFormatDataView;
 // images (eg. RGBA) or multiplanar images (eg. NV12). This format can be
 // either ResourceFormat or MultiplanarFormat (PlaneConfig + Subsampling +
 // ChannelFormat).
-class SharedImageFormat {
+class VIZ_RESOURCE_FORMAT_EXPORT SharedImageFormat {
  public:
   // Specifies how YUV (and optionally A) are divided among planes. Planes are
   // separated by underscores in the enum value names. Within each plane the
@@ -121,6 +122,9 @@ class SharedImageFormat {
   // if size in bytes overflows. Includes all planes for multiplanar formats.
   size_t EstimatedSizeInBytes(const gfx::Size& size) const;
 
+  // Returns true if the size in bytes doesn't overflow size_t.
+  bool VerifySizeInBytes(const gfx::Size& size) const;
+
   // Returns number of channels for a plane for multiplanar formats.
   int NumChannelsInPlane(int plane_index) const;
 
@@ -142,6 +146,10 @@ class SharedImageFormat {
   // Returns true if format is legacy multiplanar ResourceFormat i.e.
   // YUV_420_BIPLANAR, YVU_420, YUVA_420_TRIPLANAR, P010.
   bool IsLegacyMultiplanar() const;
+
+  // NOTE: Supported only for true single-plane formats (i.e., formats for
+  // which is_single_plane() is true and IsLegacyMultiplanar() is false).
+  int BitsPerPixel() const;
 
   bool operator==(const SharedImageFormat& o) const;
   bool operator!=(const SharedImageFormat& o) const;

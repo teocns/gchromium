@@ -23,6 +23,7 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_log.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "build/config/compiler/compiler_buildflags.h"
@@ -97,10 +98,6 @@
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chromeos/startup/startup_switches.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 #if BUILDFLAG(IS_LINUX)
 #include "chrome/browser/metrics/pressure/pressure_metrics_reporter.h"
 #endif  // BUILDFLAG(IS_LINUX)
@@ -109,6 +106,10 @@
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/user_manager/user_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#include "components/power_metrics/system_power_monitor.h"
+#endif
 
 namespace {
 
@@ -629,16 +630,6 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
     ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(trial_name,
                                                               group_name);
   }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Register a synthetic finch trial for whether the zygote hugepage remap
-  // feature is enabled.
-  bool hugepage_remap = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kZygoteHugepageRemap);
-  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
-      "ZygoteHugepageRemap", hugepage_remap ? "Enabled" : "Disabled",
-      variations::SyntheticTrialAnnotationMode::kCurrentLog);
-#endif
 }
 
 void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
@@ -740,6 +731,11 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
 #if BUILDFLAG(IS_LINUX)
   pressure_metrics_reporter_ = std::make_unique<PressureMetricsReporter>();
 #endif  // BUILDFLAG(IS_LINUX)
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(
+      power_metrics::SystemPowerMonitor::GetInstance());
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
   HandleEnableBenchmarkingCountdownAsync();
 }

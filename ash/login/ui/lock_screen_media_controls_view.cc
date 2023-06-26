@@ -14,12 +14,12 @@
 #include "ash/shell_delegate.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_id.h"
-#include "ash/style/ash_color_provider.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/media_message_center/media_controls_progress_view.h"
 #include "components/media_message_center/media_notification_util.h"
 #include "components/vector_icons/vector_icons.h"
@@ -30,6 +30,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -262,8 +263,12 @@ LockScreenMediaControlsView::LockScreenMediaControlsView(
 
   contents_view_->SetPaintToLayer();  // Needed for opacity animation.
   contents_view_->layer()->SetFillsBoundsOpaquely(false);
+  ui::ColorId background_color_id =
+      chromeos::features::IsJellyEnabled()
+          ? static_cast<ui::ColorId>(cros_tokens::kCrosSysScrim2)
+          : kColorAshShieldAndBase80;
   contents_view_->SetBackground(views::CreateThemedRoundedRectBackground(
-      kColorAshShieldAndBase80, kMediaControlsCornerRadius));
+      background_color_id, kMediaControlsCornerRadius));
 
   // |header_row_| contains the app icon and source title of the current media
   // session. It also contains the close button.
@@ -328,7 +333,9 @@ LockScreenMediaControlsView::LockScreenMediaControlsView(
                               base::Unretained(this)));
   progress_ = contents_view_->AddChildView(std::move(progress_view));
 
-  UpdateColors();
+  progress_->SetForegroundColorId(kColorAshProgressBarColorForeground);
+  progress_->SetBackgroundColorId(kColorAshProgressBarColorBackground);
+  progress_->SetTextColorId(kColorAshTextColorPrimary);
 
   // |button_row_| contains the buttons for controlling playback.
   auto button_row = std::make_unique<NonAccessibleView>();
@@ -504,11 +511,6 @@ void LockScreenMediaControlsView::OnMouseExited(const ui::MouseEvent& event) {
   }
 
   header_row_->SetForceShowCloseButton(false);
-}
-
-void LockScreenMediaControlsView::OnThemeChanged() {
-  views::View::OnThemeChanged();
-  UpdateColors();
 }
 
 void LockScreenMediaControlsView::MediaSessionInfoChanged(
@@ -916,17 +918,6 @@ void LockScreenMediaControlsView::RunResetControlsAnimation() {
 
   contents_view_->layer()->SetTransform(gfx::Transform());
   contents_view_->layer()->SetOpacity(1);
-}
-
-void LockScreenMediaControlsView::UpdateColors() {
-  const auto* color_provider = AshColorProvider::Get();
-
-  progress_->SetForegroundColor(color_provider->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kProgressBarColorForeground));
-  progress_->SetBackgroundColor(color_provider->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kProgressBarColorBackground));
-  progress_->SetTextColor(color_provider->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary));
 }
 
 BEGIN_METADATA(LockScreenMediaControlsView, views::View)

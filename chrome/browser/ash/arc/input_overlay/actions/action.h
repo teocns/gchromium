@@ -18,9 +18,7 @@
 #include "chrome/browser/ash/arc/input_overlay/actions/position.h"
 #include "chrome/browser/ash/arc/input_overlay/constants.h"
 #include "chrome/browser/ash/arc/input_overlay/db/proto/app_data.pb.h"
-#include "chrome/browser/ash/arc/input_overlay/touch_injector.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/action_label.h"
-#include "chrome/browser/ash/arc/input_overlay/ui/action_view.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -87,6 +85,7 @@ class Action {
   // |input_element| should overlap the current displayed binding. If it is
   // partially overlapped, then we only unbind the overlapped input.
   virtual void UnbindInput(const InputElement& input_element) = 0;
+  virtual ActionType GetType() = 0;
 
   // This is called for editing the actions before change is saved. Or for
   // loading the customized data to override the default input mapping.
@@ -98,7 +97,6 @@ class Action {
   void ResetPendingBind();
 
   void PrepareToBindPosition(const gfx::Point& new_touch_center);
-  void PrepareToBindPosition(std::unique_ptr<Position> position);
 
   // Restore the input binding back to the original binding.
   void RestoreToDefault();
@@ -151,9 +149,6 @@ class Action {
   bool support_modifier_key() const { return support_modifier_key_; }
   ActionView* action_view() const { return action_view_; }
   void set_action_view(ActionView* action_view) { action_view_ = action_view; }
-
-  bool deleted() const { return deleted_; }
-  void set_deleted(bool deleted) { deleted_ = deleted; }
 
  protected:
   // |touch_injector| must be non-NULL and own this Action.
@@ -215,9 +210,11 @@ class Action {
   absl::optional<float> radius_;
   // By default, it doesn't support modifier key.
   bool support_modifier_key_ = false;
-  raw_ptr<ActionView> action_view_ = nullptr;
+  raw_ptr<ActionView, DanglingUntriaged> action_view_ = nullptr;
 
  private:
+  friend class TouchInjectorTest;
+
   void OnTouchReleased();
   void OnTouchCancelled();
   // Create a touch event of |type| with |time_stamp| and save it
@@ -226,8 +223,7 @@ class Action {
                         const base::TimeTicks& time_stamp,
                         std::list<ui::TouchEvent>& touch_events);
 
-  // Mainly for default action to mark if it is deleted.
-  bool deleted_ = false;
+  void PrepareToBindPositionForTesting(std::unique_ptr<Position> position);
 
   // Corresponds to |kArcInputOverlayBeta| flag to turn on/off the editor
   // feature of adding or removing actions.

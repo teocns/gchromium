@@ -126,8 +126,12 @@ class ASH_EXPORT VideoConferenceTray
   std::u16string GetAccessibleNameForBubble() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
   void ClickedOutsideBubble() override;
+  // No need to override since this view doesn't have an active/inactive state.
+  void UpdateTrayItemColor(bool is_active) override {}
   void HandleLocaleChange() override;
   void AnchorUpdated() override;
+  void OnAnimationEnded() override;
+  bool ShouldEnterPushedState(const ui::Event& event) override;
 
   // VideoConferenceTrayController::Observer:
   void OnHasMediaAppStateChange() override;
@@ -150,11 +154,14 @@ class ASH_EXPORT VideoConferenceTray
   // to the state in `VideoConferenceTrayController`.
   void UpdateTrayAndIconsState();
 
+  IconButton* GetToggleBubbleButtonForTest();
+
  private:
   friend class video_conference::BubbleViewTest;
   friend class video_conference::ReturnToAppPanelTest;
   friend class video_conference::ResourceDependencyTest;
   friend class video_conference::ToggleEffectsViewTest;
+  friend class VideoConferenceTrayControllerTest;
   friend class VideoConferenceTrayTest;
 
   // SessionObserver:

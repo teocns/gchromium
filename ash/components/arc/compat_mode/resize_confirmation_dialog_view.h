@@ -7,6 +7,7 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "ui/views/layout/box_layout_view.h"
 
 namespace aura {
@@ -14,9 +15,13 @@ class Window;
 }  // namespace aura
 
 namespace views {
-class MdTextButton;
 class Checkbox;
+class LabelButton;
 }  // namespace views
+
+namespace ash {
+class Checkbox;
+}  // namespace ash
 
 namespace arc {
 
@@ -33,8 +38,8 @@ class ResizeConfirmationDialogView : public views::BoxLayoutView {
    public:
     explicit TestApi(ResizeConfirmationDialogView* view) : view_(view) {}
 
-    views::MdTextButton* accept_button() const { return view_->accept_button_; }
-    views::MdTextButton* cancel_button() const { return view_->cancel_button_; }
+    views::LabelButton* accept_button() const { return view_->accept_button_; }
+    views::LabelButton* cancel_button() const { return view_->cancel_button_; }
     views::Checkbox* do_not_ask_checkbox() const {
       return view_->do_not_ask_checkbox_;
     }
@@ -66,9 +71,16 @@ class ResizeConfirmationDialogView : public views::BoxLayoutView {
 
   ResizeConfirmationCallback callback_;
 
-  views::Checkbox* do_not_ask_checkbox_{nullptr};
-  views::MdTextButton* accept_button_{nullptr};
-  views::MdTextButton* cancel_button_{nullptr};
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::Checkbox* do_not_ask_checkbox_{nullptr};
+  ash::Checkbox* do_not_ask_checkbox_jelly_{nullptr};
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::LabelButton* accept_button_{nullptr};
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION views::LabelButton* cancel_button_{nullptr};
 };
 
 }  // namespace arc

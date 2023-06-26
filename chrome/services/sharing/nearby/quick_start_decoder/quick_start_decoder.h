@@ -45,16 +45,26 @@ class QuickStartDecoder : public mojom::QuickStartDecoder {
   void DecodeNotifySourceOfUpdateResponse(
       const std::vector<uint8_t>& data,
       DecodeNotifySourceOfUpdateResponseCallback callback) override;
+
+  void DecodeUserVerificationResult(
+      const std::vector<uint8_t>& data,
+      DecodeUserVerificationResultCallback callback) override;
+
+  void DecodeUserVerificationRequested(
+      const std::vector<uint8_t>& data,
+      DecodeUserVerificationRequestedCallback callback) override;
   // mojom::QuickStartDecoder:
 
  private:
   friend class QuickStartDecoderTest;
-  mojom::BootstrapConfigurationsPtr DoDecodeBootstrapConfigurations(
-      const std::vector<uint8_t>& data);
+  void DoDecodeBootstrapConfigurations(
+      const std::vector<uint8_t>& data,
+      DecodeBootstrapConfigurationsCallback callback);
   mojom::GetAssertionResponsePtr DoDecodeGetAssertionResponse(
       const std::vector<uint8_t>& data);
-  mojom::GetWifiCredentialsResponsePtr DoDecodeWifiCredentialsResponse(
-      const std::vector<uint8_t>& data);
+  void DoDecodeWifiCredentialsResponse(
+      const std::vector<uint8_t>& data,
+      DecodeWifiCredentialsResponseCallback callback);
   absl::optional<std::vector<uint8_t>> ExtractFidoDataFromJsonResponse(
       const std::vector<uint8_t>& data);
   // If the kNotifySourceOfUpdateAckKey boolean is present in the response, this

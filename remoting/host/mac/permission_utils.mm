@@ -13,7 +13,6 @@
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
-#include "base/mac/scoped_nsobject.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/task/sequenced_task_runner.h"
@@ -25,6 +24,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 
 constexpr int kMinDialogWidthPx = 650;
@@ -34,17 +37,16 @@ constexpr int kMinDialogWidthPx = 650;
 constexpr NSString* kHostServiceName = @"ChromeRemoteDesktopHost";
 
 void ShowAccessibilityPermissionDialog() {
-  base::scoped_nsobject<NSAlert> alert([[NSAlert alloc] init]);
-  [alert setMessageText:l10n_util::GetNSStringF(
-                            IDS_ACCESSIBILITY_PERMISSION_DIALOG_TITLE,
-                            l10n_util::GetStringUTF16(IDS_PRODUCT_NAME))];
-  [alert setInformativeText:
-             l10n_util::GetNSStringF(
-                 IDS_ACCESSIBILITY_PERMISSION_DIALOG_BODY_TEXT,
-                 l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
-                 l10n_util::GetStringUTF16(
-                     IDS_ACCESSIBILITY_PERMISSION_DIALOG_OPEN_BUTTON),
-                 base::SysNSStringToUTF16(kHostServiceName))];
+  NSAlert* alert = [[NSAlert alloc] init];
+  alert.messageText =
+      l10n_util::GetNSStringF(IDS_ACCESSIBILITY_PERMISSION_DIALOG_TITLE,
+                              l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
+  alert.informativeText = l10n_util::GetNSStringF(
+      IDS_ACCESSIBILITY_PERMISSION_DIALOG_BODY_TEXT,
+      l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
+      l10n_util::GetStringUTF16(
+          IDS_ACCESSIBILITY_PERMISSION_DIALOG_OPEN_BUTTON),
+      base::SysNSStringToUTF16(kHostServiceName));
   [alert
       addButtonWithTitle:l10n_util::GetNSString(
                              IDS_ACCESSIBILITY_PERMISSION_DIALOG_OPEN_BUTTON)];
@@ -55,14 +57,14 @@ void ShowAccessibilityPermissionDialog() {
   // Increase the alert width so the title doesn't wrap and the body text is
   // less scrunched.  Note that we only want to set a min-width, we don't
   // want to shrink the dialog if it is already larger than our min value.
-  NSWindow* alert_window = [alert window];
-  NSRect frame = [alert_window frame];
+  NSWindow* alert_window = alert.window;
+  NSRect frame = alert_window.frame;
   if (frame.size.width < kMinDialogWidthPx) {
     frame.size.width = kMinDialogWidthPx;
   }
   [alert_window setFrame:frame display:YES];
 
-  [alert setAlertStyle:NSAlertStyleWarning];
+  alert.alertStyle = NSAlertStyleWarning;
   [alert_window makeKeyWindow];
   if ([alert runModal] == NSAlertFirstButtonReturn) {
     base::mac::OpenSystemSettingsPane(
@@ -71,17 +73,16 @@ void ShowAccessibilityPermissionDialog() {
 }
 
 void ShowScreenRecordingPermissionDialog() {
-  base::scoped_nsobject<NSAlert> alert([[NSAlert alloc] init]);
-  [alert setMessageText:l10n_util::GetNSStringF(
-                            IDS_SCREEN_RECORDING_PERMISSION_DIALOG_TITLE,
-                            l10n_util::GetStringUTF16(IDS_PRODUCT_NAME))];
-  [alert setInformativeText:
-             l10n_util::GetNSStringF(
-                 IDS_SCREEN_RECORDING_PERMISSION_DIALOG_BODY_TEXT,
-                 l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
-                 l10n_util::GetStringUTF16(
-                     IDS_SCREEN_RECORDING_PERMISSION_DIALOG_OPEN_BUTTON),
-                 base::SysNSStringToUTF16(kHostServiceName))];
+  NSAlert* alert = [[NSAlert alloc] init];
+  alert.messageText =
+      l10n_util::GetNSStringF(IDS_SCREEN_RECORDING_PERMISSION_DIALOG_TITLE,
+                              l10n_util::GetStringUTF16(IDS_PRODUCT_NAME));
+  alert.informativeText = l10n_util::GetNSStringF(
+      IDS_SCREEN_RECORDING_PERMISSION_DIALOG_BODY_TEXT,
+      l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
+      l10n_util::GetStringUTF16(
+          IDS_SCREEN_RECORDING_PERMISSION_DIALOG_OPEN_BUTTON),
+      base::SysNSStringToUTF16(kHostServiceName));
   [alert addButtonWithTitle:
              l10n_util::GetNSString(
                  IDS_SCREEN_RECORDING_PERMISSION_DIALOG_OPEN_BUTTON)];
@@ -92,14 +93,14 @@ void ShowScreenRecordingPermissionDialog() {
   // Increase the alert width so the title doesn't wrap and the body text is
   // less scrunched.  Note that we only want to set a min-width, we don't
   // want to shrink the dialog if it is already larger than our min value.
-  NSWindow* alert_window = [alert window];
-  NSRect frame = [alert_window frame];
+  NSWindow* alert_window = alert.window;
+  NSRect frame = alert_window.frame;
   if (frame.size.width < kMinDialogWidthPx) {
     frame.size.width = kMinDialogWidthPx;
   }
   [alert_window setFrame:frame display:YES];
 
-  [alert setAlertStyle:NSAlertStyleWarning];
+  alert.alertStyle = NSAlertStyleWarning;
   [alert_window makeKeyWindow];
   if ([alert runModal] == NSAlertFirstButtonReturn) {
     base::mac::OpenSystemSettingsPane(
@@ -109,13 +110,9 @@ void ShowScreenRecordingPermissionDialog() {
 
 }  // namespace
 
-namespace remoting {
-namespace mac {
+namespace remoting::mac {
 
 bool CanInjectInput() {
-  if (!base::mac::IsAtLeastOS10_14()) {
-    return true;
-  }
   return AXIsProcessTrusted();
 }
 
@@ -123,9 +120,9 @@ bool CanRecordScreen() {
   return ui::IsScreenCaptureAllowed();
 }
 
-// MacOs 10.14+ requires an additional runtime permission for injecting input
-// using CGEventPost (we use this in our input injector for Mac).  This method
-// will request that the user enable this permission for us if they are on an
+// macOS requires an additional runtime permission for injecting input using
+// CGEventPost (we use this in our input injector for Mac).  This method will
+// request that the user enable this permission for us if they are on an
 // affected version and the permission has not already been approved.
 void PromptUserForAccessibilityPermissionIfNeeded(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
@@ -140,10 +137,9 @@ void PromptUserForAccessibilityPermissionIfNeeded(
                         base::BindOnce(&ShowAccessibilityPermissionDialog));
 }
 
-// MacOs 10.15+ requires an additional runtime permission for capturing the
-// screen.  This method will request that the user enable this permission for
-// us if they are on an affected version and the permission has not already
-// been approved.
+// macOS requires an additional runtime permission for capturing the screen.
+// This method will request that the user enable this permission for us if they
+// are on an affected version and the permission has not already been approved.
 void PromptUserForScreenRecordingPermissionIfNeeded(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   if (CanRecordScreen()) {
@@ -164,30 +160,22 @@ void PromptUserToChangeTrustStateIfNeeded(
 }
 
 bool CanCaptureAudio() {
-  if (@available(macOS 10.14, *)) {
-    NSInteger auth_status =
-        [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
-    return auth_status == AVAuthorizationStatusAuthorized;
-  }
-  return true;
+  NSInteger auth_status =
+      [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];
+  return auth_status == AVAuthorizationStatusAuthorized;
 }
 
 void RequestAudioCapturePermission(base::OnceCallback<void(bool)> callback) {
-  if (@available(macOS 10.14, *)) {
-    auto task_runner = base::SequencedTaskRunner::GetCurrentDefault();
-    __block auto block_callback = std::move(callback);
-    [AVCaptureDevice
-        requestAccessForMediaType:AVMediaTypeAudio
-                completionHandler:^(BOOL granted) {
-                  task_runner->PostTask(
-                      FROM_HERE,
-                      base::BindOnce(std::move(block_callback), granted));
-                }];
-    return;
-  }
-  // CanCaptureAudio() returns true for older OSes.
-  NOTREACHED();
+  auto task_runner = base::SequencedTaskRunner::GetCurrentDefault();
+  __block auto block_callback = std::move(callback);
+  [AVCaptureDevice
+      requestAccessForMediaType:AVMediaTypeAudio
+              completionHandler:^(BOOL granted) {
+                task_runner->PostTask(
+                    FROM_HERE,
+                    base::BindOnce(std::move(block_callback), granted));
+              }];
+  return;
 }
 
-}  // namespace mac
-}  // namespace remoting
+}  // namespace remoting::mac

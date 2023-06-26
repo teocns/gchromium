@@ -14,6 +14,7 @@
 #include "ash/shutdown_reason.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/icon_button.h"
+#include "ash/style/style_util.h"
 #include "ash/style/typography.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_utils.h"
@@ -26,7 +27,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/user_manager/user_type.h"
-#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/menu_separator_types.h"
@@ -171,41 +171,6 @@ class PowerButtonMenuDelegate : public ui::SimpleMenuModel {
 
   gfx::FontList font_list_;
 };
-
-// The power button container which contains 2 icons: a power icon and an arrow
-// down icon.
-class PowerButtonContainer : public views::Button {
- public:
-  explicit PowerButtonContainer(PressedCallback callback) : Button(callback) {
-    auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>());
-    layout->SetOrientation(views::BoxLayout::Orientation::kHorizontal);
-
-    auto* power_icon = AddChildView(std::make_unique<views::ImageView>());
-    power_icon->SetImage(ui::ImageModel::FromVectorIcon(
-        kUnifiedMenuPowerIcon, cros_tokens::kCrosSysOnSurface));
-    power_icon->SetImageSize(kIconSize);
-    auto* arrow_icon = AddChildView(std::make_unique<views::ImageView>());
-    // TODO(b/278747569): Might need to use a small style arrow down icon.
-    arrow_icon->SetImage(ui::ImageModel::FromVectorIcon(
-        vector_icons::kCaretDownIcon, cros_tokens::kCrosSysOnSurface));
-    arrow_icon->SetImageSize(kIconSize);
-
-    SetBorder(views::CreateEmptyBorder(gfx::Insets(6)));
-
-    // Paints this view to a layer so it will be on top of the
-    // `background_view_`
-    SetPaintToLayer();
-    layer()->SetFillsBoundsOpaquely(false);
-
-    SetAccessibleName(
-        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_POWER_MENU));
-    SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_POWER_MENU));
-  }
-  PowerButtonContainer(const PowerButtonContainer&) = delete;
-  PowerButtonContainer& operator=(const PowerButtonContainer&) = delete;
-  ~PowerButtonContainer() override = default;
-};
-
 }  // namespace
 
 class PowerButton::MenuController : public ui::SimpleMenuModel::Delegate,
@@ -371,6 +336,43 @@ class PowerButton::MenuController : public ui::SimpleMenuModel::Delegate,
   raw_ptr<PowerButton, ExperimentalAsh> power_button_ = nullptr;
 };
 
+PowerButtonContainer::PowerButtonContainer(PressedCallback callback)
+    : Button(callback) {
+  auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>());
+  layout->SetOrientation(views::BoxLayout::Orientation::kHorizontal);
+
+  power_icon_ = AddChildView(std::make_unique<views::ImageView>());
+  power_icon_->SetImage(ui::ImageModel::FromVectorIcon(
+      kUnifiedMenuPowerIcon, cros_tokens::kCrosSysOnSurface));
+  power_icon_->SetImageSize(kIconSize);
+  arrow_icon_ = AddChildView(std::make_unique<views::ImageView>());
+  arrow_icon_->SetID(VIEW_ID_QS_POWER_BUTTON_CHEVRON_ICON);
+  arrow_icon_->SetImage(ui::ImageModel::FromVectorIcon(
+      kChevronDownSmallIcon, cros_tokens::kCrosSysOnSurface));
+  arrow_icon_->SetImageSize(kIconSize);
+
+  SetBorder(views::CreateEmptyBorder(gfx::Insets(6)));
+
+  // Paints this view to a layer so it will be on top of the
+  // `background_view_`
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
+
+  SetAccessibleName(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_POWER_MENU));
+  SetTooltipText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_POWER_MENU));
+}
+
+PowerButtonContainer::~PowerButtonContainer() = default;
+
+void PowerButtonContainer::UpdateIconColor(bool is_active) {
+  auto icon_color_id = is_active ? cros_tokens::kCrosSysSystemOnPrimaryContainer
+                                 : cros_tokens::kCrosSysOnSurface;
+  power_icon_->SetImage(
+      ui::ImageModel::FromVectorIcon(kUnifiedMenuPowerIcon, icon_color_id));
+  arrow_icon_->SetImage(ui::ImageModel::FromVectorIcon(
+      is_active ? kChevronUpSmallIcon : kChevronDownSmallIcon, icon_color_id));
+}
+
 PowerButton::PowerButton(UnifiedSystemTrayController* tray_controller)
     : background_view_(AddChildView(std::make_unique<View>())),
       button_content_(AddChildView(std::make_unique<PowerButtonContainer>(
@@ -394,12 +396,16 @@ PowerButton::PowerButton(UnifiedSystemTrayController* tray_controller)
   set_context_menu_controller(context_menu_.get());
 
   // Installs the customized focus ring path generator for the button.
-  views::FocusRing::Install(button_content_);
-  views::FocusRing::Get(button_content_)
-      ->SetPathGenerator(
-          std::make_unique<HighlightPathGenerator>(/*power_button=*/this));
+  views::HighlightPathGenerator::Install(
+      button_content_,
+      std::make_unique<HighlightPathGenerator>(/*power_button=*/this));
   views::FocusRing::Get(button_content_)
       ->SetColorId(cros_tokens::kCrosSysPrimary);
+
+  // Ripple.
+  StyleUtil::SetUpInkDropForButton(button_content_, gfx::Insets(),
+                                   /*highlight_on_hover=*/false,
+                                   /*highlight_on_focus=*/false);
 }
 
 PowerButton::~PowerButton() = default;
@@ -407,6 +413,10 @@ PowerButton::~PowerButton() = default;
 bool PowerButton::IsMenuShowing() {
   auto* menu_runner = context_menu_->menu_runner_.get();
   return menu_runner && menu_runner->IsRunning();
+}
+
+views::MenuItemView* PowerButton::GetMenuViewForTesting() {
+  return context_menu_->root_menu_item_view_;
 }
 
 void PowerButton::OnThemeChanged() {
@@ -430,6 +440,7 @@ void PowerButton::UpdateView() {
     focus_ring->InvalidateLayout();
     focus_ring->SchedulePaint();
   }
+  button_content_->UpdateIconColor(/*is_active*/ IsMenuShowing());
 }
 
 void PowerButton::UpdateRoundedCorners() {
@@ -461,10 +472,6 @@ void PowerButton::OnButtonActivated(const ui::Event& event) {
       /*source=*/this, GetBoundsInScreen().CenterPoint(), type);
 
   UpdateView();
-}
-
-views::MenuItemView* PowerButton::GetMenuViewForTesting() {
-  return context_menu_->root_menu_item_view_;
 }
 
 }  // namespace ash

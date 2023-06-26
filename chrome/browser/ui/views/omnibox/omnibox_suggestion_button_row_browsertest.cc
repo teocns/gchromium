@@ -22,6 +22,7 @@
 #include "components/omnibox/browser/actions/omnibox_pedal.h"
 #include "components/omnibox/browser/actions/tab_switch_action.h"
 #include "components/omnibox/browser/autocomplete_match_classification.h"
+#include "components/omnibox/browser/omnibox_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
@@ -49,7 +50,7 @@ class OmniboxSuggestionButtonRowBrowserTest : public DialogBrowserTest {
 
     // Populate suggestions for the omnibox popup.
     AutocompleteController* autocomplete_controller =
-        omnibox_view->model()->autocomplete_controller();
+        omnibox_view->controller()->autocomplete_controller();
     AutocompleteResult& results = autocomplete_controller->result_;
     ACMatches matches;
     TermMatches termMatches = {{0, 0, 0}};
@@ -123,37 +124,37 @@ class OmniboxSuggestionButtonRowBrowserTest : public DialogBrowserTest {
   }
 
   bool VerifyUi() override {
-    OmniboxPopupViewViews* popup_view =
-        GetOmniboxViewViews()->GetPopupContentsViewForTesting();
+    OmniboxPopupView* popup_view =
+        GetOmniboxViewViews()->GetPopupViewForTesting();
     OmniboxEditModel* model = GetOmniboxViewViews()->model();
 
     model->SetPopupSelection(
         OmniboxPopupSelection(0, OmniboxPopupSelection::KEYWORD_MODE));
-    if (!VerifyActiveButtonText(popup_view->result_view_at(0), "Search")) {
+    if (!VerifyActiveButtonText(popup_view, 0, u"Search")) {
       return false;
     }
 
     model->SetPopupSelection(
         OmniboxPopupSelection(1, OmniboxPopupSelection::FOCUSED_BUTTON_ACTION));
-    if (!VerifyActiveButtonText(popup_view->result_view_at(1), "Switch")) {
+    if (!VerifyActiveButtonText(popup_view, 1, u"Switch")) {
       return false;
     }
 
     model->SetPopupSelection(
         OmniboxPopupSelection(2, OmniboxPopupSelection::FOCUSED_BUTTON_ACTION));
-    if (!VerifyActiveButtonText(popup_view->result_view_at(2), "Clear")) {
+    if (!VerifyActiveButtonText(popup_view, 2, u"Clear")) {
       return false;
     }
 
     model->SetPopupSelection(
         OmniboxPopupSelection(3, OmniboxPopupSelection::KEYWORD_MODE));
-    if (!VerifyActiveButtonText(popup_view->result_view_at(3), "Search")) {
+    if (!VerifyActiveButtonText(popup_view, 3, u"Search")) {
       return false;
     }
 
     model->SetPopupSelection(
         OmniboxPopupSelection(3, OmniboxPopupSelection::FOCUSED_BUTTON_ACTION));
-    if (!VerifyActiveButtonText(popup_view->result_view_at(3), "Switch")) {
+    if (!VerifyActiveButtonText(popup_view, 3, u"Switch")) {
       return false;
     }
 
@@ -169,12 +170,11 @@ class OmniboxSuggestionButtonRowBrowserTest : public DialogBrowserTest {
     return static_cast<OmniboxViewViews*>(location_bar->GetOmniboxView());
   }
 
-  bool VerifyActiveButtonText(OmniboxResultView* result_view,
-                              std::string text) {
-    views::LabelButton* button = static_cast<views::LabelButton*>(
-        result_view->GetActiveAuxiliaryButtonForAccessibility());
-    return button->GetText().find(base::ASCIIToUTF16(text)) !=
-           std::string::npos;
+  bool VerifyActiveButtonText(OmniboxPopupView* popup_view,
+                              size_t result_index,
+                              const std::u16string& text) {
+    return popup_view->GetAccessibleButtonTextForResult(result_index)
+               .find(text) != std::u16string::npos;
   }
 
  private:

@@ -4,8 +4,9 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -15,7 +16,6 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
@@ -23,6 +23,7 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
+import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowSortOrder;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -54,7 +55,7 @@ public class BookmarkUiPrefsTest {
 
     @After
     public void tearDown() {
-        mSharedPreferencesManager.removeKey(ChromePreferenceKeys.BOOKMARK_VISUALS_PREF);
+        mSharedPreferencesManager.removeKey(ChromePreferenceKeys.BOOKMARKS_VISUALS_PREF);
     }
 
     @Test
@@ -64,7 +65,7 @@ public class BookmarkUiPrefsTest {
         ShoppingFeatures.setShoppingListEligibleForTesting(true);
 
         Assert.assertEquals(
-                BookmarkRowDisplayPref.VISUAL, BookmarkUiPrefs.getBookmarkRowDisplayPref());
+                BookmarkRowDisplayPref.VISUAL, mBookmarkUiPrefs.getBookmarkRowDisplayPref());
 
         ShoppingFeatures.setShoppingListEligibleForTesting(false);
     }
@@ -77,14 +78,14 @@ public class BookmarkUiPrefsTest {
 
         // Nothing has been written to shared prefs manager.
         Assert.assertEquals(
-                BookmarkRowDisplayPref.COMPACT, BookmarkUiPrefs.getBookmarkRowDisplayPref());
+                BookmarkRowDisplayPref.COMPACT, mBookmarkUiPrefs.getBookmarkRowDisplayPref());
     }
 
     @Test
     public void initialBookmarkRowDisplayPref() {
         // Nothing has been written to shared prefs manager.
         Assert.assertEquals(
-                BookmarkRowDisplayPref.COMPACT, BookmarkUiPrefs.getBookmarkRowDisplayPref());
+                BookmarkRowDisplayPref.VISUAL, mBookmarkUiPrefs.getBookmarkRowDisplayPref());
     }
 
     @Test
@@ -92,24 +93,42 @@ public class BookmarkUiPrefsTest {
     public void returnsStoredPref() {
         mBookmarkUiPrefs.setBookmarkRowDisplayPref(BookmarkRowDisplayPref.VISUAL);
         Assert.assertEquals(
-                BookmarkRowDisplayPref.VISUAL, BookmarkUiPrefs.getBookmarkRowDisplayPref());
+                BookmarkRowDisplayPref.VISUAL, mBookmarkUiPrefs.getBookmarkRowDisplayPref());
 
         mBookmarkUiPrefs.setBookmarkRowDisplayPref(BookmarkRowDisplayPref.COMPACT);
         Assert.assertEquals(
-                BookmarkRowDisplayPref.COMPACT, BookmarkUiPrefs.getBookmarkRowDisplayPref());
+                BookmarkRowDisplayPref.COMPACT, mBookmarkUiPrefs.getBookmarkRowDisplayPref());
     }
 
     @Test
     public void setBookmarkRowDisplayPref() {
-        BookmarkUiPrefs.Observer obs = Mockito.mock(BookmarkUiPrefs.Observer.class);
-
-        mBookmarkUiPrefs.addObserver(obs);
+        mBookmarkUiPrefs.addObserver(mObserver);
         mBookmarkUiPrefs.setBookmarkRowDisplayPref(BookmarkRowDisplayPref.COMPACT);
-        verify(obs).onBookmarkRowDisplayPrefChanged();
+        verify(mObserver).onBookmarkRowDisplayPrefChanged(BookmarkRowDisplayPref.COMPACT);
 
-        mBookmarkUiPrefs.removeObserver(obs);
+        reset(mObserver);
+        mBookmarkUiPrefs.removeObserver(mObserver);
         mBookmarkUiPrefs.setBookmarkRowDisplayPref(BookmarkRowDisplayPref.COMPACT);
-        // The observer method shouldn't have been called again.
-        verify(obs, times(1)).onBookmarkRowDisplayPrefChanged();
+        verifyNoInteractions(mObserver);
+    }
+
+    @Test
+    public void testSortOrder() {
+        // Default should be REVERSE_CHRONOLOGICAL.
+        Assert.assertEquals(BookmarkRowSortOrder.REVERSE_CHRONOLOGICAL,
+                mBookmarkUiPrefs.getBookmarkRowSortOrder());
+
+        mBookmarkUiPrefs.addObserver(mObserver);
+        mBookmarkUiPrefs.setBookmarkRowSortOrder(BookmarkRowSortOrder.ALPHABETICAL);
+        verify(mObserver).onBookmarkRowSortOrderChanged(BookmarkRowSortOrder.ALPHABETICAL);
+        Assert.assertEquals(
+                BookmarkRowSortOrder.ALPHABETICAL, mBookmarkUiPrefs.getBookmarkRowSortOrder());
+
+        reset(mObserver);
+        mBookmarkUiPrefs.removeObserver(mObserver);
+        mBookmarkUiPrefs.setBookmarkRowSortOrder(BookmarkRowSortOrder.CHRONOLOGICAL);
+        verifyNoInteractions(mObserver);
+        Assert.assertEquals(
+                BookmarkRowSortOrder.CHRONOLOGICAL, mBookmarkUiPrefs.getBookmarkRowSortOrder());
     }
 }

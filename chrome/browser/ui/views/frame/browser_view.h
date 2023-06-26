@@ -77,7 +77,6 @@ class FullscreenControlHost;
 class InfoBarContainerView;
 class LocationBarView;
 class SidePanel;
-class SidePanelCoordinator;
 class StatusBubbleViews;
 class TabSearchBubbleHost;
 class TabStrip;
@@ -165,12 +164,6 @@ class BrowserView : public BrowserWindow,
 
   void SetDownloadShelfForTest(DownloadShelf* download_shelf);
 
-  // Initializes (or re-initializes) the status bubble.  We try to only create
-  // the bubble once and re-use it for the life of the browser, but certain
-  // events (such as changing enabling/disabling Aero on Win) can force a need
-  // to change some of the bubble's creation parameters.
-  void InitStatusBubble();
-
   // Returns the constraining bounding box that should be used to lay out the
   // FindBar within. This is _not_ the size of the find bar, just the bounding
   // box it should be laid out within. The coordinate system of the returned
@@ -192,6 +185,7 @@ class BrowserView : public BrowserWindow,
 
 #if BUILDFLAG(IS_MAC)
   views::Widget* overlay_widget() { return overlay_widget_.get(); }
+  views::View* overlay_view() { return overlay_view_.get(); }
   views::Widget* tab_overlay_widget() { return tab_overlay_widget_.get(); }
   views::View* tab_overlay_view() { return tab_overlay_view_.get(); }
 
@@ -213,10 +207,6 @@ class BrowserView : public BrowserWindow,
   views::View* contents_container() { return contents_container_; }
 
   SidePanel* unified_side_panel() { return unified_side_panel_; }
-
-  SidePanelCoordinator* side_panel_coordinator() {
-    return side_panel_coordinator_.get();
-  }
 
   void set_contents_border_widget(views::Widget* contents_border_widget) {
     GetBrowserViewLayout()->set_contents_border_widget(contents_border_widget);
@@ -411,6 +401,9 @@ class BrowserView : public BrowserWindow,
   // view of the update.
   void ToggleWindowControlsOverlayEnabled(base::OnceClosure done);
 
+  bool ChildOfAnchorWidgetContainsPoint(
+      const gfx::Point& point_in_browser_view_coords);
+
   bool borderless_mode_enabled_for_testing() const {
     return borderless_mode_enabled_;
   }
@@ -464,7 +457,6 @@ class BrowserView : public BrowserWindow,
                           int index,
                           int reason) override;
   void OnTabDetached(content::WebContents* contents, bool was_active) override;
-  void OnTabRestored(int command_id) override;
   void ZoomChangedForActiveTab(bool can_show_bubble) override;
   gfx::Rect GetRestoredBounds() const override;
   ui::WindowShowState GetRestoredState() const override;
@@ -520,9 +512,7 @@ class BrowserView : public BrowserWindow,
   bool IsToolbarShowing() const override;
   bool IsLocationBarVisible() const override;
   bool IsBorderlessModeEnabled() const override;
-  void ShowSidePanel(
-      absl::optional<SidePanelEntryId> entry_id,
-      absl::optional<SidePanelOpenTrigger> open_trigger) override;
+  void ShowChromeLabs() override;
 
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
@@ -538,6 +528,9 @@ class BrowserView : public BrowserWindow,
   sharing_hub::ScreenshotCapturedBubble* ShowScreenshotCapturedBubble(
       content::WebContents* contents,
       const gfx::Image& image) override;
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  void MaybeShowIOSPasswordPromoBubble() override;
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
   qrcode_generator::QRCodeGeneratorBubbleView* ShowQRCodeGeneratorBubble(
       content::WebContents* contents,
       const GURL& url,
@@ -1094,8 +1087,6 @@ class BrowserView : public BrowserWindow,
   // The side search side panel.
   raw_ptr<views::View, DanglingUntriaged> left_aligned_side_panel_separator_ =
       nullptr;
-
-  std::unique_ptr<SidePanelCoordinator> side_panel_coordinator_;
 
   // Provides access to the toolbar buttons this browser view uses. Buttons may
   // appear in a hosted app frame or in a tabbed UI toolbar.

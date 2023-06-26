@@ -26,9 +26,9 @@
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/network_service_util.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/network_service_util.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -153,8 +153,12 @@ NetworkServiceClient::~NetworkServiceClient() {
   }
 }
 
-void NetworkServiceClient::OnCertDBChanged() {
-  GetNetworkService()->OnCertDBChanged();
+void NetworkServiceClient::OnTrustStoreChanged() {
+  GetNetworkService()->OnTrustStoreChanged();
+}
+
+void NetworkServiceClient::OnClientCertStoreChanged() {
+  GetNetworkService()->OnClientCertStoreChanged();
 }
 
 void NetworkServiceClient::OnMemoryPressure(
@@ -302,6 +306,15 @@ void NetworkServiceClient::OnAuthRequired(
   auth_challenge_responder_remote->OnAuthCredentials(absl::nullopt);
 }
 
+void NetworkServiceClient::OnPrivateNetworkAccessPermissionRequired(
+    const GURL& url,
+    const net::IPAddress& ip_address,
+    const std::string& private_network_device_id,
+    const std::string& private_network_device_name,
+    OnPrivateNetworkAccessPermissionRequiredCallback callback) {
+  std::move(callback).Run(false);
+}
+
 void NetworkServiceClient::OnClearSiteData(
     const GURL& url,
     const std::string& header_value,
@@ -325,6 +338,13 @@ void NetworkServiceClient::OnDataUseUpdate(
   GetContentClient()->browser()->OnNetworkServiceDataUseUpdate(
       GlobalRenderFrameHostId(), network_traffic_annotation_id_hash, recv_bytes,
       sent_bytes);
+}
+
+void NetworkServiceClient::OnSharedStorageHeaderReceived(
+    const url::Origin& request_origin,
+    std::vector<network::mojom::SharedStorageOperationPtr> operations,
+    OnSharedStorageHeaderReceivedCallback callback) {
+  std::move(callback).Run();
 }
 
 void NetworkServiceClient::Clone(

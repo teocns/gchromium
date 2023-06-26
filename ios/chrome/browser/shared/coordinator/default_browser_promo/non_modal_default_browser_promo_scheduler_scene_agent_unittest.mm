@@ -10,16 +10,12 @@
 #import "base/test/task_environment.h"
 #import "base/time/time.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
-#import "ios/chrome/app/application_delegate/browser_launcher.h"
 #import "ios/chrome/app/application_delegate/fake_startup_information.h"
-#import "ios/chrome/app/main_application_delegate.h"
 #import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/default_browser/utils_test_support.h"
 #import "ios/chrome/browser/infobars/infobar_ios.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/infobars/test/fake_infobar_ios.h"
-#import "ios/chrome/browser/main/browser_provider.h"
-#import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/overlays/public/common/infobars/infobar_overlay_request_config.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
@@ -27,13 +23,16 @@
 #import "ios/chrome/browser/overlays/test/fake_overlay_presentation_context.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/coordinator/scene/test/fake_scene_state.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider.h"
+#import "ios/chrome/browser/shared/model/browser/browser_provider_interface.h"
+#import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_commands.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_metrics_util.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_opener.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "testing/gtest/include/gtest/gtest.h"
@@ -57,16 +56,10 @@ class NonModalDefaultBrowserPromoSchedulerSceneAgentTest : public PlatformTest {
     std::unique_ptr<TestChromeBrowserState> chrome_browser_state =
         test_cbs_builder.Build();
 
-    id browser_launcher_mock =
-        [OCMockObject mockForProtocol:@protocol(BrowserLauncher)];
     FakeStartupInformation* startup_information =
         [[FakeStartupInformation alloc] init];
-    id main_application_delegate =
-        [OCMockObject mockForClass:[MainApplicationDelegate class]];
     app_state_ =
-        [[AppState alloc] initWithBrowserLauncher:browser_launcher_mock
-                               startupInformation:startup_information
-                              applicationDelegate:main_application_delegate];
+        [[AppState alloc] initWithStartupInformation:startup_information];
     app_state_.mainBrowserState = chrome_browser_state.get();
     scene_state_ =
         [[FakeSceneState alloc] initWithAppState:app_state_

@@ -29,7 +29,7 @@ namespace ash::cloud_upload {
 class CloudUploadNotificationManager
     : public base::RefCounted<CloudUploadNotificationManager> {
  public:
-  using HandleNotificationClickCallback =
+  using HandleCompleteNotificationClickCallback =
       base::OnceCallback<void(base::FilePath)>;
 
   CloudUploadNotificationManager(
@@ -65,10 +65,10 @@ class CloudUploadNotificationManager
   }
 
   // Used in tests to set a callback to check if
-  // |HandleNotificationClick| is called with the expected
+  // |HandleCompleteNotificationClick| is called with the expected
   // |destination_path_|.
-  void SetHandleNotificationClickCallbackForTesting(
-      HandleNotificationClickCallback callback) {
+  void SetHandleCompleteNotificationClickCallbackForTesting(
+      HandleCompleteNotificationClickCallback callback) {
     callback_for_testing_ = std::move(callback);
   }
 
@@ -102,8 +102,11 @@ class CloudUploadNotificationManager
   // closed, timers are interrupted and the completion callback has been called.
   void CloseNotification();
 
+  // "Sign in" click handler for authentication error notification.
+  void HandleErrorNotificationClick(absl::optional<int> button_index);
+
   // "Show in folder" click handler for upload complete notification.
-  void HandleNotificationClick(absl::optional<int> button_index);
+  void HandleCompleteNotificationClick(absl::optional<int> button_index);
 
   // A state machine and the possible transitions. The state of showing the
   // error notification is not explicit because it is never used to determine
@@ -132,7 +135,7 @@ class CloudUploadNotificationManager
   file_manager::io_task::OperationType operation_type_;
   base::FilePath destination_path_;
   base::OnceClosure callback_;
-  HandleNotificationClickCallback callback_for_testing_;
+  HandleCompleteNotificationClickCallback callback_for_testing_;
   base::OneShotTimer in_progress_timer_;
   base::OneShotTimer complete_notification_timer_;
   State state_ = State::kUninitialized;

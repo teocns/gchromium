@@ -22,7 +22,7 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_types.h"
 #include "ui/base/ui_base_types.h"
-#include "ui/color/color_provider_manager.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/color/color_provider_source.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/event_source.h"
@@ -305,8 +305,8 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     absl::optional<int> shadow_elevation;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    ui::ColorProviderManager::ElevationMode background_elevation =
-        ui::ColorProviderManager::ElevationMode::kLow;
+    ui::ColorProviderKey::ElevationMode background_elevation =
+        ui::ColorProviderKey::ElevationMode::kLow;
 #endif
 
     // The window corner radius. May be ignored on some platforms.
@@ -349,7 +349,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     // that way throughout. This should simply be a NativeWindow - windows are
     // parented to other windows, not to views, and it being a view confuses
     // the concept with bubble anchoring a la BubbleDialogDelegateView.
-    gfx::NativeView parent = nullptr;
+    gfx::NativeView parent = gfx::NativeView();
 
     // Specifies the initial bounds of the Widget. Default is empty, which means
     // the NativeWidget may specify a default size. If the parent is specified,
@@ -385,7 +385,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     // where it wants your window placed.) Nullptr is not allowed on Windows and
     // Linux. Nullptr is allowed on Chrome OS, which will place the window on
     // the default desktop for new windows.
-    gfx::NativeWindow context = nullptr;
+    gfx::NativeWindow context = gfx::NativeWindow();
 
     // If true, forces the window to be shown in the taskbar, even for window
     // types that do not appear in the taskbar by default (popup and bubble).
@@ -819,8 +819,8 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   virtual const ui::ThemeProvider* GetThemeProvider() const;
 
   // Returns a custom theme object suitable for use in a
-  // ColorProviderManager::Key. If this is null, the window has no custom theme.
-  virtual ui::ColorProviderManager::ThemeInitializerSupplier* GetCustomTheme()
+  // ColorProviderKey. If this is null, the window has no custom theme.
+  virtual ui::ColorProviderKey::ThemeInitializerSupplier* GetCustomTheme()
       const;
 
   ui::NativeTheme* GetNativeTheme() {
@@ -921,10 +921,6 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Determines whether the window contents should be rendered transparently
   // (for example, so that they can overhang onto the window title bar).
   bool ShouldWindowContentsBeTransparent() const;
-
-  // Forces the frame into the alternate frame type (custom or native) depending
-  // on its current state.
-  void DebugToggleFrameType();
 
   // Tell the window that something caused the frame type to change.
   void FrameTypeChanged();
@@ -1141,7 +1137,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   // Sets an override for `color_mode` when `GetColorProvider()` is requested.
   // e.g. if set to kDark, colors will always be for the dark theme.
   void SetColorModeOverride(
-      absl::optional<ui::ColorProviderManager::ColorMode> color_mode);
+      absl::optional<ui::ColorProviderKey::ColorMode> color_mode);
 
   // ui::ColorProviderSource:
   const ui::ColorProvider* GetColorProvider() const override;
@@ -1187,8 +1183,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   void SetVisible(bool visible);
 
   // ui::ColorProviderSource:
-  ui::ColorProviderManager::Key GetColorProviderKey() const override;
-  absl::optional<SkColor> GetUserColor() const override;
+  ui::ColorProviderKey GetColorProviderKey() const override;
 
  private:
   // Type of ways to ignore activation changes.
@@ -1322,13 +1317,13 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   bool is_secondary_widget_ = true;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  ui::ColorProviderManager::ElevationMode background_elevation_ =
-      ui::ColorProviderManager::ElevationMode::kLow;
+  ui::ColorProviderKey::ElevationMode background_elevation_ =
+      ui::ColorProviderKey::ElevationMode::kLow;
 #endif
 
   // If set, overrides this value is used instead of the one from NativeTheme
   // when constructing a ColorProvider.
-  absl::optional<ui::ColorProviderManager::ColorMode> color_mode_override_;
+  absl::optional<ui::ColorProviderKey::ColorMode> color_mode_override_;
 
   // The current frame type in use by this window. Defaults to
   // FrameType::kDefault.

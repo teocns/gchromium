@@ -27,14 +27,15 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "printing/buildflags/buildflags.h"
 #include "printing/printing_features.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
-#include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate.h"
-#endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+#include "chrome/browser/enterprise/connectors/analysis/print_content_analysis_utils.h"
+#endif
 
 using content::BrowserThread;
 
@@ -158,6 +159,22 @@ bool PrintViewManager::PrintPreviewWithPrintRenderer(
 }
 #endif
 
+void PrintViewManager::PrintPreviewForNodeUnderContextMenu(
+    content::RenderFrameHost* rfh) {
+  if (print_preview_state_ != NOT_PREVIEWING) {
+    return;
+  }
+
+  // Don't print / print preview crashed tabs.
+  if (IsCrashed() || !rfh->IsRenderFrameLive()) {
+    return;
+  }
+
+  // This will indirectly trigger PrintPreviewForWebNode() below, which sets
+  // `print_preview_state_`.
+  GetPrintRenderFrame(rfh)->PrintNodeUnderContextMenu();
+}
+
 void PrintViewManager::PrintPreviewForWebNode(content::RenderFrameHost* rfh) {
   if (print_preview_state_ != NOT_PREVIEWING)
     return;
@@ -165,8 +182,9 @@ void PrintViewManager::PrintPreviewForWebNode(content::RenderFrameHost* rfh) {
   SetPrintPreviewRenderFrameHost(rfh);
   print_preview_state_ = USER_INITIATED_PREVIEW;
 
-  for (auto& observer : GetObservers())
+  for (auto& observer : GetTestObservers()) {
     observer.OnPrintPreview(print_preview_rfh_);
+  }
 }
 
 void PrintViewManager::PrintPreviewAlmostDone() {
@@ -276,18 +294,14 @@ void PrintViewManager::OnDlpPrintingRestrictionsChecked(
 void PrintViewManager::RejectPrintPreviewRequestIfRestrictedByContentAnalysis(
     content::GlobalRenderFrameHostId rfh_id,
     base::OnceCallback<void(bool should_proceed)> callback) {
-  enterprise_connectors::ContentAnalysisDelegate::Data scanning_data;
+  absl::optional<enterprise_connectors::ContentAnalysisDelegate::Data>
+      scanning_data = enterprise_connectors::GetBeforePrintPreviewAnalysisData(
+          web_contents());
   content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(rfh_id);
-  if (rfh &&
-      base::FeatureList::IsEnabled(features::kEnablePrintContentAnalysis) &&
-      enterprise_connectors::ContentAnalysisDelegate::IsEnabled(
-          Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
-          web_contents()->GetOutermostWebContents()->GetLastCommittedURL(),
-          &scanning_data, enterprise_connectors::AnalysisConnector::PRINT)) {
-    set_snapshotting_for_content_analysis();
+  if (rfh && scanning_data) {
     GetPrintRenderFrame(rfh)->SnapshotForContentAnalysis(base::BindOnce(
         &PrintViewManager::OnGotSnapshotCallback, weak_factory_.GetWeakPtr(),
-        std::move(callback), std::move(scanning_data), rfh_id));
+        std::move(callback), std::move(*scanning_data), rfh_id));
     return;
   }
 
@@ -333,8 +347,9 @@ bool PrintViewManager::PrintPreview(
   SetPrintPreviewRenderFrameHost(rfh);
   print_preview_state_ = USER_INITIATED_PREVIEW;
 
-  for (auto& observer : GetObservers())
+  for (auto& observer : GetTestObservers()) {
     observer.OnPrintPreview(print_preview_rfh_);
+  }
 
   return true;
 }
@@ -449,6 +464,9 @@ void PrintViewManager::OnScriptedPrintPreviewCallback(
 
 void PrintViewManager::RequestPrintPreview(
     mojom::RequestPrintPreviewParamsPtr params) {
+#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+  set_analyzing_content(/*analyzing=*/true);
+#endif
   RejectPrintPreviewRequestIfRestricted(
       GetCurrentTargetFrame()->GetGlobalId(),
       base::BindOnce(&PrintViewManager::OnRequestPrintPreviewCallback,
@@ -460,6 +478,9 @@ void PrintViewManager::OnRequestPrintPreviewCallback(
     mojom::RequestPrintPreviewParamsPtr params,
     content::GlobalRenderFrameHostId rfh_id,
     bool should_proceed) {
+#if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
+  set_analyzing_content(/*analyzing=*/false);
+#endif
   if (!should_proceed) {
     OnPrintPreviewRequestRejected(rfh_id);
     return;

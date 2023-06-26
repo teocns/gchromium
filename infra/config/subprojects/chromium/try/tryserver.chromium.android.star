@@ -374,8 +374,11 @@ try_.builder(
             "chrome/android/javatests/src/org/chromium/chrome/browser/vr/.+",
             "chrome/browser/android/vr/.+",
             "chrome/browser/vr/.+",
+            "components/webxr/.+",
             "content/browser/xr/.+",
-            "device/vr/android/.+",
+            "device/vr/.+",
+            "third_party/cardboard/.+",
+            "third_party/openxr/.+",
             "third_party/gvr-android-sdk/.+",
             "third_party/arcore-android-sdk/.+",
             "third_party/arcore-android-sdk-client/.+",
@@ -396,11 +399,6 @@ try_.builder(
         "ci/android-x86-rel",
         "ci/android-webview-10-x86-rel-tests",
     ],
-)
-
-try_.builder(
-    name = "android-pie-arm64-wpt-rel-non-cq",
-    mirrors = ["ci/android-pie-arm64-wpt-rel-non-cq"],
 )
 
 try_.builder(

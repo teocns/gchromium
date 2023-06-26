@@ -183,8 +183,10 @@ int32_t NormalizingIterator::GetNextChar() {
 }  // namespace
 
 // The values corresponding to those types are visible in the settings.
+// TODO(crbug.com/1441904): Landmark, between-street and admin-level2 are in
+// progress to be included in the settings.
 ServerFieldTypeSet GetUserVisibleTypes() {
-  static const ServerFieldTypeSet user_visibe_type = {
+  static const ServerFieldTypeSet user_visible_type = {
       NAME_FULL,
       NAME_HONORIFIC_PREFIX,
       ADDRESS_HOME_STREET_ADDRESS,
@@ -193,10 +195,13 @@ ServerFieldTypeSet GetUserVisibleTypes() {
       ADDRESS_HOME_STATE,
       ADDRESS_HOME_ZIP,
       ADDRESS_HOME_COUNTRY,
+      ADDRESS_HOME_LANDMARK,
+      ADDRESS_HOME_BETWEEN_STREETS,
+      ADDRESS_HOME_ADMIN_LEVEL2,
       EMAIL_ADDRESS,
       PHONE_HOME_WHOLE_NUMBER,
       COMPANY_NAME};
-  return user_visibe_type;
+  return user_visible_type;
 }
 
 bool ProfileValueDifference::operator==(
@@ -317,6 +322,7 @@ bool AutofillProfileComparator::HasOnlySkippableCharacters(
       .End();
 }
 
+// static
 std::u16string AutofillProfileComparator::NormalizeForComparison(
     base::StringPiece16 text,
     AutofillProfileComparator::WhitespaceSpec whitespace_spec) {

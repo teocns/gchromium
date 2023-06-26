@@ -9,6 +9,7 @@
 #include "ash/wm/desks/templates/saved_desk_test_util.h"
 #include "ash/wm/overview/overview_test_base.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/uuid.h"
 #include "components/app_restore/restore_data.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -29,7 +30,11 @@ class MockSavedDeskDelegate : public SavedDeskDelegate {
               (aura::Window*, GetAppLaunchDataCallback),
               (const override));
   MOCK_METHOD(desks_storage::DeskModel*, GetDeskModel, (), (override));
-  MOCK_METHOD(bool, IsIncognitoWindow, (aura::Window*), (const override));
+  MOCK_METHOD(desks_storage::AdminTemplateService*,
+              GetAdminTemplateService,
+              (),
+              (override));
+  MOCK_METHOD(bool, IsWindowPersistable, (aura::Window*), (const override));
   MOCK_METHOD(absl::optional<gfx::ImageSkia>,
               MaybeRetrieveIconForSpecialIdentifier,
               (const std::string&, const ui::ColorProvider*),
@@ -99,7 +104,7 @@ class AdminTemplateTest : public OverviewTestBase,
     }
 
     auto admin_template = std::make_unique<DeskTemplate>(
-        base::GUID::GenerateRandomV4(), DeskTemplateSource::kPolicy,
+        base::Uuid::GenerateRandomV4(), DeskTemplateSource::kPolicy,
         "admin template", base::Time::Now(), DeskTemplateType::kTemplate);
     admin_template->set_desk_restore_data(
         std::make_unique<app_restore::RestoreData>(

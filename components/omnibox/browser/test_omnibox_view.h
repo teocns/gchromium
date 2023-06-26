@@ -13,20 +13,15 @@
 #include "ui/gfx/range/range.h"
 
 struct AutocompleteMatch;
-class OmniboxEditModelDelegate;
-class OmniboxEditModel;
 
 // Fake implementation of OmniboxView for use in tests.
 class TestOmniboxView : public OmniboxView {
  public:
-  TestOmniboxView(OmniboxEditModelDelegate* edit_model_delegate,
-                  std::unique_ptr<OmniboxClient> client)
-      : OmniboxView(edit_model_delegate, std::move(client)) {}
+  explicit TestOmniboxView(std::unique_ptr<OmniboxClient> client)
+      : OmniboxView(std::move(client)) {}
 
   TestOmniboxView(const TestOmniboxView&) = delete;
   TestOmniboxView& operator=(const TestOmniboxView&) = delete;
-
-  void SetEditModel(std::unique_ptr<OmniboxEditModel> edit_model);
 
   const std::u16string& inline_autocompletion() const {
     return inline_autocompletion_;

@@ -10,12 +10,12 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/scoped_feature_list.h"
 #import "components/sync/base/features.h"
-#import "components/sync/driver/sync_service.h"
+#import "components/sync/service/sync_service.h"
 #import "components/sync/test/test_sync_service.h"
 #import "components/variations/scoped_variations_ids_provider.h"
 #import "google_apis/gaia/core_account_id.h"
-#import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
+#import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -55,7 +55,7 @@ void SetSyncStateFeatureActive(const CoreAccountInfo& account,
   sync_service->SetHasSyncConsent(true);
   sync_service->SetTransportState(syncer::SyncService::TransportState::ACTIVE);
   sync_service->SetDisableReasons({});
-  sync_service->SetFirstSetupComplete(true);
+  sync_service->SetInitialSyncFeatureSetupComplete(true);
   ASSERT_TRUE(sync_service->IsSyncFeatureEnabled());
 }
 
@@ -64,8 +64,7 @@ void SetSyncStateTransportActive(const CoreAccountInfo& account,
   sync_service->SetAccountInfo(account);
   sync_service->SetHasSyncConsent(false);
   sync_service->SetTransportState(syncer::SyncService::TransportState::ACTIVE);
-  sync_service->SetDisableReasons(
-      {syncer::SyncService::DisableReason::DISABLE_REASON_USER_CHOICE});
+  sync_service->SetDisableReasons({});
   ASSERT_FALSE(sync_service->IsSyncFeatureEnabled());
 }
 

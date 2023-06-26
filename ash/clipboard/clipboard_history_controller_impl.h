@@ -14,9 +14,9 @@
 #include "ash/clipboard/clipboard_history.h"
 #include "ash/clipboard/clipboard_history_resource_manager.h"
 #include "ash/public/cpp/clipboard_history_controller.h"
+#include "ash/public/cpp/session/session_observer.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
-#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/one_shot_event.h"
@@ -25,7 +25,6 @@
 #include "base/unguessable_token.h"
 #include "base/values.h"
 #include "chromeos/crosapi/mojom/clipboard_history.mojom.h"
-#include "ui/views/widget/widget_observer.h"
 
 namespace aura {
 class Window;
@@ -40,11 +39,9 @@ namespace ash {
 class ClipboardHistoryItem;
 class ClipboardHistoryMenuModelAdapter;
 class ClipboardHistoryResourceManager;
-class ClipboardManagerBubbleView;
 class ClipboardNudgeController;
+enum class LoginStatus;
 class ScopedClipboardHistoryPause;
-
-constexpr char kClipboardCopyToastId[] = "CopiedToClipboard";
 
 // Shows a menu with the last few things saved in the clipboard when the
 // keyboard shortcut is pressed.
@@ -52,7 +49,7 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
     : public ClipboardHistoryController,
       public ClipboardHistory::Observer,
       public ClipboardHistoryResourceManager::Observer,
-      public views::WidgetObserver {
+      public SessionObserver {
  public:
   // Source and plain vs. rich text info for each paste. These values are used
   // in the Ash.ClipboardHistory.PasteType histogram and therefore cannot be
@@ -106,6 +103,12 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
       OnMenuClosingCallback callback) override;
   void GetHistoryValues(GetHistoryValuesCallback callback) const override;
 
+  // Whether the clipboard history has items.
+  bool IsEmpty() const;
+
+  // Fires the timer to notify observers of item updates immediately.
+  void FireItemUpdateNotificationTimerForTest();
+
   // Returns bounds for the contextual menu in screen coordinates.
   gfx::Rect GetMenuBoundsInScreenForTest() const;
 
@@ -114,9 +117,6 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
   // requested and before the values are returned.
   void BlockGetHistoryValuesForTest();
   void ResumeGetHistoryValuesForTest();
-
-  // Whether the ClipboardHistory has items.
-  bool IsEmpty() const;
 
   // Returns the history which tracks what is being copied to the clipboard.
   const ClipboardHistory* history() const { return clipboard_history_.get(); }
@@ -159,7 +159,7 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
   class MenuDelegate;
 
   // ClipboardHistoryController:
-  bool CanShowMenu() const override;
+  bool HasAvailableHistoryItems() const override;
   void OnScreenshotNotificationCreated() override;
   std::unique_ptr<ScopedClipboardHistoryPause> CreateScopedPause() override;
   std::vector<std::string> GetHistoryItemIds() const override;
@@ -181,8 +181,17 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
   void OnCachedImageModelUpdated(
       const std::vector<base::UnguessableToken>& menu_item_ids) override;
 
-  // views::WidgetObserver:
-  void OnWidgetClosing(views::Widget* widget) override;
+  // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
+  void OnLoginStatusChanged(LoginStatus login_status) override;
+
+  // Posts a task to notify `observers_` of updates to clipboard history items.
+  void PostItemUpdateNotificationTask();
+
+  // Notifies `observers_` of updates to clipboard history items. No-op if
+  // there are no available clipboard history items and there were no available
+  // history items in the last notification.
+  void MaybeNotifyObserversOfItemUpdate();
 
   // Invoked by `GetHistoryValues()` once all clipboard instances with images
   // have been encoded into PNGs. Calls `callback` with the clipboard history
@@ -243,9 +252,6 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
   // Called when the contextual menu is closed.
   void OnMenuClosed();
 
-  // Called when toast button is pressed.
-  void ShowMenuFromToast();
-
   // Observers notified when clipboard history is shown, used, or updated.
   base::ObserverList<ClipboardHistoryController::Observer> observers_;
 
@@ -257,20 +263,13 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
   std::unique_ptr<AcceleratorTarget> accelerator_target_;
   // Controller that shows contextual nudges for multipaste.
   std::unique_ptr<ClipboardNudgeController> nudge_controller_;
-
-  // Context menu displayed by `ShowMenu()` when the clipboard history refresh
-  // feature is disabled. Null when `MenuIsShowing()` is false.
+  // Context menu displayed by `ShowMenu()`. Null when `MenuIsShowing()` is
+  // false.
   std::unique_ptr<ClipboardHistoryMenuModelAdapter> context_menu_;
   // Handles events on the `context_menu_`.
   std::unique_ptr<MenuDelegate> menu_delegate_;
-  // Bubble view displayed by `ShowMenu()` when the clipboard history refresh
-  // feature is enabled. Null when `MenuIsShowing()` is false.
-  raw_ptr<ClipboardManagerBubbleView> clipboard_manager_ = nullptr;
 
-  // The timestamp when the clipboard history menu was last shown.
-  base::TimeTicks last_menu_show_time_;
-
-  // How the user last caused the clipboard history menu to show.
+  // How the user last caused the `context_menu_` to show.
   crosapi::mojom::ClipboardHistoryControllerShowSource last_menu_source_;
 
   // Whether a paste is currently being performed.
@@ -284,6 +283,14 @@ class ASH_EXPORT ClipboardHistoryControllerImpl
   // Indicates the count of pastes which are triggered through the clipboard
   // history menu and are waiting for the confirmations from `ClipboardHistory`.
   int pastes_to_be_confirmed_ = 0;
+
+  // Used to post a task to notify `observers_` of updates to clipboard history
+  // items.
+  base::OneShotTimer item_update_notification_timer_;
+
+  // True if there were available items in the last clipboard history update
+  // notification.
+  bool has_available_items_in_last_update_ = false;
 
   // Created when a test requests that `GetHistoryValues()` wait for some work
   // to be done before encoding finishes. Reset and recreated if the same test

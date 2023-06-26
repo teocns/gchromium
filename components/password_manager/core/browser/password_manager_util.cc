@@ -43,8 +43,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_user_settings.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/url_util.h"
 
@@ -56,8 +56,13 @@ namespace {
 
 std::tuple<int, base::Time, int> GetPriorityProperties(
     const PasswordForm* form) {
-  return std::make_tuple(-static_cast<int>(GetMatchType(*form)),
-                         form->date_last_used,
+  GetLoginMatchType match_type = GetMatchType(*form);
+  // Treat affiliated android apps the same way as exact matches.
+  if (match_type == GetLoginMatchType::kAffiliated &&
+      password_manager::IsValidAndroidFacetURI(form->signon_realm)) {
+    match_type = GetLoginMatchType::kExact;
+  }
+  return std::make_tuple(-static_cast<int>(match_type), form->date_last_used,
                          static_cast<int>(form->in_store));
 }
 
@@ -252,11 +257,6 @@ base::StringPiece GetSignonRealmWithProtocolExcluded(const PasswordForm& form) {
 }
 
 GetLoginMatchType GetMatchType(const password_manager::PasswordForm& form) {
-  if (password_manager::IsValidAndroidFacetURI(form.signon_realm)) {
-    DCHECK(form.is_affiliation_based_match);
-    DCHECK(!form.is_public_suffix_match);
-    return GetLoginMatchType::kExact;
-  }
   if (form.is_affiliation_based_match)
     return GetLoginMatchType::kAffiliated;
 

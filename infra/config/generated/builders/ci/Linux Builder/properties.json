@@ -78,10 +78,6 @@
       ],
       "mirroring_builder_group_and_names": [
         {
-          "builder": "linux-1mbu-compile-fyi-rel",
-          "group": "tryserver.chromium.linux"
-        },
-        {
           "builder": "linux-dcheck-off-rel",
           "group": "tryserver.chromium.linux"
         },
@@ -113,6 +109,9 @@
     }
   },
   "$build/reclient": {
+    "bootstrap_env": {
+      "RBE_clang_depscan_archive": "true"
+    },
     "instance": "rbe-chromium-trusted",
     "jobs": 500,
     "metrics_project": "chromium-reclient-metrics"

@@ -18,6 +18,11 @@
     position: relative;
   }
 
+  :host-context([chrome-refresh-2023]) #customColor {
+    background: var(
+        --color-side-panel-customize-chrome-custom-option-background);
+  }
+
   /* colorPicker is placed on top of the theme icon to work around
      https://crbug.com/1162053. */
   #colorPicker {
@@ -46,12 +51,18 @@
     width: 20px;
   }
 
+  :host-context([chrome-refresh-2023]) #colorPickerIcon {
+    background-color: var(
+        --color-side-panel-customize-chrome-custom-option-foreground);
+  }
+
   managed-dialog {
     --cr-dialog-width: min(calc(100% - 32px), 512px);
   }
 
   :host-context([chrome-refresh-2023]) customize-chrome-color {
-    background-color: lightgrey;
+    background-color: var(
+        --color-side-panel-customize-chrome-color-picker-option-background);
     border-radius: 12px;
   }
 </style>
@@ -62,8 +73,9 @@
     <customize-chrome-color
         id="defaultColor"
         background-color="[[defaultColor_.background]]"
+        base-color="[[defaultColor_.base]]"
         foreground-color="[[defaultColor_.foreground]]"
-        background-color-hidden="[[themeHasBackgroundImage_(theme_)]]"
+        background-color-hidden="[[!showBackgroundColor_]]"
         title="$i18n{defaultColorName}"
         aria-label="$i18n{defaultColorName}"
         role="radio"
@@ -71,6 +83,22 @@
         aria-checked$="[[boolToString_(isDefaultColorSelected_)]]"
         tabindex$="[[tabIndex_(isDefaultColorSelected_)]]"
         on-click="onDefaultColorClick_"
+        basic-color>
+    </customize-chrome-color>
+  </template>
+  <template is="dom-if" if="[[isChromeRefresh2023_]]" restamp>
+    <customize-chrome-color
+        id="greyDefaultColor"
+        background-color="[[greyDefaultColor_.background]]"
+        base-color="[[greyDefaultColor_.base]]"
+        foreground-color="[[greyDefaultColor_.foreground]]"
+        title="$i18n{greyDefaultColorName}"
+        aria-label="$i18n{greyDefaultColorName}"
+        role="radio"
+        checked="[[isGreyDefaultColorSelected_]]"
+        aria-checked$="[[boolToString_(isGreyDefaultColorSelected_)]]"
+        tabindex$="[[tabIndex_(isGreyDefaultColorSelected_)]]"
+        on-click="onGreyDefaultColorClick_"
         basic-color>
     </customize-chrome-color>
   </template>
@@ -93,8 +121,9 @@
     <customize-chrome-color
         class="chrome-color"
         background-color="[[item.background]]"
+        base-color="[[item.base]]"
         foreground-color="[[item.foreground]]"
-        background-color-hidden="[[themeHasBackgroundImage_(theme_)]]"
+        background-color-hidden="[[!showBackgroundColor_]]"
         title="[[item.name]]"
         aria-label$="[[item.name]]"
         role="radio"
@@ -117,7 +146,7 @@
         id="customColor"
         background-color="[[customColor_.background]]"
         foreground-color="[[customColor_.foreground]]"
-        background-color-hidden="[[themeHasBackgroundImage_(theme_)]]"
+        background-color-hidden="[[!showCustomColorBackgroundColor_]]"
         checked="[[isCustomColorSelected_]]"
         basic-color>
     </customize-chrome-color>

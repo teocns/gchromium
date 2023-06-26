@@ -14,10 +14,12 @@
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "ios/chrome/browser/discover_feed/feed_constants.h"
-#import "ios/chrome/browser/flags/system_flags.h"
-#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_observer_bridge.h"
@@ -31,6 +33,7 @@
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
+#import "ios/chrome/browser/ui/scoped_ui_blocker/scoped_ui_blocker.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
@@ -75,7 +78,6 @@ bool IsSupportedAccessPoint(signin_metrics::AccessPoint access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER:
     case signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE:
     case signin_metrics::AccessPoint::ACCESS_POINT_CLOUD_PRINT:
-    case signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA:
     case signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO:
     case signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE:
@@ -106,6 +108,8 @@ bool IsSupportedAccessPoint(signin_metrics::AccessPoint access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_CONSISTENCY_SERVICE:
     case signin_metrics::AccessPoint::ACCESS_POINT_SEARCH_COMPANION:
     case signin_metrics::AccessPoint::ACCESS_POINT_SET_UP_LIST:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_PASSWORD_MIGRATION_WARNING_ANDROID:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return false;
   }
@@ -152,7 +156,6 @@ void RecordImpressionsTilSigninButtonsHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER:
     case signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE:
     case signin_metrics::AccessPoint::ACCESS_POINT_CLOUD_PRINT:
-    case signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA:
     case signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO:
     case signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE:
@@ -186,6 +189,8 @@ void RecordImpressionsTilSigninButtonsHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_CONSISTENCY_SERVICE:
     case signin_metrics::AccessPoint::ACCESS_POINT_SEARCH_COMPANION:
     case signin_metrics::AccessPoint::ACCESS_POINT_SET_UP_LIST:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_PASSWORD_MIGRATION_WARNING_ANDROID:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
       break;
@@ -233,7 +238,6 @@ void RecordImpressionsTilDismissHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER:
     case signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE:
     case signin_metrics::AccessPoint::ACCESS_POINT_CLOUD_PRINT:
-    case signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA:
     case signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO:
     case signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE:
@@ -267,6 +271,8 @@ void RecordImpressionsTilDismissHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_CONSISTENCY_SERVICE:
     case signin_metrics::AccessPoint::ACCESS_POINT_SEARCH_COMPANION:
     case signin_metrics::AccessPoint::ACCESS_POINT_SET_UP_LIST:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_PASSWORD_MIGRATION_WARNING_ANDROID:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
       break;
@@ -314,7 +320,6 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER:
     case signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE:
     case signin_metrics::AccessPoint::ACCESS_POINT_CLOUD_PRINT:
-    case signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA:
     case signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO:
     case signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE:
@@ -347,6 +352,8 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_CONSISTENCY_SERVICE:
     case signin_metrics::AccessPoint::ACCESS_POINT_SEARCH_COMPANION:
     case signin_metrics::AccessPoint::ACCESS_POINT_SET_UP_LIST:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_PASSWORD_MIGRATION_WARNING_ANDROID:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -379,7 +386,6 @@ const char* DisplayedCountPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER:
     case signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE:
     case signin_metrics::AccessPoint::ACCESS_POINT_CLOUD_PRINT:
-    case signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA:
     case signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO:
     case signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE:
@@ -415,6 +421,8 @@ const char* DisplayedCountPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_CONSISTENCY_SERVICE:
     case signin_metrics::AccessPoint::ACCESS_POINT_SEARCH_COMPANION:
     case signin_metrics::AccessPoint::ACCESS_POINT_SET_UP_LIST:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_PASSWORD_MIGRATION_WARNING_ANDROID:
       return nullptr;
   }
 }
@@ -444,7 +452,6 @@ const char* AlreadySeenSigninViewPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER:
     case signin_metrics::AccessPoint::ACCESS_POINT_DEVICES_PAGE:
     case signin_metrics::AccessPoint::ACCESS_POINT_CLOUD_PRINT:
-    case signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA:
     case signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO:
     case signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE:
@@ -480,6 +487,8 @@ const char* AlreadySeenSigninViewPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_CONSISTENCY_SERVICE:
     case signin_metrics::AccessPoint::ACCESS_POINT_SEARCH_COMPANION:
     case signin_metrics::AccessPoint::ACCESS_POINT_SET_UP_LIST:
+    case signin_metrics::AccessPoint::
+        ACCESS_POINT_PASSWORD_MIGRATION_WARNING_ANDROID:
       return nullptr;
   }
 }
@@ -534,6 +543,9 @@ const char* AlreadySeenSigninViewPreferenceKey(
   IdentityChooserCoordinator* _identityChooserCoordinator;
   // Coordinator to add an account.
   SigninCoordinator* _signinCoordinator;
+  // TODO(crbug.com/1448830): This class should not need to block the UI.
+  // The UI blocker is only used in sign-in only cases.
+  std::unique_ptr<ScopedUIBlocker> _uiBlocker;
 }
 
 + (void)registerBrowserStatePrefs:(user_prefs::PrefRegistrySyncable*)registry {
@@ -682,13 +694,19 @@ const char* AlreadySeenSigninViewPreferenceKey(
                      hasCloseButton:hasCloseButton
                    hasSignInSpinner:self.signinInProgress];
   }
-  return [[SigninPromoViewConfigurator alloc]
-      initWithSigninPromoViewMode:SigninPromoViewModeNoAccounts
-                        userEmail:nil
-                    userGivenName:nil
-                        userImage:nil
-                   hasCloseButton:hasCloseButton
-                 hasSignInSpinner:self.signinInProgress];
+  SigninPromoViewConfigurator* configurator =
+      [[SigninPromoViewConfigurator alloc]
+          initWithSigninPromoViewMode:SigninPromoViewModeNoAccounts
+                            userEmail:nil
+                        userGivenName:nil
+                            userImage:nil
+                       hasCloseButton:hasCloseButton
+                     hasSignInSpinner:self.signinInProgress];
+  if (self.signInOnly) {
+    configurator.primaryButtonTitleNoAccountsModeOverride =
+        l10n_util::GetNSString(IDS_IOS_CONSISTENCY_PROMO_SIGN_IN);
+  }
+  return configurator;
 }
 
 - (void)signinPromoViewIsVisible {
@@ -811,6 +829,16 @@ const char* AlreadySeenSigninViewPreferenceKey(
                                       identityChanged:NO];
 }
 
+- (void)setSignInInOnly:(BOOL)signInOnly {
+  if (_signInOnly == signInOnly) {
+    return;
+  }
+  _signInOnly = signInOnly;
+  SigninPromoViewConfigurator* configurator = [self createConfigurator];
+  [self.consumer configureSigninPromoWithConfigurator:configurator
+                                      identityChanged:NO];
+}
+
 // Records in histogram, the number of time the sign-in promo is displayed
 // before the sign-in button is pressed, if the current access point supports
 // it.
@@ -877,6 +905,9 @@ const char* AlreadySeenSigninViewPreferenceKey(
 // Triggers the primary action when `signInOnly` is at YES: starts sign-in flow.
 - (void)primaryActionForSignInOnly {
   DCHECK(self.signInOnly) << base::SysNSStringToUTF8([self description]);
+  SceneState* sceneState =
+      SceneStateBrowserAgent::FromBrowser(_browser)->GetSceneState();
+  _uiBlocker = std::make_unique<ScopedUIBlocker>(sceneState);
   signin_metrics::RecordSigninUserActionForAccessPoint(self.accessPoint);
   self.signinPromoViewState = ios::SigninPromoViewState::UsedAtLeastOnce;
   self.signinInProgress = YES;
@@ -887,6 +918,9 @@ const char* AlreadySeenSigninViewPreferenceKey(
 // add account dialog.
 - (void)secondaryActionForSignInOnly {
   DCHECK(self.signInOnly) << base::SysNSStringToUTF8([self description]);
+  SceneState* sceneState =
+      SceneStateBrowserAgent::FromBrowser(_browser)->GetSceneState();
+  _uiBlocker = std::make_unique<ScopedUIBlocker>(sceneState);
   signin_metrics::RecordSigninUserActionForAccessPoint(self.accessPoint);
   self.signinPromoViewState = ios::SigninPromoViewState::UsedAtLeastOnce;
   self.signinInProgress = YES;
@@ -910,17 +944,29 @@ const char* AlreadySeenSigninViewPreferenceKey(
   __weak id<SigninPromoViewConsumer> weakConsumer = self.consumer;
   __weak __typeof(self) weakSelf = self;
   [_authenticationFlow startSignInWithCompletion:^(BOOL success) {
+    [weakSelf signInFlowCompletedForSignInOnly];
     if ([weakConsumer respondsToSelector:@selector(signinDidFinish)]) {
-      weakSelf.signinInProgress = NO;
       [weakConsumer signinDidFinish];
     }
   }];
+}
+
+// Called when the sign-in flow is over. This method should only be called
+// when this is a sign-in only flow.
+- (void)signInFlowCompletedForSignInOnly {
+  DCHECK(self.signInOnly) << base::SysNSStringToUTF8([self description]);
+  _uiBlocker.reset();
+  self.signinInProgress = NO;
 }
 
 - (void)startAddAccountForSignInOnly {
   DCHECK(!_signinCoordinator)
       << base::SysNSStringToUTF8([_signinCoordinator description]) << " "
       << base::SysNSStringToUTF8([self description]);
+  DCHECK(self.signInOnly) << base::SysNSStringToUTF8([self description]);
+  SceneState* sceneState =
+      SceneStateBrowserAgent::FromBrowser(_browser)->GetSceneState();
+  _uiBlocker = std::make_unique<ScopedUIBlocker>(sceneState);
   self.signinPromoViewState = ios::SigninPromoViewState::UsedAtLeastOnce;
   self.signinInProgress = YES;
   _signinCoordinator = [SigninCoordinator
@@ -946,6 +992,7 @@ const char* AlreadySeenSigninViewPreferenceKey(
       break;
     case SigninCoordinatorResultInterrupted:
     case SigninCoordinatorResultCanceledByUser:
+      _uiBlocker.reset();
       self.signinInProgress = NO;
       break;
   }
@@ -1119,6 +1166,7 @@ const char* AlreadySeenSigninViewPreferenceKey(
   _identityChooserCoordinator = nil;
   if (!identity) {
     self.signinInProgress = NO;
+    _uiBlocker.reset();
     return;
   }
   self.identity = identity;
@@ -1135,9 +1183,10 @@ const char* AlreadySeenSigninViewPreferenceKey(
                        @"signinInProgress: %d, accessPoint: %d, "
                        @"signinPromoViewVisible: %d, invalidOrClosed %d>",
                        self.class.description, self, self.identity,
-                       self.signinPromoViewState, self.signinInProgress,
-                       self.accessPoint, self.signinPromoViewVisible,
-                       self.invalidOrClosed];
+                       static_cast<int>(self.signinPromoViewState),
+                       self.signinInProgress,
+                       static_cast<int>(self.accessPoint),
+                       self.signinPromoViewVisible, self.invalidOrClosed];
 }
 
 @end

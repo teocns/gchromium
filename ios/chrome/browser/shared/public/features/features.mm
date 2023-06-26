@@ -4,13 +4,15 @@
 
 #import "ios/chrome/browser/shared/public/features/features.h"
 
+#import "ui/base/device_form_factor.h"
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 BASE_FEATURE(kDefaultBrowserBlueDotPromo,
              "DefaultBrowserBlueDotPromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<BlueDotPromoUserGroup>::Option
     kBlueDotPromoUserGroupOptions[] = {
@@ -21,8 +23,11 @@ constexpr base::FeatureParam<BlueDotPromoUserGroup>::Option
 
 constexpr base::FeatureParam<BlueDotPromoUserGroup> kBlueDotPromoUserGroupParam{
     &kDefaultBrowserBlueDotPromo, "user-group",
-    BlueDotPromoUserGroup::kOnlyBlueDotPromoEnabled,
-    &kBlueDotPromoUserGroupOptions};
+    BlueDotPromoUserGroup::kAllDBPromosEnabled, &kBlueDotPromoUserGroupOptions};
+
+BASE_FEATURE(kIOSPaymentsBottomSheet,
+             "IOSPaymentsBottomSheet",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kExpandedTabStrip,
              "ExpandedTabStrip",
@@ -44,10 +49,6 @@ BASE_FEATURE(kIncognitoNtpRevamp,
              "IncognitoNtpRevamp",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kDefaultBrowserFullscreenPromoExperiment,
-             "DefaultBrowserFullscreenPromoExperiment",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDefaultBrowserIntentsShowSettings,
              "DefaultBrowserIntentsShowSettings",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -66,14 +67,14 @@ BASE_FEATURE(kDefaultBrowserVideoPromo,
 
 BASE_FEATURE(kIOSCustomBrowserEditMenu,
              "IOSCustomBrowserEditMenu",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kIOSEditMenuPartialTranslateNoIncognitoParam[] =
     "IOSEditMenuPartialTranslateNoIncognitoParam";
 
 BASE_FEATURE(kIOSEditMenuPartialTranslate,
              "IOSEditMenuPartialTranslate",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsPartialTranslateEnabled() {
   if (@available(iOS 16, *)) {
@@ -88,7 +89,7 @@ bool ShouldShowPartialTranslateInIncognito() {
   }
   return !base::GetFieldTrialParamByFeatureAsBool(
       kIOSEditMenuPartialTranslate,
-      kIOSEditMenuPartialTranslateNoIncognitoParam, false);
+      kIOSEditMenuPartialTranslateNoIncognitoParam, true);
 }
 
 const char kIOSEditMenuSearchWithTitleParamTitle[] =
@@ -156,10 +157,6 @@ BASE_FEATURE(kEnableShortenedPasswordAutoFillInstruction,
              "EnableShortenedPasswordAutoFillInstruction",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kUseSFSymbolsInOmnibox,
-             "UseSFSymbolsInOmnibox",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kSFSymbolsFollowUp,
              "SFSymbolsFollowUp",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -173,6 +170,10 @@ BASE_FEATURE(kTabGridRecencySort,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsTabGridSortedByRecency() {
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+    return false;
+  }
+
   return base::FeatureList::IsEnabled(kTabGridRecencySort);
 }
 
@@ -186,10 +187,14 @@ bool IsNewTabGridTransitionsEnabled() {
 
 BASE_FEATURE(kMultilineFadeTruncatingLabel,
              "MultilineFadeTruncatingLabel",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNotificationSettingsMenuItem,
              "NotificationSettingsMenuItem",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSpotlightOpenTabsSource,
+             "SpotlightOpenTabsSource",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSpotlightReadingListSource,
@@ -206,7 +211,7 @@ bool IsConsistencyNewAccountInterfaceEnabled() {
 
 BASE_FEATURE(kAddToHomeScreen,
              "AddToHomeScreen",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kAddToHomeScreenDisableIncognitoParam[] =
     "AddToHomeScreenDisableIncognitoParam";
@@ -219,7 +224,7 @@ bool ShouldAddToHomeScreen(bool in_incognito) {
     return true;
   }
   return !base::GetFieldTrialParamByFeatureAsBool(
-      kAddToHomeScreen, kAddToHomeScreenDisableIncognitoParam, false);
+      kAddToHomeScreen, kAddToHomeScreenDisableIncognitoParam, true);
 }
 
 BASE_FEATURE(kNewNTPOmniboxLayout,
@@ -232,7 +237,7 @@ BASE_FEATURE(kEnableEmailInBookmarksReadingListSnackbar,
 
 BASE_FEATURE(kIndicateSyncErrorInOverflowMenu,
              "IndicateSyncErrorInOverflowMenu",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsIndicateSyncErrorInOverflowMenuEnabled() {
   return base::FeatureList::IsEnabled(kIndicateSyncErrorInOverflowMenu);
@@ -242,6 +247,33 @@ BASE_FEATURE(kBottomOmniboxSteadyState,
              "BottomOmniboxSteadyState",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+bool IsBottomOmniboxSteadyStateEnabled() {
+  // Bottom omnibox is only available on phones.
+  if (ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_PHONE) {
+    return false;
+  }
+  return base::FeatureList::IsEnabled(kBottomOmniboxSteadyState);
+}
+
 BASE_FEATURE(kOnlyAccessClipboardAsync,
              "OnlyAccessClipboardAsync",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kHideSettingsSyncPromo,
+             "HideSettingsSyncPromo",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDefaultBrowserTriggerCriteriaExperiment,
+             "DefaultBrowserTriggerCriteriaExperiment",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const char kDefaultBrowserTriggerOnOmniboxCopyPaste[] =
+    "trigger_on_omnibox_copy_paste";
+
+BASE_FEATURE(kThemeColorInToolbar,
+             "ThemeColorInToolbar",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTabGridRefactoring,
+             "TabGridRefactoring",
              base::FEATURE_DISABLED_BY_DEFAULT);

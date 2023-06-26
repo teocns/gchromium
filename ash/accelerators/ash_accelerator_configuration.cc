@@ -195,13 +195,18 @@ AshAcceleratorConfiguration::~AshAcceleratorConfiguration() {
 // static:
 void AshAcceleratorConfiguration::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
+  if (!::features::IsShortcutCustomizationEnabled()) {
+    return;
+  }
+
   registry->RegisterDictionaryPref(prefs::kShortcutCustomizationOverrides);
 }
 
 void AshAcceleratorConfiguration::OnActiveUserPrefServiceChanged(
     PrefService* pref_service) {
   // A pref service may not be available in tests.
-  if (!pref_service || pref_service != GetActiveUserPrefService()) {
+  if (!::features::IsShortcutCustomizationEnabled() || !pref_service ||
+      pref_service != GetActiveUserPrefService()) {
     return;
   }
 
@@ -246,7 +251,7 @@ AcceleratorConfigResult AshAcceleratorConfiguration::AddUserAccelerator(
     const ui::Accelerator& accelerator) {
   CHECK(::features::IsShortcutCustomizationEnabled());
   const AcceleratorConfigResult result =
-      DoAddAccelerator(action_id, accelerator);
+      DoAddAccelerator(action_id, accelerator, /*save_override=*/true);
 
   if (result == AcceleratorConfigResult::kSuccess) {
     UpdateAndNotifyAccelerators();
@@ -329,6 +334,7 @@ AcceleratorConfigResult AshAcceleratorConfiguration::RestoreDefault(
   const auto& defaults = default_id_to_accelerators_cache_.find(action_id);
   DCHECK(defaults != default_id_to_accelerators_cache_.end());
 
+  AcceleratorConfigResult result = AcceleratorConfigResult::kSuccess;
   // Iterate through the default and only add back the default if they're not
   // in use.
   for (const auto& default_accelerator : defaults->second) {
@@ -336,15 +342,25 @@ AcceleratorConfigResult AshAcceleratorConfiguration::RestoreDefault(
       accelerators_for_id.push_back(default_accelerator);
       accelerator_to_id_.InsertNew(
           {default_accelerator, static_cast<AcceleratorAction>(action_id)});
+    } else {
+      // The default accelerator cannot be re-added since it conflicts with
+      // another accelerator.
+      result = AcceleratorConfigResult::kRestoreSuccessWithConflicts;
     }
   }
 
-  // TODO(jimmyxgong): Update prefs when available.
+  // Update the pref overrides.
+  std::string id = base::NumberToString(action_id);
+  const auto* found_override = accelerator_overrides_.Find(id);
+  if (found_override) {
+    accelerator_overrides_.Remove(id);
+  }
+
   UpdateAndNotifyAccelerators();
 
-  VLOG(1) << "ResetAction called for ActionID: " << action_id
-          << " returned successfully.";
-  return AcceleratorConfigResult::kSuccess;
+  VLOG(1) << "ResetAction called for ActionID: " << action_id << " returned "
+          << static_cast<uint32_t>(result);
+  return result;
 }
 
 AcceleratorConfigResult AshAcceleratorConfiguration::RestoreAllDefaults() {
@@ -354,12 +370,14 @@ AcceleratorConfigResult AshAcceleratorConfiguration::RestoreAllDefaults() {
   deprecated_accelerators_to_id_.Clear();
   actions_with_deprecations_.clear();
 
-  // TODO(jimmyxgong): Reset the prefs here too.
   id_to_accelerators_ = default_id_to_accelerators_cache_;
   accelerator_to_id_ = default_accelerators_to_id_cache_;
 
   deprecated_accelerators_to_id_ = default_deprecated_accelerators_to_id_cache_;
   actions_with_deprecations_ = default_actions_with_deprecations_cache_;
+
+  // Clear the prefs to be back to default.
+  accelerator_overrides_.clear();
 
   UpdateAndNotifyAccelerators();
 
@@ -473,7 +491,8 @@ AcceleratorConfigResult AshAcceleratorConfiguration::DoRemoveAccelerator(
 
 AcceleratorConfigResult AshAcceleratorConfiguration::DoAddAccelerator(
     AcceleratorActionId action_id,
-    const ui::Accelerator& accelerator) {
+    const ui::Accelerator& accelerator,
+    bool save_override) {
   CHECK(::features::IsShortcutCustomizationEnabled());
 
   const auto& accelerators_iter = id_to_accelerators_.find(action_id);
@@ -485,9 +504,19 @@ AcceleratorConfigResult AshAcceleratorConfiguration::DoAddAccelerator(
   // remove/disable it.
   const auto* conflict_action_id = FindAcceleratorAction(accelerator);
   if (conflict_action_id) {
-    const AcceleratorConfigResult remove_result =
-        DoRemoveAccelerator(*conflict_action_id, accelerator,
-                            /*save_override=*/false);
+    // If the conflicting accelerator is NOT the default for culprit action id,
+    // then we should update the override accordingly. Otherwise, we do not
+    // save the override as it will be handled implicitly when applying the
+    // prefs.
+    bool save_remove_override = false;
+    absl::optional<AcceleratorAction> conflict_accelerator_default_id =
+        GetIdForDefaultAccelerator(accelerator);
+    if (conflict_accelerator_default_id.has_value()) {
+      save_remove_override =
+          conflict_accelerator_default_id.value() != *conflict_action_id;
+    }
+    const AcceleratorConfigResult remove_result = DoRemoveAccelerator(
+        *conflict_action_id, accelerator, save_remove_override);
     if (remove_result != AcceleratorConfigResult::kSuccess) {
       return remove_result;
     }
@@ -499,7 +528,12 @@ AcceleratorConfigResult AshAcceleratorConfiguration::DoAddAccelerator(
   accelerator_to_id_.InsertNew(
       {accelerator, static_cast<AcceleratorAction>(action_id)});
 
-  // TODO(jimmyxgong): Update prefs to match updated state.
+  if (save_override) {
+    // Update pref overrides.
+    UpdateOverrides(action_id, accelerator,
+                    AcceleratorModificationAction::kAdd);
+  }
+
   return AcceleratorConfigResult::kSuccess;
 }
 
@@ -518,13 +552,13 @@ AshAcceleratorConfiguration::DoReplaceAccelerator(
 
   // First remove the old accelerator.
   const AcceleratorConfigResult remove_result =
-      DoRemoveAccelerator(action_id, old_accelerator, /*save_override=*/false);
+      DoRemoveAccelerator(action_id, old_accelerator, /*save_override=*/true);
   if (remove_result != AcceleratorConfigResult::kSuccess) {
     return remove_result;
   }
 
   // Now add the new accelerator.
-  return DoAddAccelerator(action_id, new_accelerator);
+  return DoAddAccelerator(action_id, new_accelerator, /*save_override=*/true);
 }
 
 const DeprecatedAcceleratorData*
@@ -586,7 +620,9 @@ void AshAcceleratorConfiguration::UpdateAndNotifyAccelerators() {
 
   UpdateAccelerators(id_to_accelerators_);
   NotifyAcceleratorsUpdated();
-  SaveOverridePrefChanges();
+  if (::features::IsShortcutCustomizationEnabled()) {
+    SaveOverridePrefChanges();
+  }
 }
 
 void AshAcceleratorConfiguration::SaveOverridePrefChanges() {
@@ -610,7 +646,6 @@ void AshAcceleratorConfiguration::ApplyPrefOverrides() {
       const base::Value::Dict& override_dict = accelerator_override.GetDict();
       const AcceleratorModificationData& override_data =
           ValueToAcceleratorModificationData(override_dict);
-      // TODO (jimmyxgong): Implement AddAccelerator pref override.
       if (override_data.action == AcceleratorModificationAction::kRemove) {
         // Race condition:
         // If the user has disabled the default accelerator but then adds
@@ -622,6 +657,11 @@ void AshAcceleratorConfiguration::ApplyPrefOverrides() {
           DoRemoveAccelerator(action_id, override_data.accelerator,
                               /*save_override=*/false);
         }
+      }
+
+      if (override_data.action == AcceleratorModificationAction::kAdd) {
+        DoAddAccelerator(action_id, override_data.accelerator,
+                         /*save_override=*/false);
       }
     }
   }

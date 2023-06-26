@@ -446,13 +446,6 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
                 NetworkHandler::GetUiProxyConfigService()->ProxyModeForNetwork(
                     network))
           : mojom::ProxyMode::kDirect;
-  result->dns_queries_monitored =
-      NetworkHandler::IsInitialized() &&
-              NetworkHandler::Get()->network_metadata_store()
-          ? NetworkHandler::Get()
-                ->network_metadata_store()
-                ->secure_dns_templates_with_identifiers_active()
-          : false;
 
   switch (type) {
     case mojom::NetworkType::kCellular: {
@@ -468,7 +461,8 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
       const DeviceState* cellular_device =
           network_state_handler->GetDeviceState(network->device_path());
       bool sim_is_primary =
-          cellular_device && IsSimPrimary(network->iccid(), cellular_device);
+          cellular_device &&
+          cellular_utils::IsSimPrimary(network->iccid(), cellular_device);
       cellular->sim_lock_enabled =
           sim_is_primary && cellular_device->sim_lock_enabled();
       cellular->sim_locked = sim_is_primary && cellular_device->IsSimLocked();
@@ -521,6 +515,7 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
       wifi->signal_strength = network->signal_strength();
       wifi->ssid = network->name();
       wifi->hidden_ssid = network->hidden_ssid();
+      wifi->passpoint_id = network->passpoint_id();
       result->type_state =
           mojom::NetworkTypeStateProperties::NewWifi(std::move(wifi));
       break;
@@ -537,7 +532,8 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
 std::vector<mojom::SIMInfoPtr> CellularSIMInfosToMojo(
     const DeviceState* device) {
   std::vector<mojom::SIMInfoPtr> sim_info_mojos;
-  for (const auto& sim_slot : GetSimSlotInfosWithUpdatedEid(device)) {
+  for (const auto& sim_slot :
+       cellular_utils::GetSimSlotInfosWithUpdatedEid(device)) {
     auto sim_info_mojo = mojom::SIMInfo::New();
     sim_info_mojo->slot_id = sim_slot.slot_id;
     sim_info_mojo->iccid = sim_slot.iccid;
@@ -591,6 +587,8 @@ mojom::InhibitReason GetInhibitReason(
       return mojom::InhibitReason::kResettingEuiccMemory;
     case CellularInhibitor::InhibitReason::kDisablingProfile:
       return mojom::InhibitReason::kDisablingProfile;
+    case CellularInhibitor::InhibitReason::kRequestingAvailableProfiles:
+      return mojom::InhibitReason::kRequestingAvailableProfiles;
   }
 }
 
@@ -2164,6 +2162,26 @@ mojom::TrafficCounterSource ConvertToTrafficCounterSourceEnum(
   return mojom::TrafficCounterSource::kUnknown;
 }
 
+bool GetDnsQueriesMonitoredValue() {
+  if (!NetworkHandler::IsInitialized() ||
+      !NetworkHandler::Get()->network_metadata_store()) {
+    return false;
+  }
+
+  NetworkMetadataStore* store = NetworkHandler::Get()->network_metadata_store();
+  return store->secure_dns_templates_with_identifiers_active();
+}
+
+bool GetReportXdrEventsEnabledValue() {
+  if (!NetworkHandler::IsInitialized() ||
+      !NetworkHandler::Get()->network_metadata_store()) {
+    return false;
+  }
+
+  NetworkMetadataStore* store = NetworkHandler::Get()->network_metadata_store();
+  return store->report_xdr_events_enabled();
+}
+
 }  // namespace
 
 CrosNetworkConfig::CrosNetworkConfig()
@@ -2950,6 +2968,9 @@ void CrosNetworkConfig::GetGlobalPolicy(GetGlobalPolicyCallback callback) {
       ::onc::global_network_config::kAllowOnlyPolicyWiFiToConnectIfAvailable,
       /*value_if_key_missing_from_dict=*/
       result->allow_only_policy_wifi_networks_to_connect_if_available);
+  result->dns_queries_monitored = GetDnsQueriesMonitoredValue();
+  result->report_xdr_events_enabled = GetReportXdrEventsEnabledValue();
+
   absl::optional<std::vector<std::string>> blocked_hex_ssids = GetStringList(
       global_policy_dict, ::onc::global_network_config::kBlockedHexSSIDs);
   if (blocked_hex_ssids) {

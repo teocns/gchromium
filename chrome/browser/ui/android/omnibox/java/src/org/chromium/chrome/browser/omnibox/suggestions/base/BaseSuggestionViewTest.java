@@ -456,12 +456,6 @@ public class BaseSuggestionViewTest {
         executeLayoutTest(100, 10, View.LAYOUT_DIRECTION_LTR);
     }
 
-    @Test(expected = AssertionError.class)
-    public void layout_emptyContentViews() {
-        mContentView.setMinimumHeight(0);
-        executeLayoutTest(100, 10, View.LAYOUT_DIRECTION_LTR);
-    }
-
     @Test
     public void layout_minimumHeightWithNoFooterIsSemicompact() {
         mView.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
@@ -515,13 +509,11 @@ public class BaseSuggestionViewTest {
         contentView.setMinimumHeight(CONTENT_VIEW_REPORTED_HEIGHT_PX);
         BaseSuggestionViewForTest suggestionViewForTest =
                 new BaseSuggestionViewForTest(contentView);
-        int marginPx = mActivity.getResources().getDimensionPixelSize(
-                org.chromium.chrome.browser.omnibox.R.dimen.omnibox_suggestion_vertical_margin);
 
         Assert.assertEquals(mDecorationIconWidthPx, suggestionViewForTest.mDecorationIconWidthPx);
-        Assert.assertEquals(mSemicompactSuggestionViewHeight - marginPx,
-                suggestionViewForTest.mContentHeightPx);
-        Assert.assertEquals(mCompactSuggestionViewHeight - marginPx,
-                suggestionViewForTest.mCompactContentHeightPx);
+        Assert.assertEquals(
+                mSemicompactSuggestionViewHeight, suggestionViewForTest.mContentHeightPx);
+        Assert.assertEquals(
+                mCompactSuggestionViewHeight, suggestionViewForTest.mCompactContentHeightPx);
     }
 }

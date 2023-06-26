@@ -41,22 +41,13 @@ BASE_FEATURE(kRemoveMobileViewportDoubleTap,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Design doc: bit.ly/scrollunification
-// Disabled on Windows due to crbug.com/1378021.
 BASE_FEATURE(kScrollUnification,
              "ScrollUnification",
-#if BUILDFLAG(IS_WIN)
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#else
              base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
 
 BASE_FEATURE(kMainRepaintScrollPrefersNewContent,
              "MainRepaintScrollPrefersNewContent",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kFlushGpuAtDraw,
-             "FlushGpuAtDraw",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSchedulerSmoothnessForAnimatedScrolls,
              "SmoothnessModeForAnimatedScrolls",
@@ -64,10 +55,6 @@ BASE_FEATURE(kSchedulerSmoothnessForAnimatedScrolls,
 
 BASE_FEATURE(kHudDisplayForPerformanceMetrics,
              "HudDisplayForPerformanceMetrics",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kJankInjectionAblationFeature,
-             "JankInjectionAblation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPreferNewContentForCheckerboardedScrolls,
@@ -82,6 +69,10 @@ BASE_FEATURE(kNonBlockingCommit,
              "NonBlockingCommit",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kNoPreserveLastMutation,
+             "NoPreserveLastMutation",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 BASE_FEATURE(kSlidingWindowForDroppedFrameCounter,
              "SlidingWindowForDroppedFrameCounter",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -92,11 +83,16 @@ BASE_FEATURE(kNormalPriorityImageDecoding,
 
 BASE_FEATURE(kUseDMSAAForTiles,
              "UseDMSAAForTiles",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_WIN)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 BASE_FEATURE(kUpdateBrowserControlsWithoutProxy,
              "UpdateBrowserControlsWithoutProxy",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRasterTilePriorityQueue,
              "RasterTilePriorityQueue",
@@ -114,6 +110,10 @@ BASE_FEATURE(kReclaimResourcesFlushInBackground,
              "ReclaimResourcesFlushInBackground",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kReclaimResourcesDelayedFlushInBackground,
+             "ReclaimResourcesDelayedFlushInBackground",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kMoreAggressiveSolidColorDetection,
              "MoreAggressiveSolidColorDetection",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -121,4 +121,9 @@ BASE_FEATURE(kMoreAggressiveSolidColorDetection,
 BASE_FEATURE(kReducedFrameRateEstimation,
              "kReducedFrameRateEstimation",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDetectHiDpiForMsaa,
+             "DetectHiDpiForMsaa",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 }  // namespace features

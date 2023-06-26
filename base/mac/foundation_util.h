@@ -95,6 +95,14 @@ BASE_EXPORT FilePath GetUserDocumentPath();
 //   returns - path to the application bundle, or empty on error
 BASE_EXPORT FilePath GetAppBundlePath(const FilePath& exec_name);
 
+// Takes a path to an (executable) binary and tries to provide the path to an
+// application bundle containing it. It takes the innermost bundle that it can
+// find (so for "/Foo/Bar.app/.../Baz.app/..." it produces
+// "/Foo/Bar.app/.../Baz.app").
+//   |exec_name| - path to the binary
+//   returns - path to the application bundle, or empty on error
+BASE_EXPORT FilePath GetInnermostAppBundlePath(const FilePath& exec_name);
+
 #define TYPE_NAME_FOR_CF_TYPE_DECL(TypeCF) \
   BASE_EXPORT std::string TypeNameForCFType(TypeCF##Ref)
 
@@ -135,7 +143,7 @@ BASE_EXPORT void SetBaseBundleID(const char* new_base_bundle_id);
 }  // namespace base::mac
 
 // These casting functions cannot be implemented in a way that will work with
-// ARC. Use the casting functions in base/mac/bridging.h instead.
+// ARC. Use the casting functions in base/apple/bridging.h instead.
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 
 #if defined(__OBJC__)

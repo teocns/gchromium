@@ -68,9 +68,10 @@ void ClearAppUsageStats(const std::string& app_id) {
 #elif BUILDFLAG(IS_WIN)
   for (const auto& key_path : UsageStatsRegKeyPaths()) {
     LONG outcome = base::win::RegKey(UpdaterScopeToHKeyRoot(GetTestScope()),
-                                     key_path.c_str(), Wow6432(KEY_WRITE))
+                                     key_path.c_str(), Wow6432(DELETE))
                        .DeleteKey(base::SysUTF8ToWide(app_id).c_str());
-    ASSERT_TRUE(outcome == ERROR_SUCCESS || outcome == ERROR_FILE_NOT_FOUND);
+    ASSERT_TRUE(outcome == ERROR_SUCCESS || outcome == ERROR_FILE_NOT_FOUND ||
+                outcome == ERROR_INVALID_HANDLE);
   }
 #endif
 }
@@ -111,14 +112,7 @@ class UpdateUsageStatsTaskTest : public testing::Test {
   std::vector<base::ScopedClosureRunner> cleanups_;
 };
 
-// Mac Google-branded builds may pick up Chrome or other Google software
-// usagestat opt-ins from outside this test. Disable the test in that
-// configuration.
-#if !BUILDFLAG(IS_MAC) || !BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#endif
-
 #if BUILDFLAG(IS_WIN)
-
 TEST_F(UpdateUsageStatsTaskTest, NoApps) {
   ClearAppUsageStats("app1");
   ClearAppUsageStats("app2");
@@ -158,15 +152,17 @@ TEST_F(UpdateUsageStatsTaskTest,
   SetAppUsageStats(CLIENT_STATE_KEY, "app1", false);
   ASSERT_TRUE(OtherAppUsageStatsAllowed({"app1"}, GetTestScope()));
 }
-
 #elif !BUILDFLAG(IS_MAC) || !BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// Mac Google-branded builds may pick up Chrome or other Google software
+// usagestat opt-ins from outside this test. Disable the test in that
+// configuration.
 TEST_F(UpdateUsageStatsTaskTest, NoApps) {
   ClearAppUsageStats("app1");
   ClearAppUsageStats("app2");
   ASSERT_FALSE(OtherAppUsageStatsAllowed({"app1", "app2"}, GetTestScope()));
 }
 
-// TODO(crbug.com/1367437): Enable tests once updater is implemented for Linux
+// TODO(crbug.com/1367437): Enable tests once updater is implemented for Linux.
 #if !BUILDFLAG(IS_LINUX)
 TEST_F(UpdateUsageStatsTaskTest, OneAppEnabled) {
   SetAppUsageStats("app1", true);

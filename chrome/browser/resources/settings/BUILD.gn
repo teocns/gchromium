@@ -69,7 +69,6 @@ build_webui("build") {
   # -----------------web_component_files start ---------------------------------
   web_component_files = [
     "a11y_page/a11y_page.ts",
-    "a11y_page/live_caption_section.ts",
     "about_page/about_page.ts",
     "appearance_page/appearance_fonts_page.ts",
     "appearance_page/appearance_page.ts",
@@ -115,9 +114,14 @@ build_webui("build") {
     "performance_page/battery_page.ts",
     "performance_page/performance_page.ts",
     "performance_page/tab_discard_exception_add_dialog.ts",
+    "performance_page/tab_discard_exception_add_input.ts",
+    "performance_page/tab_discard_exception_current_sites_entry.ts",
+    "performance_page/tab_discard_exception_current_sites_list.ts",
     "performance_page/tab_discard_exception_edit_dialog.ts",
+    "performance_page/tab_discard_exception_edit_input.ts",
     "performance_page/tab_discard_exception_entry.ts",
     "performance_page/tab_discard_exception_list.ts",
+    "performance_page/tab_discard_exception_tabbed_add_dialog.ts",
     "people_page/people_page.ts",
     "people_page/signout_dialog.ts",
     "people_page/sync_account_control.ts",
@@ -148,8 +152,6 @@ build_webui("build") {
     "privacy_page/privacy_sandbox/privacy_sandbox_interest_item.ts",
     "privacy_page/privacy_sandbox/privacy_sandbox_page.ts",
     "privacy_page/privacy_sandbox/privacy_sandbox_topics_subpage.ts",
-    "privacy_page/secure_dns.ts",
-    "privacy_page/secure_dns_input.ts",
     "privacy_page/security_keys_bio_enroll_dialog.ts",
     "privacy_page/security_keys_credential_management_dialog.ts",
     "privacy_page/security_keys_pin_field.ts",
@@ -166,6 +168,7 @@ build_webui("build") {
     "reset_page/reset_profile_banner.ts",
     "reset_page/reset_profile_dialog.ts",
     "safety_check_page/safety_check_child.ts",
+    "safety_check_page/safety_check_extensions.ts",
     "safety_check_page/safety_check_extensions_child.ts",
     "safety_check_page/safety_check_notification_permissions.ts",
     "safety_check_page/safety_check_page.ts",
@@ -173,6 +176,7 @@ build_webui("build") {
     "safety_check_page/safety_check_safe_browsing_child.ts",
     "safety_check_page/safety_check_unused_site_permissions.ts",
     "safety_check_page/safety_check_updates_child.ts",
+    "safety_hub/safety_hub_page.ts",
     "search_engines_page/omnibox_extension_entry.ts",
     "search_engines_page/search_engine_edit_dialog.ts",
     "search_engines_page/search_engine_entry.ts",
@@ -217,7 +221,6 @@ build_webui("build") {
 
   if (!is_chromeos_ash) {
     web_component_files += [
-      "a11y_page/live_translate_section.ts",
       "people_page/manage_profile.ts",
       "relaunch_confirmation_dialog.ts",
       "languages_page/add_languages_dialog.ts",
@@ -230,6 +233,8 @@ build_webui("build") {
 
   if (!is_chromeos) {
     web_component_files += [
+      "a11y_page/live_caption_section.ts",
+      "a11y_page/live_translate_section.ts",
       "default_browser_page/default_browser_page.ts",
       "people_page/import_data_dialog.ts",
     ]
@@ -239,9 +244,11 @@ build_webui("build") {
     web_component_files += [ "languages_page/edit_dictionary_page.ts" ]
   }
 
-  if (!is_mac) {
+  if (!is_chromeos && !is_mac) {
     web_component_files += [ "a11y_page/captions_subpage.ts" ]
-  } else {
+  }
+
+  if (is_mac) {
     web_component_files += [ "autofill_page/passkey_edit_dialog.ts" ]
   }
 
@@ -289,6 +296,7 @@ build_webui("build") {
     "on_startup_page/on_startup_browser_proxy.ts",
     "on_startup_page/startup_urls_page_browser_proxy.ts",
     "page_visibility.ts",
+    "performance_page/discard_timer_options.ts",
     "performance_page/performance_browser_proxy.ts",
     "performance_page/performance_metrics_proxy.ts",
     "performance_page/tab_discard_exception_validation_mixin.ts",
@@ -302,15 +310,15 @@ build_webui("build") {
     "reset_page/reset_browser_proxy.ts",
     "route.ts",
     "router.ts",
-    "safety_check_page/extensions_safety_check_browser_proxy.ts",
     "safety_check_page/safety_check_browser_proxy.ts",
+    "safety_check_page/safety_check_extensions_browser_proxy.ts",
+    "safety_hub/safety_hub_browser_proxy.ts",
     "search_engines_page/search_engines_browser_proxy.ts",
     "search_settings.ts",
     "settings.ts",
     "settings_page/main_page_mixin.ts",
     "site_settings/constants.ts",
     "site_settings/site_settings_mixin.ts",
-    "site_settings/site_settings_permissions_browser_proxy.ts",
     "site_settings/site_settings_prefs_browser_proxy.ts",
     "site_settings/website_usage_browser_proxy.ts",
     "site_settings_page/site_settings_page_util.ts",

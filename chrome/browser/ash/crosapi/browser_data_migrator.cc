@@ -47,16 +47,12 @@ uint64_t DiskCheck(const base::FilePath& profile_data_dir) {
   using browser_data_migrator_util::GetTargetItems;
   using browser_data_migrator_util::ItemType;
   using browser_data_migrator_util::TargetItems;
-  TargetItems lacros_items =
-      GetTargetItems(profile_data_dir, ItemType::kLacros);
   TargetItems deletable_items =
       GetTargetItems(profile_data_dir, ItemType::kDeletable);
 
-  int64_t required_size =
+  const int64_t required_size =
       browser_data_migrator_util::EstimatedExtraBytesCreated(profile_data_dir) -
       deletable_items.total_size;
-  if (!base::FeatureList::IsEnabled(ash::features::kLacrosMoveProfileMigration))
-    required_size += lacros_items.total_size;
 
   return browser_data_migrator_util::ExtraBytesRequiredToBeFreed(
       required_size, profile_data_dir);
@@ -217,6 +213,20 @@ bool BrowserDataMigratorImpl::MaybeRestartToMigrateInternal(
   // Check if user exists i.e. not a guest session.
   if (!user)
     return false;
+
+  // Migration should not run for secondary users.
+  const auto* primary_user = user_manager::UserManager::Get()->GetPrimaryUser();
+  // `MaybeRestartToMigrateInternal()` either gets called before profile
+  // initialization or after profile initialization. In case of the former, its
+  // called from `PreProfileInit()` and this is only called for the primary
+  // profile so we can assume that the user is the primary user if `primary_user
+  // == nullptr`. If primary_user is not null then we check if `user !=
+  // primary_user`.
+  if (primary_user && (user != primary_user)) {
+    LOG(WARNING) << "Skip migration for secondary users.";
+    return false;
+  }
+
   // Check if profile migration is enabled. If not immediately return.
   if (!crosapi::browser_util::
           IsProfileMigrationEnabledWithUserAndPolicyInitState(
@@ -456,8 +466,7 @@ void BrowserDataMigratorImpl::RegisterLocalStatePrefs(
     PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(kMigrationStep,
                                 static_cast<int>(MigrationStep::kCheckStep));
-  registry->RegisterDictionaryPref(kMigrationAttemptCountPref,
-                                   base::Value::Dict());
+  registry->RegisterDictionaryPref(kMigrationAttemptCountPref);
   // Register prefs for move migration.
   MoveMigrator::RegisterLocalStatePrefs(registry);
 }

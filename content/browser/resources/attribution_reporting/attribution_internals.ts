@@ -6,10 +6,9 @@ import 'chrome://resources/cr_elements/cr_tab_box/cr_tab_box.js';
 import './attribution_internals_table.js';
 
 import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
-import {getTrustedHTML} from 'chrome://resources/js/static_types.js';
 import {Origin} from 'chrome://resources/mojo/url/mojom/origin.mojom-webui.js';
 
-import {TriggerVerification} from './attribution.mojom-webui.js';
+import {AttributionSupport, TriggerVerification} from './attribution.mojom-webui.js';
 import {Factory, HandlerInterface, HandlerRemote, ObserverInterface, ObserverReceiver, ReportID, SourceStatus, WebUIDebugReport, WebUIOsRegistration, WebUIRegistration, WebUIReport, WebUISource, WebUISource_Attributability, WebUISourceRegistration, WebUITrigger, WebUITrigger_Status} from './attribution_internals.mojom-webui.js';
 import {AttributionInternalsTableElement} from './attribution_internals_table.js';
 import {OsRegistrationResult, OsRegistrationType} from './attribution_reporting.mojom-webui.js';
@@ -390,13 +389,13 @@ class RegistrationTableModel<T extends Registration> extends TableModel<T> {
 class Trigger extends Registration {
   readonly eventLevelStatus: string;
   readonly aggregatableStatus: string;
-  readonly verification?: TriggerVerification;
+  readonly verifications: TriggerVerification[];
 
   constructor(mojo: WebUITrigger) {
     super(mojo.registration);
     this.eventLevelStatus = triggerStatusToText(mojo.eventLevelStatus);
     this.aggregatableStatus = triggerStatusToText(mojo.aggregatableStatus);
-    this.verification = mojo.verification;
+    this.verifications = mojo.verifications;
   }
 }
 
@@ -412,9 +411,9 @@ class ReportVerificationColumn implements Column<Trigger> {
   }
 
   render(td: HTMLElement, row: Trigger) {
-    if (row.verification) {
-      renderDL(td, row.verification, VERIFICATION_COLS);
-    }
+      row.verifications.forEach(verification => {
+        renderDL(td, verification, VERIFICATION_COLS);
+      });
   }
 }
 
@@ -535,13 +534,18 @@ class AggregatableAttributionReport extends Report {
   }
 }
 
-function commonReportTableColumns<T extends Report>(): Array<Column<T>> {
+function commonPreReportTableColumns<T extends Report>(): Array<Column<T>> {
   return [
-    new CodeColumn<T>('Report Body', (e) => e.reportBody),
     new ValueColumn<T, string>('Status', (e) => e.status),
     new ReportUrlColumn<T>(),
     new DateColumn<T>('Trigger Time', (e) => e.triggerTime),
     new DateColumn<T>('Report Time', (e) => e.reportTime),
+  ];
+}
+
+function commonPostReportTableColumns<T extends Report>(): Array<Column<T>> {
+  return [
+    new CodeColumn<T>('Report Body', (e) => e.reportBody),
   ];
 }
 
@@ -557,8 +561,9 @@ class ReportTableModel<T extends Report> extends TableModel<T> {
       private readonly sendReportsButton: HTMLButtonElement,
       private readonly handler: HandlerInterface) {
     super(
-        commonReportTableColumns<T>().concat(cols),
-        5,  // Sort by report time by default; the extra column is added below
+        commonPreReportTableColumns<T>().concat(cols)
+            .concat(commonPostReportTableColumns<T>()),
+        4,  // Sort by report time by default; the extra column is added below
         'No sent or pending reports.',
     );
 
@@ -972,6 +977,12 @@ function sourceRegistrationStatusToText(status: SourceStatus): string {
         return 'Rejected: excessive reporting origins';
       case StoreSourceResult.kProhibitedByBrowserPolicy:
         return 'Rejected: prohibited by browser policy';
+      case StoreSourceResult.kDestinationReportingLimitReached:
+        return 'Rejected: destination reporting limit reached';
+      case StoreSourceResult.kDestinationGlobalLimitReached:
+        return 'Rejected: destination global limit reached';
+      case StoreSourceResult.kDestinationBothLimitsReached:
+        return 'Rejected: destination both limits reached';
       default:
         return status.toString();
     }
@@ -1017,8 +1028,8 @@ function triggerStatusToText(status: WebUITrigger_Status): string {
       return 'Failure: Prohibited by browser policy';
     case WebUITrigger_Status.kNoMatchingConfigurations:
       return 'Rejected: no matching event-level configurations';
-    case WebUITrigger_Status.kExcessiveEventLevelReports:
-      return 'Failure: Excessive event-level reports';
+    case WebUITrigger_Status.kExcessiveReports:
+      return 'Failure: Excessive reports';
     default:
       assertNotReached();
   }
@@ -1173,18 +1184,35 @@ class AttributionInternals implements ObserverInterface {
           response.enabled ? 'enabled' : 'disabled';
       featureStatusContent.classList.toggle('disabled', !response.enabled);
 
-      const debugModeContent =
-          document.querySelector<HTMLElement>('#debug-mode-content')!;
-      const html = getTrustedHTML`The #attribution-reporting-debug-mode flag is
- <strong>enabled</strong>, reports are sent immediately and never pending.`;
-      debugModeContent.innerHTML = html as unknown as string;
+      const reportDelaysContent =
+          document.querySelector<HTMLElement>('#report-delays')!;
+      const noiseContent = document.querySelector<HTMLElement>('#noise')!;
 
-      if (!response.debugMode) {
-        debugModeContent.innerText = '';
+      if (response.debugMode) {
+        reportDelaysContent.innerText = 'disabled';
+        noiseContent.innerText = 'disabled';
+      } else {
+        reportDelaysContent.innerText = 'enabled';
+        noiseContent.innerText = 'enabled';
       }
 
       const attributionSupport = document.querySelector<HTMLElement>('#attribution-support')!;
-      attributionSupport.innerText = response.attributionSupport;
+      switch (response.attributionSupport) {
+        case AttributionSupport.kWeb:
+          attributionSupport.innerText = 'web';
+          break;
+        case AttributionSupport.kWebAndOs:
+          attributionSupport.innerText = 'os, web';
+          break;
+        case AttributionSupport.kOs:
+          attributionSupport.innerText = 'os';
+          break;
+        case AttributionSupport.kNone:
+          attributionSupport.innerText = '';
+          break;
+        default:
+          assertNotReached();
+      }
     });
 
     this.updateSources();

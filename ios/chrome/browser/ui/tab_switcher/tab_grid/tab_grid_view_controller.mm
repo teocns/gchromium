@@ -6,6 +6,7 @@
 
 #import <objc/runtime.h>
 
+#import "base/debug/dump_without_crashing.h"
 #import "base/functional/bind.h"
 #import "base/ios/ios_util.h"
 #import "base/logging.h"
@@ -44,14 +45,15 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/suggested_actions/suggested_actions_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_collection_commands.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_context_menu_provider.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_bottom_toolbar.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_empty_state_view.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_new_tab_button.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_control.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_top_toolbar.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/thumb_strip_plus_sign_button.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/grid_transition_layout.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_bottom_toolbar.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_new_tab_button.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_page_control.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_toolbars_commands_wrangler.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/toolbars/tab_grid_top_toolbar.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/legacy_grid_transition_layout.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -121,8 +123,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                                      RecentTabsTableViewControllerUIDelegate,
                                      SuggestedActionsDelegate,
                                      UIGestureRecognizerDelegate,
-                                     UIScrollViewAccessibilityDelegate,
-                                     UISearchBarDelegate>
+                                     UIScrollViewAccessibilityDelegate>
 // Whether the view is visible. Bookkeeping is based on
 // `-contentWillAppearAnimated:` and
 // `-contentWillDisappearAnimated methods. Note that the `Did` methods are not
@@ -147,8 +148,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 @property(nonatomic, weak) UIView* scrollContentView;
 // Scrim view to be presented when the search box in focused with no text.
 @property(nonatomic, strong) UIControl* scrimView;
-@property(nonatomic, weak) TabGridTopToolbar* topToolbar;
-@property(nonatomic, weak) TabGridBottomToolbar* bottomToolbar;
 @property(nonatomic, assign) TabGridConfiguration configuration;
 // Setting the current page doesn't scroll the scroll view; use
 // -scrollToPage:animated: for that.
@@ -291,7 +290,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   [self setupSearchUI];
   [self setupTopToolbar];
   [self setupBottomToolbar];
-  [self setupEditButton];
 
   if (IsPinnedTabsEnabled()) {
     [self setupPinnedTabsViewController];
@@ -312,14 +310,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
-  // Modify Incognito and Regular Tabs Insets
+  // Modify Incognito and Regular Tabs Insets.
   [self setInsetForGridViews];
-  // Reset bottom message width after bottom toolbar is updated after an
-  // orientation change. As this depends on
-  // `regularTabsViewController.gridView.contentOffset.x`, this should not be
-  // done in `-traitCollectionDidChange` when the updated layout has not been
-  // finalized.
-  [self updateRegularTabsBottomMessageConstraintsIfExists];
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
@@ -355,6 +347,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   if (IsPinnedTabsEnabled()) {
     [self updatePinnedTabsViewControllerConstraints];
   }
+  [self updateRegularTabsBottomMessageConstraintsIfExists];
 }
 
 #pragma mark - UIScrollViewDelegate
@@ -443,7 +436,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return l10n_util::GetNSString(stringID);
 }
 
-#pragma mark - GridTransitionAnimationLayoutProviding properties
+#pragma mark - LegacyGridTransitionAnimationLayoutProviding properties
 
 - (BOOL)isSelectedCellVisible {
   if (self.activePage != self.currentPage) {
@@ -465,8 +458,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
-- (GridTransitionLayout*)transitionLayout:(TabGridPage)activePage {
-  GridTransitionLayout* layout = [self transitionLayoutForPage:activePage];
+- (LegacyGridTransitionLayout*)transitionLayout:(TabGridPage)activePage {
+  LegacyGridTransitionLayout* layout =
+      [self transitionLayoutForPage:activePage];
   if (!layout) {
     return nil;
   }
@@ -704,12 +698,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [self slideOutRegularTabsBottomMessage];
     return;
   }
-  [self.regularTabsViewController
-      addChildViewController:self.regularTabsBottomMessage];
-  [self.regularTabsViewController.view
-      addSubview:self.regularTabsBottomMessage.view];
-  [self.regularTabsBottomMessage
-      didMoveToParentViewController:self.regularTabsViewController];
+  [self addChildViewController:self.regularTabsBottomMessage];
+  [self.view addSubview:self.regularTabsBottomMessage.view];
+  [self.regularTabsBottomMessage didMoveToParentViewController:self];
   [self initializeRegularTabsBottomMessageView];
 }
 
@@ -989,6 +980,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
+#pragma mark - TabGridToolbarsDelegateWrangler
+
+- (BOOL)isCurrentGridEmpty {
+  return [self gridViewControllerForPage:self.currentPage].gridEmpty;
+}
+
 #pragma mark - Private
 
 // Records the idle page status for the current `currentPage`.
@@ -1079,7 +1076,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 // Returns transition layout for the provided `page`.
-- (GridTransitionLayout*)transitionLayoutForPage:(TabGridPage)page {
+- (LegacyGridTransitionLayout*)transitionLayoutForPage:(TabGridPage)page {
   switch (page) {
     case TabGridPageIncognitoTabs:
       return [self.incognitoTabsViewController transitionLayout];
@@ -1091,12 +1088,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 // Returns transition layout provider for the regular tabs page.
-- (GridTransitionLayout*)transitionLayoutForRegularTabsPage {
-  GridTransitionLayout* regularTabsTransitionLayout =
+- (LegacyGridTransitionLayout*)transitionLayoutForRegularTabsPage {
+  LegacyGridTransitionLayout* regularTabsTransitionLayout =
       [self.regularTabsViewController transitionLayout];
 
   if (IsPinnedTabsEnabled()) {
-    GridTransitionLayout* pinnedTabsTransitionLayout =
+    LegacyGridTransitionLayout* pinnedTabsTransitionLayout =
         [self.pinnedTabsViewController transitionLayout];
 
     return [self combineTransitionLayout:regularTabsTransitionLayout
@@ -1110,43 +1107,47 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 // priority over `secondaryLayout`. This means that in case there are two
 // activeItems and/or two selectionItems available, only the ones from
 // `primaryLayout` would be picked for a combined layout.
-- (GridTransitionLayout*)
-    combineTransitionLayout:(GridTransitionLayout*)primaryLayout
-       withTransitionLayout:(GridTransitionLayout*)secondaryLayout {
-  NSArray<GridTransitionItem*>* primaryInactiveItems =
+- (LegacyGridTransitionLayout*)
+    combineTransitionLayout:(LegacyGridTransitionLayout*)primaryLayout
+       withTransitionLayout:(LegacyGridTransitionLayout*)secondaryLayout {
+  NSArray<LegacyGridTransitionItem*>* primaryInactiveItems =
       primaryLayout.inactiveItems;
-  NSArray<GridTransitionItem*>* secondaryInactiveItems =
+  NSArray<LegacyGridTransitionItem*>* secondaryInactiveItems =
       secondaryLayout.inactiveItems;
 
-  NSArray<GridTransitionItem*>* inactiveItems =
+  NSArray<LegacyGridTransitionItem*>* inactiveItems =
       [self combineInactiveItems:primaryInactiveItems
                withInactiveItems:secondaryInactiveItems];
 
-  GridTransitionActiveItem* primaryActiveItem = primaryLayout.activeItem;
-  GridTransitionActiveItem* secondaryActiveItem = secondaryLayout.activeItem;
+  LegacyGridTransitionActiveItem* primaryActiveItem = primaryLayout.activeItem;
+  LegacyGridTransitionActiveItem* secondaryActiveItem =
+      secondaryLayout.activeItem;
 
   // Prefer primary active item.
-  GridTransitionActiveItem* activeItem =
+  LegacyGridTransitionActiveItem* activeItem =
       primaryActiveItem ? primaryActiveItem : secondaryActiveItem;
 
-  GridTransitionItem* primarySelectionItem = primaryLayout.selectionItem;
-  GridTransitionItem* secondarySelectionItem = secondaryLayout.selectionItem;
+  LegacyGridTransitionItem* primarySelectionItem = primaryLayout.selectionItem;
+  LegacyGridTransitionItem* secondarySelectionItem =
+      secondaryLayout.selectionItem;
 
   // Prefer primary selection item.
-  GridTransitionItem* selectionItem =
+  LegacyGridTransitionItem* selectionItem =
       primarySelectionItem ? primarySelectionItem : secondarySelectionItem;
 
-  return [GridTransitionLayout layoutWithInactiveItems:inactiveItems
-                                            activeItem:activeItem
-                                         selectionItem:selectionItem];
+  return [LegacyGridTransitionLayout layoutWithInactiveItems:inactiveItems
+                                                  activeItem:activeItem
+                                               selectionItem:selectionItem];
 }
 
 // Combines two arrays of inactive items into one. The `primaryInactiveItems`
 // (if any) would be placed in the front of the resulting array, whether the
 // `secondaryInactiveItems` would be placed in the back.
-- (NSArray<GridTransitionItem*>*)
-    combineInactiveItems:(NSArray<GridTransitionItem*>*)primaryInactiveItems
-       withInactiveItems:(NSArray<GridTransitionItem*>*)secondaryInactiveItems {
+- (NSArray<LegacyGridTransitionItem*>*)
+    combineInactiveItems:
+        (NSArray<LegacyGridTransitionItem*>*)primaryInactiveItems
+       withInactiveItems:
+           (NSArray<LegacyGridTransitionItem*>*)secondaryInactiveItems {
   if (primaryInactiveItems == nil) {
     primaryInactiveItems = @[];
   }
@@ -1219,7 +1220,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 - (void)setInsetForGridViews {
   // Sync the scroll view offset to the current page value if the scroll view
   // isn't scrolling. Don't animate this.
-  if (!self.scrollView.dragging && !self.scrollView.decelerating) {
+  if (!self.scrollViewAnimatingContentOffset && !self.scrollView.dragging &&
+      !self.scrollView.decelerating) {
     [self scrollToPage:self.currentPage animated:NO];
   }
 
@@ -1285,7 +1287,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [self.pinnedTabsViewController pinnedTabsAvailable:pinnedTabsAvailable];
   }
   [self updateToolbarsAppearance];
-  [self setupEditButton];
+  [self.toolbarCommandsWrangler updateToolbarButtons];
   // Make sure the current page becomes the first responder, so that it can
   // register and handle key commands.
   [self.currentPageViewController becomeFirstResponder];
@@ -1572,63 +1574,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
-- (void)setupEditButton API_AVAILABLE(ios(14.0)) {
-  ActionFactory* actionFactory = [[ActionFactory alloc]
-      initWithScenario:MenuScenarioHistogram::kTabGridEdit];
-  __weak TabGridViewController* weakSelf = self;
-  NSMutableArray<UIMenuElement*>* menuElements =
-      [@[ [actionFactory actionToCloseAllTabsWithBlock:^{
-        [weakSelf closeAllButtonTapped:nil];
-      }] ] mutableCopy];
-  // Disable the "Select All" option from the edit button when there is no tabs
-  // in the regular tab grid. "Close All" can still be called if there is
-  // element in inactive tabs.
-  BOOL disabledSelectAll = self.currentPage == TabGridPageRegularTabs &&
-                           self.regularTabsViewController.isGridEmpty;
-  if (!disabledSelectAll) {
-    [menuElements addObject:[actionFactory actionToSelectTabsWithBlock:^{
-                    [weakSelf selectTabsButtonTapped:nil];
-                  }]];
-  }
-
-  UIMenu* menu = [UIMenu menuWithChildren:menuElements];
-  [self.topToolbar setEditButtonMenu:menu];
-  [self.bottomToolbar setEditButtonMenu:menu];
-}
-
 // Adds the top toolbar and sets constraints.
 - (void)setupTopToolbar {
-  // In iOS 13+, constraints break if the UIToolbar is initialized with a null
-  // or zero rect frame. An arbitrary non-zero frame fixes this issue.
-  TabGridTopToolbar* topToolbar =
-      [[TabGridTopToolbar alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
-  self.topToolbar = topToolbar;
-  topToolbar.translatesAutoresizingMaskIntoConstraints = NO;
+  UIView* topToolbar = self.topToolbar;
+  CHECK(topToolbar);
+
   [self.view addSubview:topToolbar];
-
-  // Sets the leadingButton title during initialization allows the actionSheet
-  // to be correctly anchored. See: crbug.com/1140982.
-  [topToolbar setCloseAllButtonTarget:self
-                               action:@selector(closeAllButtonTapped:)];
-  [topToolbar setDoneButtonTarget:self action:@selector(doneButtonTapped:)];
-  [topToolbar setNewTabButtonTarget:self action:@selector(newTabButtonTapped:)];
-  [topToolbar setSelectAllButtonTarget:self
-                                action:@selector(selectAllButtonTapped:)];
-  [topToolbar setSearchButtonTarget:self action:@selector(searchButtonTapped:)];
-  [topToolbar setCancelSearchButtonTarget:self
-                                   action:@selector(cancelSearchButtonTapped:)];
-  [topToolbar setSearchBarDelegate:self];
-
-  // Configure and initialize the page control.
-  [topToolbar.pageControl addTarget:self
-                             action:@selector(pageControlChangedValue:)
-                   forControlEvents:UIControlEventValueChanged];
-  [topToolbar.pageControl addTarget:self
-                             action:@selector(pageControlChangedPageByDrag:)
-                   forControlEvents:TabGridPageChangeByDragEvent];
-  [topToolbar.pageControl addTarget:self
-                             action:@selector(pageControlChangedPageByTap:)
-                   forControlEvents:TabGridPageChangeByTapEvent];
 
   [NSLayoutConstraint activateConstraints:@[
     [topToolbar.topAnchor
@@ -1640,10 +1591,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 // Adds the bottom toolbar and sets constraints.
 - (void)setupBottomToolbar {
-  TabGridBottomToolbar* bottomToolbar = [[TabGridBottomToolbar alloc] init];
-  self.bottomToolbar = bottomToolbar;
-  bottomToolbar.translatesAutoresizingMaskIntoConstraints = NO;
+  UIView* bottomToolbar = self.bottomToolbar;
+  CHECK(bottomToolbar);
+
   [self.view addSubview:bottomToolbar];
+
   [NSLayoutConstraint activateConstraints:@[
     [bottomToolbar.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
     [bottomToolbar.leadingAnchor
@@ -1651,17 +1603,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [bottomToolbar.trailingAnchor
         constraintEqualToAnchor:self.view.trailingAnchor],
   ]];
-
-  [bottomToolbar setCloseAllButtonTarget:self
-                                  action:@selector(closeAllButtonTapped:)];
-  [bottomToolbar setDoneButtonTarget:self action:@selector(doneButtonTapped:)];
-
-  [bottomToolbar setNewTabButtonTarget:self
-                                action:@selector(newTabButtonTapped:)];
-  [bottomToolbar setCloseTabsButtonTarget:self
-                                   action:@selector(closeSelectedTabs:)];
-  [bottomToolbar setShareTabsButtonTarget:self
-                                   action:@selector(shareSelectedTabs:)];
 
   [self.layoutGuideCenter referenceView:bottomToolbar
                               underName:kTabGridBottomToolbarGuide];
@@ -2068,7 +2009,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 // Creates and shows a new regular tab.
 - (void)openNewRegularTabForKeyboardCommand {
-  [self.handler dismissModalDialogs];
+  [self.handler dismissModalDialogsWithCompletion:nil];
   [self openNewTabInPage:TabGridPageRegularTabs focusOmnibox:YES];
   base::RecordAction(
       base::UserMetricsAction("MobileTabGridCreateRegularTabKeyboard"));
@@ -2076,7 +2017,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 // Creates and shows a new incognito tab.
 - (void)openNewIncognitoTabForKeyboardCommand {
-  [self.handler dismissModalDialogs];
+  [self.handler dismissModalDialogsWithCompletion:nil];
   [self openNewTabInPage:TabGridPageIncognitoTabs focusOmnibox:YES];
   base::RecordAction(
       base::UserMetricsAction("MobileTabGridCreateIncognitoTabKeyboard"));
@@ -2224,14 +2165,17 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 - (void)reportTabSelectionTime {
-  CHECK(!self.tabGridEnterTime.is_null());
+  if (self.tabGridEnterTime.is_null()) {
+    // The enter time was not recorded. Bail out.
+    return;
+  }
   base::TimeDelta duration = base::TimeTicks::Now() - self.tabGridEnterTime;
   base::UmaHistogramLongTimes("IOS.TabSwitcher.TimeSpentOpeningExistingTab",
                               duration);
   self.tabGridEnterTime = base::TimeTicks();
 }
 
-#pragma mark UIGestureRecognizerDelegate
+#pragma mark - UIGestureRecognizerDelegate
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer*)gestureRecognizer
     shouldRecognizeSimultaneouslyWithGestureRecognizer:
@@ -2241,7 +2185,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return NO;
 }
 
-#pragma mark UISearchBarDelegate
+#pragma mark - UISearchBarDelegate
 
 - (void)searchBarTextDidBeginEditing:(UISearchBar*)searchBar {
   [self updateScrimVisibilityForText:searchBar.text];
@@ -2503,8 +2447,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     return;
   }
 
-  // Check if the tab being selected is already selected.
-  BOOL alreadySelected = NO;
   id<GridCommands> tabsDelegate;
   if (gridViewController == self.regularTabsViewController) {
     tabsDelegate = self.regularTabsDelegate;
@@ -2525,7 +2467,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // Record how long it took to select an item.
   [self reportTabSelectionTime];
 
-  alreadySelected = [tabsDelegate isItemWithIDSelected:itemID];
+  // Check if the tab being selected is already selected.
+  BOOL alreadySelected = [tabsDelegate isItemWithIDSelected:itemID];
   if (!alreadySelected) {
     [self setCurrentIdlePageStatus:NO];
   }
@@ -2607,7 +2550,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     crash_keys::SetIncognitoTabCount(count);
     [self handleTabCountChangeWithTabCount:count];
   }
-  [self setupEditButton];
+  [self.toolbarCommandsWrangler updateToolbarButtons];
 }
 
 - (void)gridViewController:(GridViewController*)gridViewController
@@ -2705,8 +2648,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 - (void)didTapInactiveTabsButtonInGridViewController:
     (GridViewController*)gridViewController {
-  DCHECK(IsInactiveTabsEnabled());
-  DCHECK_EQ(self.currentPage, TabGridPageRegularTabs);
+  CHECK(IsInactiveTabsEnabled());
+  CHECK_EQ(self.currentPage, TabGridPageRegularTabs);
   base::RecordAction(base::UserMetricsAction("MobileTabGridShowInactiveTabs"));
   [self.delegate showInactiveTabs];
 }
@@ -2716,7 +2659,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   NOTREACHED();
 }
 
-#pragma mark - Control actions
+#pragma mark - TabGridToolbarsActionWrangler
 
 - (void)doneButtonTapped:(id)sender {
   // Tapping Done when in selection mode, should only return back to the normal
@@ -2783,40 +2726,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       NOTREACHED() << "It is invalid to call close all tabs on remote tabs.";
       break;
   }
-}
-
-- (void)handleCloseAllButtonForRegularTabsWithAnchor:(UIBarButtonItem*)anchor {
-  DCHECK_EQ(self.undoCloseAllAvailable,
-            (self.regularTabsViewController.gridEmpty &&
-             self.regularTabsViewController.inactiveGridEmpty));
-
-  if (self.undoCloseAllAvailable) {
-    [self undoCloseAllItemsForRegularTabs];
-  } else {
-    [self saveAndCloseAllItemsForRegularTabs];
-  }
-}
-
-- (void)undoCloseAllItemsForRegularTabs {
-  // This was saved as a stack: first save the inactive tabs, then the active
-  // tabs. So undo in the reverse order: first undo the active tabs, then the
-  // inactive tabs.
-  [self.regularTabsDelegate undoCloseAllItems];
-  [self.inactiveTabsDelegate undoCloseAllItems];
-
-  self.undoCloseAllAvailable = NO;
-  [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
-}
-
-- (void)saveAndCloseAllItemsForRegularTabs {
-  // This was saved as a stack: first save the inactive tabs, then the active
-  // tabs. So undo in the reverse order: first undo the active tabs, then the
-  // inactive tabs.
-  [self.inactiveTabsDelegate saveAndCloseAllItems];
-  [self.regularTabsDelegate saveAndCloseAllItems];
-
-  self.undoCloseAllAvailable = YES;
-  [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
 }
 
 - (void)searchButtonTapped:(id)sender {
@@ -2965,6 +2874,56 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                        withInteration:TabSwitcherPageChangeInteraction::
                                           kControlTap];
   }
+}
+
+#pragma mark - Control helpers
+
+- (void)handleCloseAllButtonForRegularTabsWithAnchor:(UIBarButtonItem*)anchor {
+  DCHECK_EQ(self.undoCloseAllAvailable,
+            (self.regularTabsViewController.gridEmpty &&
+             self.regularTabsViewController.inactiveGridEmpty));
+
+  if (self.undoCloseAllAvailable) {
+    [self undoCloseAllItemsForRegularTabs];
+  } else {
+    [self saveAndCloseAllItemsForRegularTabs];
+  }
+}
+
+- (void)undoCloseAllItemsForRegularTabs {
+  GridViewController* regularViewController =
+      [self gridViewControllerForPage:TabGridPageRegularTabs];
+
+  [regularViewController willUndoCloseAll];
+
+  // This was saved as a stack: first save the inactive tabs, then the active
+  // tabs. So undo in the reverse order: first undo the active tabs, then the
+  // inactive tabs.
+  [self.regularTabsDelegate undoCloseAllItems];
+  [self.inactiveTabsDelegate undoCloseAllItems];
+
+  [regularViewController didUndoCloseAll];
+
+  self.undoCloseAllAvailable = NO;
+  [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
+}
+
+- (void)saveAndCloseAllItemsForRegularTabs {
+  GridViewController* regularViewController =
+      [self gridViewControllerForPage:TabGridPageRegularTabs];
+
+  [regularViewController willCloseAll];
+
+  // This was saved as a stack: first save the inactive tabs, then the active
+  // tabs. So undo in the reverse order: first undo the active tabs, then the
+  // inactive tabs.
+  [self.inactiveTabsDelegate saveAndCloseAllItems];
+  [self.regularTabsDelegate saveAndCloseAllItems];
+
+  [regularViewController didCloseAll];
+
+  self.undoCloseAllAvailable = YES;
+  [self configureCloseAllButtonForCurrentPageAndUndoAvailability];
 }
 
 #pragma mark - DisabledTabViewControllerDelegate
@@ -3181,6 +3140,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.regularTabsBottomMessageConstraints = nil;
 
   UIView* bottomMessageView = self.regularTabsBottomMessage.view;
+  [bottomMessageView invalidateIntrinsicContentSize];
   NSMutableArray<NSLayoutConstraint*>* constraints =
       [[NSMutableArray alloc] init];
   // left and right anchors.
@@ -3225,7 +3185,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     [bottomMessageView.bottomAnchor constraintEqualToAnchor:bottomAnchor],
     [bottomMessageView.topAnchor
         constraintGreaterThanOrEqualToAnchor:self.view.topAnchor
-                                    constant:topLayoutAnchorConstant]
+                                    constant:topLayoutAnchorConstant],
+    [bottomMessageView.heightAnchor
+        constraintLessThanOrEqualToConstant:bottomMessageView
+                                                .intrinsicContentSize.height],
   ]];
   self.regularTabsBottomMessageConstraints = constraints;
   [NSLayoutConstraint
@@ -3239,7 +3202,6 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   bottomMessageView.translatesAutoresizingMaskIntoConstraints = NO;
   // The bottom message should cover all grid cells but not cover the blocking
   // view.
-  bottomMessageView.layer.zPosition = FLT_MAX - 1;
   bottomMessageView.hidden = self.tabGridMode != TabGridModeNormal;
   [self slideInRegularTabsBottomMessage];
 }
@@ -3248,15 +3210,22 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 // should be called only when the bottom message is just set.
 - (void)slideInRegularTabsBottomMessage {
   UIView* bottomMessageView = self.regularTabsBottomMessage.view;
-  self.regularTabsViewController.gridView.contentInset =
-      [self calculateInsetForRegularGridView];
+  UIScrollView* regularTabsGridView = self.regularTabsViewController.gridView;
+  CGFloat scrollableHeight = regularTabsGridView.contentSize.height +
+                             regularTabsGridView.adjustedContentInset.bottom -
+                             regularTabsGridView.bounds.size.height;
+  // Slide if there are more active tabs that the screen could hold, and that
+  // the user has scrolled to the bottom.
+  BOOL shouldScrollAgainAfterSliding =
+      regularTabsGridView.contentSize.height >= self.view.bounds.size.height &&
+      regularTabsGridView.contentOffset.y >= scrollableHeight;
   // Initial position of `bottomMessageView should be below the view, so that
   // the animation slides it up from the bottom, instead of sliding it down from
   // the top.
   NSLayoutConstraint* initialConstraint = [bottomMessageView.topAnchor
       constraintEqualToAnchor:self.view.bottomAnchor];
   initialConstraint.active = YES;
-  [self.regularTabsViewController.view layoutIfNeeded];
+  [self.view layoutIfNeeded];
   // Perform initial animation.
   __weak TabGridViewController* weakSelf = self;
   [UIView
@@ -3264,7 +3233,14 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                animations:^{
                  initialConstraint.active = NO;
                  [weakSelf updateRegularTabsBottomMessageConstraintsIfExists];
-                 [weakSelf.regularTabsViewController.view layoutIfNeeded];
+                 [weakSelf.view layoutIfNeeded];
+                 if (shouldScrollAgainAfterSliding) {
+                   CGFloat newScrollableHeight =
+                       scrollableHeight + bottomMessageView.bounds.size.height;
+                   [regularTabsGridView
+                       setContentOffset:CGPointMake(0, newScrollableHeight)
+                               animated:NO];
+                 }
                }];
 }
 

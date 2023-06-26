@@ -23,6 +23,7 @@ struct CORE_EXPORT NGInlineNodeData final : NGInlineItemsData {
     return static_cast<TextDirection>(base_direction_);
   }
 
+  bool HasFloats() const { return has_floats_; }
   bool HasInitialLetterBox() const { return has_initial_letter_box_; }
   bool HasRuby() const { return has_ruby_; }
 
@@ -31,6 +32,12 @@ struct CORE_EXPORT NGInlineNodeData final : NGInlineItemsData {
   // True if this node can't use the bisection in `NGParagraphLineBreaker`.
   bool IsBisectLineBreakDisabled() const {
     return is_bisect_line_break_disabled_;
+  }
+  // True if this node can't use the `NGScorehLineBreaker`, that can be
+  // determined by `CollectInlines`. Conditions that can change without
+  // `CollectInlines` are in `NGLineBreaker::ShouldDisableScoreLineBreak()`.
+  bool IsScoreLineBreakDisabled() const {
+    return is_score_line_break_disabled_;
   }
 
   const NGInlineItemsData& ItemsData(bool is_first_line) const {
@@ -66,6 +73,8 @@ struct CORE_EXPORT NGInlineNodeData final : NGInlineItemsData {
   unsigned is_bidi_enabled_ : 1;
   unsigned base_direction_ : 1;  // TextDirection
 
+  unsigned has_floats_ : 1;
+
   // True if this node contains initial letter box. This value is used for
   // clearing. To control whether subsequent blocks overlap with initial
   // letter[1].
@@ -91,6 +100,7 @@ struct CORE_EXPORT NGInlineNodeData final : NGInlineItemsData {
   unsigned changes_may_affect_earlier_lines_ : 1;
 
   unsigned is_bisect_line_break_disabled_ : 1;
+  unsigned is_score_line_break_disabled_ : 1;
 };
 
 }  // namespace blink

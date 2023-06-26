@@ -4,8 +4,16 @@
 
 #include "ash/ambient/managed/screensaver_image_downloader.h"
 
+#include <string>
+
+#include "ash/ambient/metrics/managed_screensaver_metrics.h"
+#include "base/containers/flat_set.h"
+#include "base/files/file_enumerator.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/hash/sha1.h"
+#include "base/logging.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool.h"
 #include "net/http/http_request_headers.h"
@@ -60,9 +68,14 @@ constexpr net::NetworkTrafficAnnotationTag
           }
         })");
 constexpr char kCacheFileExt[] = ".cache";
+constexpr char kCacheFileWildCardPattern[] = "*.cache";
 
 constexpr int64_t kMaxFileSizeInBytes = 8 * 1024 * 1024;  // 8 MB
 constexpr int kMaxUrlFetchRetries = 3;
+
+// This limit is specified in the policy definition for the policies
+// ScreensaverLockScreenImages and DeviceScreensaverLoginScreenImages.
+constexpr size_t kMaxUrlsToProcessFromPolicy = 25u;
 
 std::unique_ptr<network::SimpleURLLoader> CreateSimpleURLLoader(
     const std::string& url) {
@@ -70,6 +83,7 @@ std::unique_ptr<network::SimpleURLLoader> CreateSimpleURLLoader(
   request->url = GURL(url);
   request->method = net::HttpRequestHeaders::kGetMethod;
   request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  CHECK(request->url.SchemeIs(url::kHttpsScheme));
 
   auto loader = network::SimpleURLLoader::Create(
       std::move(request), kScreensaverImageDownloaderNetworkTag);
@@ -103,30 +117,181 @@ bool VerifyOrCreateDownloadDirectory(const base::FilePath& download_directory) {
   return true;
 }
 
-}  // namespace
-
-ScreensaverImageDownloader::Job::Job(const std::string& image_url,
-                                     ResultCallback result_callback)
-    : image_url(image_url), result_callback(std::move(result_callback)) {}
-
-ScreensaverImageDownloader::Job::~Job() = default;
-
-std::string ScreensaverImageDownloader::Job::file_name() const {
-  const std::string hash = base::SHA1HashString(image_url);
+std::string GetHashedFileNameForUrl(const std::string& url) {
+  const std::string hash = base::SHA1HashString(url);
   const std::string encoded_hash = base::HexEncode(hash.data(), hash.size());
   return encoded_hash + kCacheFileExt;
 }
 
+std::vector<std::string> GetImageUrlsToProcess(
+    const base::Value::List& image_url_list) {
+  std::vector<std::string> urls;
+  for (size_t i = 0;
+       i < kMaxUrlsToProcessFromPolicy && i < image_url_list.size(); ++i) {
+    const base::Value& value = image_url_list[i];
+    if (!value.is_string() || value.GetString().empty()) {
+      continue;
+    }
+    // Canonicalize URLs and require HTTPS.
+    GURL url(value.GetString());
+    if (!url.is_valid() || !url.SchemeIs(url::kHttpsScheme)) {
+      LOG(WARNING) << "Ignored invalid URL: " << url;
+      continue;
+    }
+
+    urls.emplace_back(url.spec());
+  }
+  return urls;
+}
+
+// Returns all the cached images in the provided directory.
+// This method does blocking IO and should only be run on a thread that
+// allows blocking IO.
+std::vector<base::FilePath> GetCachedImagesFromDisk(
+    const base::FilePath& directory) {
+  std::vector<base::FilePath> images_on_disk;
+  base::FileEnumerator iterator(directory, /*recursive=*/false,
+                                base::FileEnumerator::FILES,
+                                FILE_PATH_LITERAL(kCacheFileWildCardPattern));
+  base::FilePath current_path;
+  for (base::FilePath path = iterator.Next(); !path.empty();
+       path = iterator.Next()) {
+    images_on_disk.push_back(path);
+  }
+
+  return images_on_disk;
+}
+
+// Deletes all the provided files in the `files_to_delete` parameter.
+// This method does blocking IO and should only be run on a thread that
+// allows blocking IO.
+// Note: In case all of the files are successfully deleted, this will return
+// true otherwise will return false.
+bool DeleteFiles(const std::vector<base::FilePath>& files_to_delete) {
+  bool success = true;
+  for (const auto& path : files_to_delete) {
+    // Even if one file fails to delete mark this operation as not being
+    // success.
+    if (!base::DeleteFile(path)) {
+      LOG(WARNING) << "Failed to clean up: " << path.BaseName().value();
+      success = false;
+    }
+  }
+  return success;
+}
+
+}  // namespace
+
 ScreensaverImageDownloader::ScreensaverImageDownloader(
     scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory,
-    const base::FilePath& download_directory)
+    const base::FilePath& download_directory,
+    ImageListUpdatedCallback image_list_updated_callback)
     : task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
       shared_url_loader_factory_(shared_url_loader_factory),
-      download_directory_(download_directory) {}
+      download_directory_(download_directory),
+      image_list_updated_callback_(image_list_updated_callback) {}
 
 ScreensaverImageDownloader::~ScreensaverImageDownloader() = default;
+
+void ScreensaverImageDownloader::UpdateImageUrlList(
+    const base::Value::List& image_url_list) {
+  if (image_url_list.empty()) {
+    // If the screensaver is listening to updates, notify that the images are no
+    // longer available before deleting them.
+    image_list_updated_callback_.Run(std::vector<base::FilePath>());
+
+    ClearRequestQueue();
+    weak_ptr_factory_.InvalidateWeakPtrs();
+    DeleteDownloadedImages();
+    downloaded_images_.clear();
+    return;
+  }
+
+  std::vector<std::string> new_image_urls =
+      GetImageUrlsToProcess(image_url_list);
+
+  // `this` is unretained here as `PostTaskAndReplyWithResult` does not work
+  // with weak ptrs as weak ptrs do not work with functions that return a value.
+  // The usage is safe as the task is executed immediately and `this` should
+  // outlive the call.
+  task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&ScreensaverImageDownloader::DeleteUnreferencedImageFiles,
+                     base::Unretained(this), new_image_urls),
+      base::BindOnce(&ScreensaverImageDownloader::OnUnreferencedImagesDeleted,
+                     weak_ptr_factory_.GetWeakPtr()));
+
+  for (const std::string& url : new_image_urls) {
+    DVLOG(1) << "Queue URL: " << url;
+    auto job = std::make_unique<ScreensaverImageDownloader::Job>(url);
+    QueueDownloadJob(std::move(job));
+  }
+}
+
+std::vector<base::FilePath>
+ScreensaverImageDownloader::DeleteUnreferencedImageFiles(
+    const std::vector<std::string>& new_image_urls) {
+  std::vector<std::string> hashed_image_urls = new_image_urls;
+  // Hash the image url
+  base::ranges::transform(hashed_image_urls.begin(), hashed_image_urls.end(),
+                          hashed_image_urls.begin(), GetHashedFileNameForUrl);
+
+  base::flat_set<std::string> hashed_image_file_paths(hashed_image_urls);
+
+  auto cached_images_from_disk = GetCachedImagesFromDisk(download_directory_);
+
+  std::vector<base::FilePath> file_paths_to_delete;
+  for (const auto& downloaded_file : cached_images_from_disk) {
+    if (!hashed_image_file_paths.contains(downloaded_file.BaseName().value())) {
+      file_paths_to_delete.push_back(downloaded_file);
+    }
+  }
+  if (!DeleteFiles(file_paths_to_delete)) {
+    // TODO(b/276208772): Track result with metrics
+    DLOG(WARNING) << "Failed to delete some of the files";
+  }
+
+  return file_paths_to_delete;
+}
+
+void ScreensaverImageDownloader::OnUnreferencedImagesDeleted(
+    std::vector<base::FilePath> file_paths_deleted) {
+  if (file_paths_deleted.empty()) {
+    return;
+  }
+  for (const auto& path : file_paths_deleted) {
+    downloaded_images_.erase(path);
+    DVLOG(1) << "Removing path from in memory cache " << path;
+  }
+
+  image_list_updated_callback_.Run(std::vector<base::FilePath>(
+      downloaded_images_.begin(), downloaded_images_.end()));
+}
+
+std::vector<base::FilePath> ScreensaverImageDownloader::GetScreensaverImages() {
+  return std::vector<base::FilePath>(downloaded_images_.begin(),
+                                     downloaded_images_.end());
+}
+
+void ScreensaverImageDownloader::SetImagesForTesting(
+    const std::vector<base::FilePath>& images_file_paths) {
+  downloaded_images_ = base::flat_set<base::FilePath>(images_file_paths);
+}
+
+base::FilePath ScreensaverImageDownloader::GetDowloadDirForTesting() {
+  return download_directory_;
+}
+
+ScreensaverImageDownloader::Job::Job(const std::string& image_url)
+    : image_url(image_url) {}
+
+ScreensaverImageDownloader::Job::~Job() = default;
+
+std::string ScreensaverImageDownloader::Job::file_name() const {
+  return GetHashedFileNameForUrl(image_url);
+}
 
 void ScreensaverImageDownloader::QueueDownloadJob(
     std::unique_ptr<Job> download_job) {
@@ -270,9 +435,13 @@ void ScreensaverImageDownloader::FinishDownloadJob(
     std::unique_ptr<Job> download_job,
     ScreensaverImageDownloadResult result,
     absl::optional<base::FilePath> path) {
-  // TODO(b/276208772): Track result with metrics
-  CHECK(!download_job->result_callback.is_null());
-  std::move(download_job->result_callback).Run(result, path);
+  RecordManagedScreensaverImageDownloadResult(result);
+
+  if (result == ScreensaverImageDownloadResult::kSuccess) {
+    downloaded_images_.insert(*path);
+    image_list_updated_callback_.Run(std::vector<base::FilePath>(
+        downloaded_images_.begin(), downloaded_images_.end()));
+  }
 
   if (downloading_queue_.empty()) {
     queue_state_ = QueueState::kWaiting;

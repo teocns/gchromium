@@ -17,9 +17,16 @@ Mp4BoxWriter::Mp4BoxWriter(const Mp4MuxerContext& context)
 Mp4BoxWriter::~Mp4BoxWriter() = default;
 
 void Mp4BoxWriter::WriteAndFlush() {
+  // It will write itself as well as children boxes.
   BoxByteStream writer;
 
-  // It will write itself as well as children boxes.
+  WriteAndFlush(writer);
+}
+
+void Mp4BoxWriter::WriteAndFlush(BoxByteStream& writer) {
+  DCHECK(!writer.has_open_boxes());
+
+  // It will write to input writer as well as children boxes.
   Write(writer);
 
   // Update the total size on respective boxes.
@@ -40,24 +47,6 @@ void Mp4BoxWriter::WriteChildren(BoxByteStream& writer) {
 void Mp4BoxWriter::AddChildBox(std::unique_ptr<Mp4BoxWriter> box_writer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   child_boxes_.push_back(std::move(box_writer));
-}
-
-void Mp4BoxWriter::WriteBox(BoxByteStream& writer, mp4::FourCC fourcc) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  writer.WriteU32(fourcc);
-}
-
-void Mp4BoxWriter::WriteFullBox(BoxByteStream& writer,
-                                mp4::FourCC fourcc,
-                                uint32_t flags,
-                                uint8_t version) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  writer.WriteU32(fourcc);
-
-  writer.WriteU8(version);
-
-  writer.WriteU24(flags);
 }
 
 }  // namespace media

@@ -35,7 +35,8 @@
   }
 
   :host([modules-redesigned-enabled_]) {
-    --ntp-module-border-radius: 24px;
+    --ntp-module-border-radius: 16px;
+    --ntp-module-item-border-radius: 12px;
     --ntp-module-layout-width: 360px;
     --ntp-module-width: 360px;
   }
@@ -57,6 +58,11 @@
     position: absolute;
     top: 0;
     width: 100%;
+  }
+
+  #oneGoogleBarScrim[fixed] {
+    /* Prevent scrim from bouncing when overscrolling. */
+    position: fixed;
   }
 
   #oneGoogleBar {
@@ -93,7 +99,7 @@
     width: var(--ntp-module-layout-width);
   }
 
-  ntp-modules:not([hidden]) {
+  #modules:not([hidden]) {
     /* We use animation instead of transition to allow a fade-in out of
        display: none. */
     animation: 300ms ease-in-out fade-in-animation;
@@ -130,7 +136,7 @@
 
   /* ~ because the dom-if results in a template between the middle-slot-promo
      and ntp-modules. */
-  ntp-middle-slot-promo:not([hidden]) ~ ntp-modules {
+  ntp-middle-slot-promo:not([hidden]) ~ #modules {
     margin-top: 16px;
   }
 
@@ -144,6 +150,7 @@
   #customizeButtonContainer:has(help-bubble) {
     /* help-bubble parent needs z-index to overlay ntp-iframe */
     z-index: 1001;
+    background-color: var(--color-new-tab-page-button-background) !important;
   }
 
   :host-context([dir='ltr']) #customizeButtonContainer {
@@ -162,7 +169,10 @@
     background-color: var(--ntp-protected-icon-background-color-hovered);
   }
 
-  #customizeButton {
+  /* TODO(crbug.com/1454193): Show collapsed Customize Chrome button
+  for first step of Panorama tutorial after M115 is released to Stable. */
+  #customizeButton,
+  #customizeButtonContainer:has(help-bubble) #customizeButton {
     --hover-bg-color: var(--color-new-tab-page-button-background-hovered);
     --text-color: var(--color-new-tab-page-button-foreground);
     border: none;
@@ -170,6 +180,7 @@
     box-shadow: 0 3px 6px rgba(0, 0, 0, .16), 0 1px 2px rgba(0, 0, 0, .23);
     font-weight: 400;
     min-width: 32px;
+    padding: 8px 16px;
   }
 
   :host([show-background-image_]) #customizeButton {
@@ -181,7 +192,7 @@
     box-shadow: var(--ntp-focus-shadow);
   }
 
-  #customizeIcon {
+  #customizeIcon, #customizeButtonContainer:has(help-bubble) #customizeIcon {
     -webkit-mask-image: url(icons/icon_pencil.svg);
     -webkit-mask-repeat: no-repeat;
     -webkit-mask-size: 100%;
@@ -193,7 +204,15 @@
 
   :host([show-background-image_]) #customizeIcon {
     background-color: white;
-    margin: 0;
+    margin-inline-end: 0;
+  }
+
+  :host([show-background-image_]) #customizeText {
+      display: none;
+  }
+
+  #customizeButtonContainer:has(help-bubble) #customizeText {
+      display: inherit;
   }
 
   @media (max-width: 550px) {
@@ -334,7 +353,8 @@
         --ntp-logo-color: [[rgbaOrInherit_(logoColor_)]];">
   <template is="dom-if" if="[[lazyRender_]]">
     <template is="dom-if" if="[[oneGoogleBarEnabled_]]">
-      <div id="oneGoogleBarScrim" hidden$="[[!showOneGoogleBarScrim_]]"></div>
+      <div id="oneGoogleBarScrim" hidden$="[[!showOneGoogleBarScrim_]]"
+          fixed$="[[scrolledToTop_]]"></div>
       <ntp-iframe id="oneGoogleBar" src="[[oneGoogleBarIframePath_]]"
           hidden$="[[!oneGoogleBarLoaded_]]"
           allow="camera [[oneGoogleBarIframeOrigin_]]; display-capture [[oneGoogleBarIframeOrigin_]]"> <!-- presubmit: ignore-long-line -->
@@ -376,13 +396,22 @@
         </ntp-middle-slot-promo>
       </template>
       <template is="dom-if" if="[[modulesEnabled_]]">
-        <ntp-modules id="modules"
-            modules-fre-shown="{{modulesFreShown}}"
-            modules-shown-to-user="{{modulesShownToUser}}"
-            on-customize-module="onCustomizeModule_"
-            on-modules-loaded="onModulesLoaded_"
-            hidden="[[!promoAndModulesLoaded_]]">
-        </ntp-modules>
+        <template is="dom-if" if="[[!modulesRedesignedEnabled_]]">
+          <ntp-modules id="modules"
+              modules-fre-shown="{{modulesFreShown}}"
+              modules-shown-to-user="{{modulesShownToUser}}"
+              on-customize-module="onCustomizeModule_"
+              on-modules-loaded="onModulesLoaded_"
+              hidden="[[!promoAndModulesLoaded_]]">
+          </ntp-modules>
+        </template>
+        <template is="dom-if" if="[[modulesRedesignedEnabled_]]">
+          <ntp-modules-v2 id="modules"
+              on-customize-module="onCustomizeModule_"
+              on-modules-loaded="onModulesLoaded_"
+              hidden="[[!promoAndModulesLoaded_]]">
+          </ntp-modules-v2>
+        </template>
       </template>
       <a id="backgroundImageAttribution"
           href="[[backgroundImageAttributionUrl_]]"
@@ -405,7 +434,7 @@
         <cr-button id="customizeButton" on-click="onCustomizeClick_"
             title="$i18n{customizeThisPage}" aria-pressed="[[showCustomize_]]">
           <div id="customizeIcon"></div>
-          <div id="customizeText" hidden$="[[showBackgroundImage_]]">
+          <div id="customizeText">
             $i18n{customizeButton}
           </div>
         </cr-button>

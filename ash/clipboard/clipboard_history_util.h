@@ -58,9 +58,10 @@ enum class Action {
 // IDs for the views used by the clipboard history menu.
 enum MenuViewID {
   // We start at 1 because 0 is not a valid view ID.
-  kDeleteButtonViewID = 1,
-
-  kMainButtonViewID
+  kClearAllButtonViewID = 1,
+  kDeleteButtonViewID,
+  kMainButtonViewID,
+  kMenuTitleViewID,
 };
 
 // Modes for specifying a clipboard history pause's semantics.
@@ -157,9 +158,12 @@ ASH_EXPORT ui::ImageModel GetIconForFileClipboardItem(
 // render.
 ASH_EXPORT ui::ImageModel GetHtmlPreviewPlaceholder();
 
-// Returns the item descriptors based on `items`.
-std::vector<crosapi::mojom::ClipboardHistoryItemDescriptor>
-GetItemDescriptorsFrom(const std::list<ClipboardHistoryItem>& items);
+// Returns an item descriptor based on `item`.
+crosapi::mojom::ClipboardHistoryItemDescriptor ItemToDescriptor(
+    const ClipboardHistoryItem& item);
+
+// Calculates the preferred width for clipboard history menu item views.
+int GetPreferredItemViewWidth();
 
 }  // namespace clipboard_history_util
 }  // namespace ash

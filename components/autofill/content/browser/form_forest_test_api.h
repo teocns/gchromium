@@ -17,11 +17,6 @@ class FormForestTestApi {
   using FrameData = FormForest::FrameData;
   using FrameForm = FormForest::FrameAndForm;
 
-  absl::optional<LocalFrameToken> Resolve(const FrameData& local,
-                                          FrameToken other) {
-    return ff_->Resolve(local, other);
-  }
-
   explicit FormForestTestApi(FormForest* ff) : ff_(ff) { DCHECK(ff_); }
 
   void Reset() { ff_->frame_datas_.clear(); }
@@ -76,9 +71,6 @@ void FormForestTestApi::TraverseTrees(base::stack<FrameForm>& frontier,
   while (!frontier.empty()) {
     FrameForm next = frontier.top();
     frontier.pop();
-    DCHECK(next);
-    if (!next)
-      continue;
     fun(*next.form);
     ExpandForm(frontier, next);
   }

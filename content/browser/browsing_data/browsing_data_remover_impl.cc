@@ -29,6 +29,7 @@
 #include "content/browser/browsing_data/browsing_data_filter_builder_impl.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -560,6 +561,14 @@ void BrowsingDataRemoverImpl::RemoveImpl(
     network_context->ClearCorsPreflightCache(
         filter_builder->BuildNetworkServiceFilter(),
         CreateTaskCompletionClosureForMojo(TracingDataType::kPreflightCache));
+
+    // Clears the BFCache entries for the current browser context.
+    for (WebContentsImpl* web_contents : WebContentsImpl::GetAllWebContents()) {
+      if (web_contents->GetBrowserContext()->UniqueId() ==
+          browser_context_->UniqueId()) {
+        web_contents->GetController().GetBackForwardCache().Flush();
+      }
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -604,6 +613,20 @@ void BrowsingDataRemoverImpl::RemoveImpl(
             delete_begin_.is_null() ? base::Time::Min() : delete_begin_,
             delete_end_.is_null() ? base::Time::Max() : delete_end_,
             CreateTaskCompletionClosureForMojo(TracingDataType::kAuthCache));
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Shared Dictionaries.
+  if ((remove_mask & DATA_TYPE_COOKIES) || (remove_mask & DATA_TYPE_CACHE)) {
+    if (base::FeatureList::IsEnabled(
+            blink::features::kCompressionDictionaryTransportBackend)) {
+      network::mojom::NetworkContext* network_context =
+          browser_context_->GetDefaultStoragePartition()->GetNetworkContext();
+      network_context->ClearSharedDictionaryCache(
+          delete_begin, delete_end, filter_builder->BuildNetworkServiceFilter(),
+          CreateTaskCompletionClosureForMojo(
+              TracingDataType::kSharedDictionary));
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -850,6 +873,8 @@ const char* BrowsingDataRemoverImpl::GetHistogramSuffix(TracingDataType task) {
       return "SharedStorage";
     case TracingDataType::kPreflightCache:
       return "PreflightCache";
+    case TracingDataType::kSharedDictionary:
+      return "SharedDictionary";
   }
 }
 

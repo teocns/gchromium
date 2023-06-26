@@ -962,6 +962,11 @@ media::VideoEncoder::EncodeOptions VideoEncoder::CreateEncodeOptions(
                      request->encodeOpts->keyFrameNonNull();
   switch (active_config_->codec) {
     case media::VideoCodec::kAV1: {
+      if (!active_config_->options.bitrate.has_value() ||
+          active_config_->options.bitrate->mode() !=
+              media::Bitrate::Mode::kExternal) {
+        break;
+      }
       if (!request->encodeOpts->hasAv1() ||
           !request->encodeOpts->av1()->hasQuantizer()) {
         break;
@@ -970,6 +975,11 @@ media::VideoEncoder::EncodeOptions VideoEncoder::CreateEncodeOptions(
       break;
     }
     case media::VideoCodec::kVP9: {
+      if (!active_config_->options.bitrate.has_value() ||
+          active_config_->options.bitrate->mode() !=
+              media::Bitrate::Mode::kExternal) {
+        break;
+      }
       if (!request->encodeOpts->hasVp9() ||
           !request->encodeOpts->vp9()->hasQuantizer()) {
         break;
@@ -1196,6 +1206,11 @@ void VideoEncoder::CallOutputCallback(
 
   if (first_output_after_configure_ || codec_desc.has_value() ||
       output_color_space != last_output_color_space_) {
+    if (active_config->codec == media::VideoCodec::kH264) {
+      DCHECK(active_config->options.avc.produce_annexb ||
+             codec_desc.has_value());
+    }
+
     first_output_after_configure_ = false;
 
     if (output_color_space != last_output_color_space_) {

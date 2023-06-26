@@ -10,17 +10,7 @@ namespace switches {
 // All switches in alphabetical order.
 
 #if BUILDFLAG(IS_ANDROID)
-// If enabled, starts gaia id fetching process from android accounts in
-// AccountManagerFacade (AMF). Thus clients can get gaia id from AMF directly.
-BASE_FEATURE(kGaiaIdCacheInAccountManagerFacade,
-             "GaiaIdCacheInAccountManagerFacade",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kIdentityStatusConsistency,
-             "IdentityStatusConsistency",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
-#if BUILDFLAG(IS_IOS)
+// Feature to add a signed-out avatar on the NTP.
 BASE_FEATURE(kIdentityStatusConsistency,
              "IdentityStatusConsistency",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -61,6 +51,10 @@ BASE_FEATURE(kForceDisableExtendedSyncPromos,
 BASE_FEATURE(kForceStartupSigninPromo,
              "ForceStartupSigninPromo",
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+#if BUILDFLAG(IS_IOS)
+BASE_FEATURE(kFinchIosFre, "FinchIosFre", base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 // Enables a new version of the sync confirmation UI.

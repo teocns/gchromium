@@ -6,20 +6,25 @@
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "ash/constants/ash_pref_names.h"
 #include "ash/glanceables/glanceables_v2_controller.h"
 #include "ash/shell.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/ash/glanceables/glanceables_classroom_client_impl.h"
 #include "chrome/browser/ui/ash/glanceables/glanceables_tasks_client_impl.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/account_id/account_id.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/user_manager/user.h"
@@ -35,12 +40,24 @@ GlanceablesKeyedService::GlanceablesKeyedService(Profile* profile)
       account_id_(BrowserContextHelper::Get()
                       ->GetUserByBrowserContext(profile)
                       ->GetAccountId()) {
+  PrefService* const pref_service = profile->GetPrefs();
+
+  CHECK(pref_service);
+
+  // Listen to pref changes.
+  pref_change_registrar_.Init(pref_service);
+  pref_change_registrar_.Add(
+      prefs::kGlanceablesEnabled,
+      base::BindRepeating(&GlanceablesKeyedService::UpdateRegistrationInAsh,
+                          base::Unretained(this)));
+
   CreateClients();
 }
 
 GlanceablesKeyedService::~GlanceablesKeyedService() = default;
 
 void GlanceablesKeyedService::Shutdown() {
+  classroom_client_.reset();
   tasks_client_.reset();
   UpdateRegistrationInAsh();
 }
@@ -67,10 +84,14 @@ GlanceablesKeyedService::CreateRequestSenderForClient(
 }
 
 void GlanceablesKeyedService::CreateClients() {
-  tasks_client_ =
-      std::make_unique<GlanceablesTasksClientImpl>(base::BindRepeating(
-          &GlanceablesKeyedService::CreateRequestSenderForClient,
-          base::Unretained(this)));
+  const auto create_request_sender_callback = base::BindRepeating(
+      &GlanceablesKeyedService::CreateRequestSenderForClient,
+      base::Unretained(this));
+  classroom_client_ = std::make_unique<GlanceablesClassroomClientImpl>(
+      create_request_sender_callback);
+  tasks_client_ = std::make_unique<GlanceablesTasksClientImpl>(
+      create_request_sender_callback);
+
   UpdateRegistrationInAsh();
 }
 
@@ -78,9 +99,23 @@ void GlanceablesKeyedService::UpdateRegistrationInAsh() const {
   if (!Shell::HasInstance()) {
     return;
   }
+
   DCHECK(Shell::Get()->glanceables_v2_controller());
+
+  PrefService* prefs = profile_->GetPrefs();
+
+  CHECK(prefs);
+
+  if (!prefs->GetBoolean(prefs::kGlanceablesEnabled)) {
+    Shell::Get()->glanceables_v2_controller()->UpdateClientsRegistration(
+        account_id_, GlanceablesV2Controller::ClientsRegistration{
+                         .classroom_client = nullptr, .tasks_client = nullptr});
+    return;
+  }
+
   Shell::Get()->glanceables_v2_controller()->UpdateClientsRegistration(
       account_id_, GlanceablesV2Controller::ClientsRegistration{
+                       .classroom_client = classroom_client_.get(),
                        .tasks_client = tasks_client_.get()});
 }
 

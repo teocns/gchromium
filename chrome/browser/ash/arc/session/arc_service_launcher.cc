@@ -12,6 +12,7 @@
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/audio/arc_audio_bridge.h"
 #include "ash/components/arc/camera/arc_camera_bridge.h"
+#include "ash/components/arc/chrome_feature_flags/arc_chrome_feature_flags_bridge.h"
 #include "ash/components/arc/clipboard/arc_clipboard_bridge.h"
 #include "ash/components/arc/compat_mode/arc_resize_lock_manager.h"
 #include "ash/components/arc/crash_collector/arc_crash_collector_bridge.h"
@@ -30,7 +31,6 @@
 #include "ash/components/arc/pay/arc_payment_app_bridge.h"
 #include "ash/components/arc/power/arc_power_bridge.h"
 #include "ash/components/arc/property/arc_property_bridge.h"
-#include "ash/components/arc/rotation_lock/arc_rotation_lock_bridge.h"
 #include "ash/components/arc/sensor/arc_iio_sensor_bridge.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/session/arc_session.h"
@@ -70,7 +70,7 @@
 #include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_manager.h"
 #include "chrome/browser/ash/arc/instance_throttle/arc_instance_throttle.h"
 #include "chrome/browser/ash/arc/intent_helper/arc_settings_service.h"
-#include "chrome/browser/ash/arc/intent_helper/factory_reset_delegate.h"
+#include "chrome/browser/ash/arc/intent_helper/chrome_arc_intent_helper_delegate.h"
 #include "chrome/browser/ash/arc/keymaster/arc_keymaster_bridge.h"
 #include "chrome/browser/ash/arc/kiosk/arc_kiosk_bridge.h"
 #include "chrome/browser/ash/arc/metrics/arc_metrics_service_proxy.h"
@@ -253,12 +253,11 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcInstanceThrottle::GetForBrowserContext(profile);
   {
     auto* intent_helper = ArcIntentHelperBridge::GetForBrowserContext(profile);
-    intent_helper->SetDelegate(std::make_unique<FactoryResetDelegate>());
+    intent_helper->SetDelegate(
+        std::make_unique<ChromeArcIntentHelperDelegate>(profile));
     arc_icon_cache_delegate_provider_ =
         std::make_unique<ArcIconCacheDelegateProvider>(intent_helper);
   }
-  ArcIntentHelperBridge::GetForBrowserContext(profile)->SetDelegate(
-      std::make_unique<FactoryResetDelegate>());
   ArcKeyboardShortcutBridge::GetForBrowserContext(profile);
   ArcKeymasterBridge::GetForBrowserContext(profile);
   ArcKioskBridge::GetForBrowserContext(profile);
@@ -295,7 +294,6 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcPropertyBridge::GetForBrowserContext(profile);
   ArcProvisionNotificationService::GetForBrowserContext(profile);
   ArcResizeLockManager::GetForBrowserContext(profile);
-  ArcRotationLockBridge::GetForBrowserContext(profile);
   ArcScreenCaptureBridge::GetForBrowserContext(profile);
   ArcSettingsService::GetForBrowserContext(profile);
   ArcSharesheetBridge::GetForBrowserContext(profile);
@@ -316,6 +314,7 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ash::ApkWebAppService::Get(profile);
   ash::app_restore::AppRestoreArcTaskHandler::GetForProfile(profile);
   ArcInitialOptInNotifier::GetForProfile(profile);
+  ArcChromeFeatureFlagsBridge::GetForBrowserContext(profile);
 
   if (arc::IsArcVmEnabled()) {
     // ARCVM-only services.
@@ -435,6 +434,7 @@ void ArcServiceLauncher::EnsureFactoriesBuilt() {
   ArcFileSystemMounter::EnsureFactoryBuilt();
   ArcFileSystemOperationRunner::EnsureFactoryBuilt();
   ArcFileSystemWatcherService::EnsureFactoryBuilt();
+  ArcIdleManager::EnsureFactoryBuilt();
   ArcIioSensorBridge::EnsureFactoryBuilt();
   ArcImeService::EnsureFactoryBuilt();
   ArcInitialOptInNotifier::EnsureFactoryBuilt();
@@ -464,7 +464,6 @@ void ArcServiceLauncher::EnsureFactoriesBuilt() {
   ArcPropertyBridge::EnsureFactoryBuilt();
   ArcProvisionNotificationService::EnsureFactoryBuilt();
   ArcResizeLockManager::EnsureFactoryBuilt();
-  ArcRotationLockBridge::EnsureFactoryBuilt();
   ArcScreenCaptureBridge::EnsureFactoryBuilt();
   ArcSettingsService::EnsureFactoryBuilt();
   ArcStorageManager::EnsureFactoryBuilt();
@@ -485,6 +484,7 @@ void ArcServiceLauncher::EnsureFactoriesBuilt() {
   CertStoreService::EnsureFactoryBuilt();
   GpuArcVideoKeyedService::EnsureFactoryBuilt();
   input_overlay::ArcInputOverlayManager::EnsureFactoryBuilt();
+  ArcChromeFeatureFlagsBridge::EnsureFactoryBuilt();
 }
 
 }  // namespace arc

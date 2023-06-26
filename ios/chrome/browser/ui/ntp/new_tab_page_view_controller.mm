@@ -136,6 +136,9 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
 // constraints are not set before the views have been added to view hierarchy.
 @property(nonatomic, assign) BOOL viewDidFinishLoading;
 
+// YES if the NTP is in the middle of animating an omnibox focus.
+@property(nonatomic, assign) BOOL isAnimatingOmniboxFocus;
+
 @end
 
 @implementation NewTabPageViewController {
@@ -196,8 +199,7 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
     AddSameConstraints(_backgroundGradientView, self.view);
     [self updateModularHomeBackgroundColorForUserInterfaceStyle:
               self.traitCollection.userInterfaceStyle];
-    self.view.backgroundColor =
-        [UIColor colorNamed:@"ntp_background_light_mode_only_color"];
+    self.view.backgroundColor = [UIColor colorNamed:@"ntp_background_color"];
   } else {
     self.view.backgroundColor = ntp_home::NTPBackgroundColor();
   }
@@ -384,7 +386,6 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
         -([self stickyOmniboxHeight] + [self feedHeaderHeight]);
     [self.contentSuggestionsViewController.view setNeedsLayout];
     [self.contentSuggestionsViewController.view layoutIfNeeded];
-    [self.ntpContentDelegate reloadContentSuggestions];
   }
 
   if (previousTraitCollection.preferredContentSizeCategory !=
@@ -399,6 +400,18 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
 #pragma mark - Public
 
 - (void)focusOmnibox {
+  // Do nothing if the omnibox is already focused or is in the middle of a
+  // focus. This prevents `collectionShiftingOffset` from being reset to close
+  // to 0, which would result in the defocus animation not returning to the top
+  // of the NTP if that was the original position.
+  // This is relevant beacuse the omnibox logic signals the NTP to focus the
+  // omnibox when it becomes the keyboard first responder, but that happens
+  // during the NTP focus animation, which results in -focusOmnibox being called
+  // twice.
+  if (self.omniboxFocused || self.isAnimatingOmniboxFocus) {
+    return;
+  }
+
   // If the feed is meant to be visible and its contents have not loaded yet,
   // then any omnibox focus animations (i.e. opening app from search widget
   // action) needs to wait until it is ready. viewDidAppear: currently serves as
@@ -439,8 +452,6 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
                                      kContentSuggestionsReset];
   }
 
-  [self addViewControllerAboveFeed:self.contentSuggestionsViewController];
-
   // Adds the feed top section to the view hierarchy if it exists.
   if (self.feedTopSectionViewController) {
     [self addViewControllerAboveFeed:self.feedTopSectionViewController];
@@ -452,6 +463,8 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
   if (self.feedHeaderViewController) {
     [self addViewControllerAboveFeed:self.feedHeaderViewController];
   }
+
+  [self addViewControllerAboveFeed:self.contentSuggestionsViewController];
 
   [self addViewControllerAboveFeed:self.headerViewController];
 
@@ -512,15 +525,15 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
   [self updateFakeOmniboxForScrollPosition];
 }
 
-- (void)updateHeightAboveFeedAndScrollToTopIfNeeded {
-  if (self.viewDidFinishLoading &&
-      !self.hasSavedOffsetFromPreviousScrollState) {
-    // Do not scroll to the top if there is a saved scroll state. Also,
-    // `-setContentOffsetToTop` potentially updates constaints, and if
-    // viewDidLoad has not finished, some views may not in the view hierarchy
-    // yet.
+- (void)updateHeightAboveFeed {
+  if (self.viewDidFinishLoading) {
+    CGFloat oldHeightAboveFeed = self.collectionView.contentInset.top;
+    CGFloat oldOffset = self.collectionView.contentOffset.y;
     [self updateFeedInsetsForContentAbove];
-    [self setContentOffsetToTop];
+    CGFloat change = self.collectionView.contentInset.top - oldHeightAboveFeed;
+    // Offset the change by subtracting it from the content offset, in order to
+    // visually keep the same scroll position.
+    [self setContentOffset:oldOffset - change];
   }
 }
 
@@ -897,9 +910,11 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
     strongSelf.disableScrollAnimation = NO;
     [strongSelf.headerViewController
         completeHeaderFakeOmniboxFocusAnimationWithFinalPosition:finalPosition];
+    strongSelf.isAnimatingOmniboxFocus = NO;
   }];
 
   self.animator.interruptible = YES;
+  self.isAnimatingOmniboxFocus = YES;
   [self.animator startAnimation];
 }
 
@@ -1158,12 +1173,14 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
 
 // Sets an top inset to the feed collection view to fit the content above it.
 - (void)updateFeedInsetsForContentAbove {
-  self.collectionView.contentInset = UIEdgeInsetsMake(
-      [self heightAboveFeed], 0, self.collectionView.contentInset.bottom, 0);
+  CGFloat heightAboveFeed = [self heightAboveFeed];
   // Updates `additionalOffset` using the content above the feed.
-  self.additionalOffset = [self heightAboveFeed];
-  // Update `scrolledToMinimumHeight` after updating `additionalOffset`.
-  [self updateScrolledToMinimumHeight];
+  self.additionalOffset = heightAboveFeed;
+  // Setting the contentInset will cause a scroll, which will call
+  // scrollViewDidScroll which calls updateScrolledToMinimumHeight. So no need
+  // to call here.
+  self.collectionView.contentInset = UIEdgeInsetsMake(
+      heightAboveFeed, 0, self.collectionView.contentInset.bottom, 0);
 }
 
 // Checks whether the feed top section is visible and updates the
@@ -1376,9 +1393,27 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
   return adjustedOffset;
 }
 
+// Background gradient view will be used when in dark mode, the assigned
+// background color to this view's otherwise.
 - (void)updateModularHomeBackgroundColorForUserInterfaceStyle:
     (UIUserInterfaceStyle)style {
   _backgroundGradientView.hidden = style == UIUserInterfaceStyleLight;
+}
+
+// Signal to the ViewController that the height above the feed needs to be
+// recalculated and thus also likely needs to be scrolled up to accommodate for
+// the new height. Nothing may happen if the ViewController determines that the
+// current scroll state should not change.
+- (void)updateHeightAboveFeedAndScrollToTopIfNeeded {
+  if (self.viewDidFinishLoading &&
+      !self.hasSavedOffsetFromPreviousScrollState) {
+    // Do not scroll to the top if there is a saved scroll state. Also,
+    // `-setContentOffsetToTop` potentially updates constaints, and if
+    // viewDidLoad has not finished, some views may not in the view hierarchy
+    // yet.
+    [self updateFeedInsetsForContentAbove];
+    [self setContentOffsetToTop];
+  }
 }
 
 #pragma mark - Helpers
@@ -1461,17 +1496,12 @@ const CGFloat kShiftTilesUpAnimationDuration = 0.1;
 // The y-position content offset for when the fake omnibox
 // should stick to the top of the NTP.
 - (CGFloat)offsetToStickOmnibox {
-  CGFloat offset =
-      -(self.headerViewController.view.frame.size.height -
-        [self stickyOmniboxHeight] -
-        [self.feedHeaderViewController customSearchEngineViewHeight]);
-  if (IsSplitToolbarMode(self)) {
-    offset -= [self contentSuggestionsContentHeight];
-  }
-  if (self.feedTopSectionViewController) {
-    offset -= self.feedTopSectionViewController.view.frame.size.height;
-  }
-  return offset;
+  // Do not need to factor in safeAreaInsets.top because the fake omnibox sticks
+  // below it, so it is effectively just the scroll distance between top of
+  // NTPHeader and the top of the Fake Omnibox.
+  return -([self heightAboveFeed] -
+           [self.headerViewController
+                   offsetToBeginFakeOmniboxExpansionForSplitMode]);
 }
 
 // Whether the collection view has attained its minimum height.

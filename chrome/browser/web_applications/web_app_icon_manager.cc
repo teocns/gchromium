@@ -49,7 +49,6 @@
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorType.h"
-#include "ui/base/layout.h"
 #include "ui/base/resource/resource_scale_factor.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/favicon_size.h"
@@ -436,16 +435,17 @@ TypedResult<ShortcutsMenuIconBitmaps> ReadShortcutsMenuIconsBlocking(
     scoped_refptr<FileUtilsWrapper> utils,
     const base::FilePath& web_apps_directory,
     const AppId& app_id,
-    const std::vector<IconSizes>& shortcuts_menu_icons_sizes) {
+    const std::vector<WebAppShortcutsMenuItemInfo>& shortcuts_menu_item_infos) {
   TypedResult<ShortcutsMenuIconBitmaps> results;
   int curr_index = 0;
-  for (const auto& icon_sizes : shortcuts_menu_icons_sizes) {
+  for (const auto& item_info : shortcuts_menu_item_infos) {
     IconBitmaps result;
 
     for (IconPurpose purpose : kIconPurposes) {
       std::map<SquareSizePx, SkBitmap> bitmaps;
 
-      for (SquareSizePx icon_size_px : icon_sizes.GetSizesForPurpose(purpose)) {
+      for (SquareSizePx icon_size_px :
+           item_info.downloaded_icon_sizes.GetSizesForPurpose(purpose)) {
         TypedResult<SkBitmap> read_result =
             ReadShortcutsMenuIconBlocking(utils, web_apps_directory, app_id,
                                           purpose, curr_index, icon_size_px);
@@ -463,7 +463,7 @@ TypedResult<ShortcutsMenuIconBitmaps> ReadShortcutsMenuIconsBlocking(
     // item.
     results.value.push_back(std::move(result));
   }
-  CHECK_EQ(shortcuts_menu_icons_sizes.size(), results.value.size());
+  CHECK_EQ(shortcuts_menu_item_infos.size(), results.value.size());
   return results;
 }
 
@@ -541,14 +541,15 @@ ReadShortcutMenuIconsWithTimestampBlocking(
     scoped_refptr<FileUtilsWrapper> utils,
     const base::FilePath& web_apps_directory,
     const AppId& app_id,
-    const std::vector<IconSizes>& shortcuts_menu_icons_sizes) {
+    const std::vector<WebAppShortcutsMenuItemInfo>& shortcuts_menu_icon_infos) {
   TypedResult<WebAppIconManager::ShortcutIconDataVector> results;
   int curr_index = 0;
-  for (const auto& icon_sizes : shortcuts_menu_icons_sizes) {
+  for (const auto& icon_info : shortcuts_menu_icon_infos) {
     WebAppIconManager::ShortcutMenuIconTimes data;
     for (IconPurpose purpose : kIconPurposes) {
       base::flat_map<SquareSizePx, base::Time> bitmap_with_time;
-      for (SquareSizePx icon_size_px : icon_sizes.GetSizesForPurpose(purpose)) {
+      for (SquareSizePx icon_size_px :
+           icon_info.downloaded_icon_sizes.GetSizesForPurpose(purpose)) {
         base::FilePath file_name =
             GetManifestResourcesShortcutsMenuIconFileName(
                 web_apps_directory, app_id, purpose, curr_index, icon_size_px);
@@ -567,7 +568,7 @@ ReadShortcutMenuIconsWithTimestampBlocking(
     // item.
     results.value.push_back(std::move(data));
   }
-  CHECK_EQ(shortcuts_menu_icons_sizes.size(), results.value.size());
+  CHECK_EQ(shortcuts_menu_icon_infos.size(), results.value.size());
   return results;
 }
 
@@ -1049,7 +1050,7 @@ void WebAppIconManager::ReadAllShortcutMenuIconsWithTimestamp(
       FROM_HERE,
       base::BindOnce(ReadShortcutMenuIconsWithTimestampBlocking, utils_,
                      web_apps_directory_, app_id,
-                     web_app->downloaded_shortcuts_menu_icons_sizes()),
+                     web_app->shortcuts_menu_item_infos()),
       base::BindOnce(&LogErrorsCallCallback<ShortcutIconDataVector>,
                      GetWeakPtr(), std::move(callback)));
 }
@@ -1116,7 +1117,7 @@ void WebAppIconManager::ReadAllShortcutsMenuIcons(
       FROM_HERE,
       base::BindOnce(ReadShortcutsMenuIconsBlocking, utils_,
                      web_apps_directory_, app_id,
-                     web_app->downloaded_shortcuts_menu_icons_sizes()),
+                     web_app->shortcuts_menu_item_infos()),
       base::BindOnce(&LogErrorsCallCallback<ShortcutsMenuIconBitmaps>,
                      GetWeakPtr(), std::move(callback)));
 }
@@ -1211,10 +1212,8 @@ gfx::ImageSkia WebAppIconManager::GetMonochromeFavicon(
 
 void WebAppIconManager::OnWebAppInstalled(const AppId& app_id) {
   ReadFavicon(app_id);
-#if BUILDFLAG(IS_CHROMEOS)
-  // Notifications use a monochrome icon.
+  // Monochrome icons are used in tabbed apps and for ChromeOS notifications.
   ReadMonochromeFavicon(app_id);
-#endif
 }
 
 void WebAppIconManager::OnWebAppInstallManagerDestroyed() {

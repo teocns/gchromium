@@ -7,6 +7,8 @@
 #include <windows.h>
 #include <stdint.h>
 
+#include <shellapi.h>
+
 #include <string>
 
 #include "base/command_line.h"
@@ -21,6 +23,7 @@
 #include "base/win/scoped_handle.h"
 #include "build/branding_buildflags.h"
 #include "crypto/random.h"
+#include "extensions/common/extension_features.h"
 
 namespace extensions {
 
@@ -232,8 +235,23 @@ bool NativeProcessLauncher::LaunchNativeProcess(
   options.current_directory = command_line.GetProgram().DirName();
   options.start_hidden = true;
 
+  bool use_direct_launch =
+      base::FeatureList::IsEnabled(
+          extensions_features::kLaunchWindowsNativeHostsDirectly) &&
+      command_line.GetProgram().MatchesFinalExtension(L".exe");
+
   base::Process launched_process;
-  if (command_line.GetProgram().MatchesFinalExtension(L".exe")) {
+  if (use_direct_launch) {
+    // Compat: If the target is SUBSYSTEM_WINDOWS, then don't set |start_hidden|
+    // in order to mimic legacy behavior: https://crbug.com/1442359.
+    // A Windows executable will have LOWORD of 0x4550. A GUI executable will
+    // have a non-Zero HIWORD while a console executable will have a 0 HIWORD.
+    uintptr_t exe_type = ::SHGetFileInfoW(
+        command_line.GetProgram().value().c_str(), 0, NULL, 0, SHGFI_EXETYPE);
+    if ((LOWORD(exe_type) == 0x4550) && (HIWORD(exe_type) != 0)) {
+      options.start_hidden = false;
+    }
+
     launched_process =
         LaunchNativeExeDirectly(command, options, in_pipe_name, out_pipe_name);
   } else {

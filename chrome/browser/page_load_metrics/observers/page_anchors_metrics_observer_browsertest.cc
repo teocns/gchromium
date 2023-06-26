@@ -173,8 +173,16 @@ IN_PROC_BROWSER_TEST_F(PageAnchorsMetricsObserverBrowserTest,
       ukm::builders::NavigationPredictorUserInteractions::kAnchorIndexName, 0);
 }
 
+// TODO(crbug.com/1456408): Test is flaky on linux-chromeos-dbg.
+#if BUILDFLAG(IS_CHROMEOS) && !defined(NDEBUG)
+#define MAYBE_TestDifferentUKMSourceIdsPerNavigation \
+  DISABLED_TestDifferentUKMSourceIdsPerNavigation
+#else
+#define MAYBE_TestDifferentUKMSourceIdsPerNavigation \
+  TestDifferentUKMSourceIdsPerNavigation
+#endif
 IN_PROC_BROWSER_TEST_F(PageAnchorsMetricsObserverBrowserTest,
-                       TestDifferentUKMSourceIdsPerNavigation) {
+                       MAYBE_TestDifferentUKMSourceIdsPerNavigation) {
   // Start with page 1.
   ResetUKM();
   NavigateTo(GetTestURL("/1.html"));
@@ -203,8 +211,8 @@ IN_PROC_BROWSER_TEST_F(PageAnchorsMetricsObserverBrowserTest,
       ukm::builders::NavigationPredictorAnchorElementMetrics::kEntryName,
       anchor_elements_entries_size + 1u);
   // Do some interactions.
-  EXPECT_TRUE(content::ExecuteScript(web_contents(),
-                                     R"(
+  EXPECT_TRUE(content::ExecJs(web_contents(),
+                              R"(
           let a = document.createElement("a");
           a.id = "link";
           a.href = "https://www.google.com";
@@ -230,8 +238,8 @@ IN_PROC_BROWSER_TEST_F(PageAnchorsMetricsObserverBrowserTest,
       anchor_elements_entries_size + 1u);
 
   // Do some interactions.
-  EXPECT_TRUE(content::ExecuteScript(web_contents(),
-                                     R"(
+  EXPECT_TRUE(content::ExecJs(web_contents(),
+                              R"(
           let a = document.createElement("a");
           a.id = "link";
           a.href = "https://www.example.com";

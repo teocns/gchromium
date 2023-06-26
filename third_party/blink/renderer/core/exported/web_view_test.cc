@@ -273,7 +273,15 @@ class WebViewTest : public testing::Test {
                        const std::string& html_file);
   bool SimulateGestureAtElement(WebInputEvent::Type, Element*);
   bool SimulateGestureAtElementById(WebInputEvent::Type, const WebString& id);
-  gfx::Size PrintICBSizeFromPageSize(const gfx::Size& page_size);
+  WebGestureEvent BuildTapEvent(WebInputEvent::Type,
+                                int tap_event_count,
+                                const gfx::PointF& position_in_widget);
+  bool SimulateTapEventAtElement(WebInputEvent::Type,
+                                 int tap_event_count,
+                                 Element*);
+  bool SimulateTapEventAtElementById(WebInputEvent::Type,
+                                     int tap_event_count,
+                                     const WebString& id);
 
   ExternalDateTimeChooser* GetExternalDateTimeChooser(
       WebViewImpl* web_view_impl);
@@ -468,19 +476,8 @@ TEST_F(WebViewTest, SetBaseBackgroundColorBeforeMainFrame) {
   // Note: this test doesn't use WebViewHelper since it intentionally runs
   // initialization code between WebView and WebLocalFrame creation.
   WebViewClient web_view_client;
-  WebViewImpl* web_view = To<WebViewImpl>(
-      WebView::Create(&web_view_client,
-                      /*is_hidden=*/false,
-                      /*is_prerendering=*/false,
-                      /*is_inside_portal=*/false,
-                      /*fenced_frame_mode=*/absl::nullopt,
-                      /*compositing_enabled=*/true,
-                      /*widgets_never_composited=*/false,
-                      /*opener=*/nullptr, mojo::NullAssociatedReceiver(),
-                      web_view_helper_.GetAgentGroupScheduler(),
-                      /*session_storage_namespace_id=*/base::EmptyString(),
-                      /*page_base_background_color=*/absl::nullopt));
-
+  WebViewImpl* web_view = web_view_helper_.CreateWebView(
+      &web_view_client, /*compositing_enabled=*/true);
   EXPECT_NE(SK_ColorBLUE, web_view->BackgroundColor());
   // WebView does not have a frame yet; while it's possible to set the page
   // background color, it won't have any effect until a local main frame is
@@ -2771,15 +2768,59 @@ bool WebViewTest::SimulateGestureAtElementById(WebInputEvent::Type type,
   return SimulateGestureAtElement(type, element);
 }
 
-gfx::Size WebViewTest::PrintICBSizeFromPageSize(const gfx::Size& page_size) {
-  // The expected layout size comes from the calculation done in
-  // ResizePageRectsKeepingRatio() which is used from PrintContext::begin() to
-  // scale the page size.
-  float ratio = static_cast<float>(page_size.height()) / page_size.width();
-  int icb_width =
-      floor(page_size.width() * PrintContext::kPrintingMinimumShrinkFactor);
-  int icb_height = floor(icb_width * ratio);
-  return gfx::Size(icb_width, icb_height);
+WebGestureEvent WebViewTest::BuildTapEvent(
+    WebInputEvent::Type type,
+    int tap_event_count,
+    const gfx::PointF& position_in_widget) {
+  WebGestureEvent event(type, WebInputEvent::kNoModifiers,
+                        WebInputEvent::GetStaticTimeStampForTests(),
+                        WebGestureDevice::kTouchscreen);
+  event.SetPositionInWidget(position_in_widget);
+
+  switch (type) {
+    case WebInputEvent::Type::kGestureTapDown:
+      event.data.tap_down.tap_down_count = tap_event_count;
+      break;
+    case WebInputEvent::Type::kGestureTap:
+      event.data.tap.tap_count = tap_event_count;
+      break;
+    default:
+      break;
+  }
+  return event;
+}
+
+bool WebViewTest::SimulateTapEventAtElement(WebInputEvent::Type type,
+                                            int tap_event_count,
+                                            Element* element) {
+  if (!element || !element->GetLayoutObject()) {
+    return false;
+  }
+
+  DCHECK(web_view_helper_.GetWebView());
+  element->scrollIntoViewIfNeeded();
+
+  const gfx::PointF center = gfx::PointF(
+      web_view_helper_.GetWebView()
+          ->MainFrameImpl()
+          ->GetFrameView()
+          ->FrameToScreen(element->GetLayoutObject()->AbsoluteBoundingBoxRect())
+          .CenterPoint());
+
+  const WebGestureEvent event = BuildTapEvent(type, tap_event_count, center);
+  web_view_helper_.GetWebView()->MainFrameWidget()->HandleInputEvent(
+      WebCoalescedInputEvent(event, ui::LatencyInfo()));
+  RunPendingTasks();
+  return true;
+}
+
+bool WebViewTest::SimulateTapEventAtElementById(WebInputEvent::Type type,
+                                                int tap_event_count,
+                                                const WebString& id) {
+  DCHECK(web_view_helper_.GetWebView());
+  auto* element = static_cast<Element*>(
+      web_view_helper_.LocalMainFrame()->GetDocument().GetElementById(id));
+  return SimulateTapEventAtElement(type, tap_event_count, element);
 }
 
 ExternalDateTimeChooser* WebViewTest::GetExternalDateTimeChooser(
@@ -2791,16 +2832,8 @@ ExternalDateTimeChooser* WebViewTest::GetExternalDateTimeChooser(
 TEST_F(WebViewTest, ClientTapHandlingNullWebViewClient) {
   // Note: this test doesn't use WebViewHelper since WebViewHelper creates an
   // internal WebViewClient on demand if the supplied WebViewClient is null.
-  WebViewImpl* web_view = To<WebViewImpl>(WebView::Create(
-      /*client=*/nullptr, /*is_hidden=*/false, /*is_prerendering=*/false,
-      /*is_inside_portal=*/false,
-      /*fenced_frame_mode=*/absl::nullopt,
-      /*compositing_enabled=*/false,
-      /*widgets_never_composited=*/false,
-      /*opener=*/nullptr, mojo::NullAssociatedReceiver(),
-      web_view_helper_.GetAgentGroupScheduler(),
-      /*session_storage_namespace_id=*/base::EmptyString(),
-      /*page_base_background_color=*/absl::nullopt));
+  WebViewImpl* web_view = web_view_helper_.CreateWebView(
+      /*web_view_client=*/nullptr, /*compositing_enabled=*/false);
   frame_test_helpers::TestWebFrameClient web_frame_client;
   WebLocalFrame* local_frame = WebLocalFrame::CreateMainFrame(
       web_view, &web_frame_client, nullptr, LocalFrameToken(), DocumentToken(),
@@ -3254,6 +3287,92 @@ TEST_F(WebViewTest, LongPressSelection) {
   EXPECT_TRUE(SimulateGestureAtElementById(
       WebInputEvent::Type::kGestureLongPress, target));
   EXPECT_EQ("testword", frame->SelectionAsText().Utf8());
+}
+
+TEST_F(WebViewTest, DoublePressSelection) {
+  ScopedTouchTextEditingRedesignForTest touch_text_editing_redesign(true);
+  RegisterMockedHttpURLLoad("double_press_selection.html");
+
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
+      base_url_ + "double_press_selection.html");
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
+  UpdateAllLifecyclePhases();
+  RunPendingTasks();
+
+  WebString target = WebString::FromUTF8("target");
+  WebLocalFrameImpl* frame = web_view->MainFrameImpl();
+
+  // Double press should select nearest word.
+  EXPECT_TRUE(SimulateTapEventAtElementById(
+      WebInputEvent::Type::kGestureTapDown, 1, target));
+  EXPECT_TRUE(SimulateTapEventAtElementById(WebInputEvent::Type::kGestureTap, 1,
+                                            target));
+  EXPECT_TRUE(SimulateTapEventAtElementById(
+      WebInputEvent::Type::kGestureTapDown, 2, target));
+  EXPECT_EQ("selection", frame->SelectionAsText().Utf8());
+
+  // Releasing double tap should keep the selection.
+  EXPECT_TRUE(SimulateTapEventAtElementById(WebInputEvent::Type::kGestureTap, 2,
+                                            target));
+  EXPECT_EQ("selection", frame->SelectionAsText().Utf8());
+}
+
+TEST_F(WebViewTest, DoublePressSelectionOnSelectStartFalse) {
+  ScopedTouchTextEditingRedesignForTest touch_text_editing_redesign(true);
+  RegisterMockedHttpURLLoad("double_press_selection.html");
+
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
+      base_url_ + "double_press_selection.html");
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
+  UpdateAllLifecyclePhases();
+  RunPendingTasks();
+
+  WebString onselectstartfalse = WebString::FromUTF8("onselectstartfalse");
+  WebLocalFrameImpl* frame = web_view->MainFrameImpl();
+
+  // Should not select anything when onselectstart is false.
+  EXPECT_TRUE(SimulateTapEventAtElementById(
+      WebInputEvent::Type::kGestureTapDown, 1, onselectstartfalse));
+  EXPECT_TRUE(SimulateTapEventAtElementById(WebInputEvent::Type::kGestureTap, 1,
+                                            onselectstartfalse));
+  EXPECT_TRUE(SimulateTapEventAtElementById(
+      WebInputEvent::Type::kGestureTapDown, 2, onselectstartfalse));
+  EXPECT_EQ("", frame->SelectionAsText().Utf8());
+  EXPECT_TRUE(SimulateTapEventAtElementById(WebInputEvent::Type::kGestureTap, 2,
+                                            onselectstartfalse));
+  EXPECT_EQ("", frame->SelectionAsText().Utf8());
+}
+
+TEST_F(WebViewTest, DoublePressSelectionPreventDefaultMouseDown) {
+  ScopedTouchTextEditingRedesignForTest touch_text_editing_redesign(true);
+  RegisterMockedHttpURLLoad("double_press_selection.html");
+
+  WebViewImpl* web_view = web_view_helper_.InitializeAndLoad(
+      base_url_ + "double_press_selection.html");
+  web_view->MainFrameViewWidget()->Resize(gfx::Size(500, 300));
+  UpdateAllLifecyclePhases();
+  RunPendingTasks();
+
+  web_view->MainFrameImpl()->ExecuteScript(
+      WebScriptSource("document.getElementById('targetdiv').addEventListener("
+                      "'mousedown', function(e) { e.preventDefault();});"));
+
+  WebString target = WebString::FromUTF8("target");
+  WebLocalFrameImpl* frame = web_view->MainFrameImpl();
+
+  // Double press should not select anything.
+  EXPECT_TRUE(SimulateTapEventAtElementById(
+      WebInputEvent::Type::kGestureTapDown, 1, target));
+  EXPECT_TRUE(SimulateTapEventAtElementById(WebInputEvent::Type::kGestureTap, 1,
+                                            target));
+  EXPECT_TRUE(SimulateTapEventAtElementById(
+      WebInputEvent::Type::kGestureTapDown, 2, target));
+  EXPECT_EQ("", frame->SelectionAsText().Utf8());
+
+  // Releasing double tap also should not select anything.
+  EXPECT_TRUE(SimulateTapEventAtElementById(WebInputEvent::Type::kGestureTap, 2,
+                                            target));
+  EXPECT_EQ("", frame->SelectionAsText().Utf8());
 }
 
 TEST_F(WebViewTest, FinishComposingTextDoesNotDismissHandles) {
@@ -4826,15 +4945,6 @@ TEST_F(WebViewTest, PreferredSizeWithNGGridSkipped) {
                                    )HTML",
                                      base_url);
 
-  LocalFrame* main_frame = web_view->MainFrameImpl()->GetFrame();
-  Document* document = main_frame->GetDocument();
-  Element* element = document->getElementById("target");
-
-  // Note: Not entirely clear how we get into this state in release builds, we
-  // *should* be layout clean and have cached results for the preferred size
-  // query. See https://crbug.com/1245654 for how we saw this issue in the wild.
-  element->GetLayoutBox()->ClearLayoutResults();
-
   gfx::Size size = web_view->ContentsPreferredMinimumSize();
   EXPECT_EQ(10, size.width());
   EXPECT_EQ(10, size.height());
@@ -5364,9 +5474,9 @@ TEST_F(WebViewTest, ResizeForPrintingViewportUnits) {
   gfx::Size page_size(300, 360);
 
   WebPrintParams print_params;
-  print_params.print_content_area.set_size(page_size);
+  print_params.print_content_area_in_css_pixels.set_size(gfx::SizeF(page_size));
 
-  gfx::Size expected_size = PrintICBSizeFromPageSize(page_size);
+  gfx::Size expected_size = page_size;
 
   frame->PrintBegin(print_params, WebNode());
 
@@ -5407,10 +5517,10 @@ TEST_F(WebViewTest, WidthMediaQueryWithPageZoomAfterPrinting) {
       Color::FromRGB(0, 128, 0),
       div->GetComputedStyle()->VisitedDependentColor(GetCSSPropertyColor()));
 
-  gfx::Size page_size(300, 360);
+  gfx::SizeF page_size(300, 360);
 
   WebPrintParams print_params;
-  print_params.print_content_area.set_size(page_size);
+  print_params.print_content_area_in_css_pixels.set_size(page_size);
 
   frame->PrintBegin(print_params, WebNode());
   frame->PrintEnd();
@@ -5445,10 +5555,10 @@ TEST_F(WebViewTest, ViewportUnitsPrintingWithPageZoom) {
   EXPECT_EQ(400, t2->OffsetWidth());
 
   gfx::Size page_size(600, 720);
-  int expected_width = PrintICBSizeFromPageSize(page_size).width();
+  int expected_width = page_size.width();
 
   WebPrintParams print_params;
-  print_params.print_content_area.set_size(page_size);
+  print_params.print_content_area_in_css_pixels.set_size(gfx::SizeF(page_size));
 
   frame->PrintBegin(print_params, WebNode());
 
@@ -5467,7 +5577,7 @@ TEST_F(WebViewTest, ResizeWithFixedPosCrash) {
   WebLocalFrameImpl* frame = web_view->MainFrameImpl();
   gfx::Size page_size(300, 360);
   WebPrintParams print_params;
-  print_params.print_content_area.set_size(page_size);
+  print_params.print_content_area_in_css_pixels.set_size(gfx::SizeF(page_size));
   frame->PrintBegin(print_params, WebNode());
   web_view->MainFrameWidget()->Resize(page_size);
   frame->PrintEnd();

@@ -10,6 +10,9 @@
 #include "chrome/browser/ash/arc/input_overlay/ui/action_view.h"
 
 namespace arc::input_overlay {
+
+class TouchInjector;
+
 // ActionTap transform key/mouse events to touch events.
 class ActionTap : public Action {
  public:
@@ -31,6 +34,7 @@ class ActionTap : public Action {
       DisplayOverlayController* display_overlay_controller) override;
   void UnbindInput(const InputElement& input_element) override;
   std::unique_ptr<ActionProto> ConvertToProtoIfCustomized() const override;
+  ActionType GetType() override;
 
  private:
   class ActionTapView;

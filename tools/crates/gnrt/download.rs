@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use crate::crates;
+use crate::crates::{self, ThirdPartySource};
 use crate::manifest::CargoManifest;
 use crate::paths;
 use crate::util::{check_exit_ok, check_output, check_spawn, check_wait_with_output};
@@ -21,22 +21,13 @@ pub fn download(
     security: bool,
     paths: &paths::ChromiumPaths,
 ) -> Result<()> {
-    let vendored_crate = crates::ChromiumVendoredCrate {
-        name: name.to_string(),
-        epoch: crates::Epoch::from_version(&version),
-    };
-    let build_path = paths.third_party.join(vendored_crate.build_path());
-    let crate_path = paths.third_party.join(vendored_crate.crate_path());
+    let vendored_crate = crates::VendoredCrate { name: name.into(), version: version.clone() };
+    let build_path = paths.third_party.join(ThirdPartySource::build_path(&vendored_crate));
+    let crate_path = paths.third_party.join(ThirdPartySource::crate_path(&vendored_crate));
 
-    let url = format!(
-        "{dir}/{name}/{name}-{version}.{suffix}",
-        dir = CRATES_IO_DOWNLOAD_URL,
-        suffix = CRATES_IO_DOWNLOAD_SUFFIX
-    );
-    let curl_out = check_output(
-        &mut process::Command::new("curl").arg("--fail").arg(url.to_string()),
-        "curl",
-    )?;
+    let url =
+        format!("{CRATES_IO_DOWNLOAD_URL}/{name}/{name}-{version}.{CRATES_IO_DOWNLOAD_SUFFIX}");
+    let curl_out = check_output(process::Command::new("curl").arg("--fail").arg(&url), "curl")?;
     check_exit_ok(&curl_out, "curl")?;
 
     // Makes the directory where the build file will go. The crate's source code
@@ -49,7 +40,7 @@ pub fn download(
     std::fs::create_dir(&crate_path).expect("Crate directory '{crate_path}' already exists");
 
     let mut untar = check_spawn(
-        &mut process::Command::new("tar")
+        process::Command::new("tar")
             // Extract and unzip from stdin.
             .arg("xzf")
             .arg("-")
@@ -82,11 +73,11 @@ pub fn download(
 
     let (_, readme_license) = ALLOWED_LICENSES
         .iter()
-        .find(|(allowed_license, _)| &cargo.package.license == *allowed_license)
+        .find(|(allowed_license, _)| cargo.package.license == *allowed_license)
         .expect("License in downloaded Cargo.toml is not in ALLOWED_LICENSES");
 
     let vcs_path = crate_path.join(".cargo_vcs_info.json");
-    let vcs_contents = match fs::read_to_string(&vcs_path) {
+    let vcs_contents = match fs::read_to_string(vcs_path) {
         Ok(s) => serde_json::from_str(&s).unwrap(),
         Err(_) => None,
     };
@@ -126,14 +117,14 @@ fn gen_readme_chromium_text(
 
     format!(
         "Name: {crate_name}\n\
-         URL: {url}\n\
+         URL: {CRATES_IO_VIEW_URL}/{package_name}\n\
          Description: {description}\n\
          Version: {version}\n\
          Security Critical: {security}\n\
          License: {license}\n\
          {revision}",
         crate_name = manifest.package.name,
-        url = format!("{}/{}", CRATES_IO_VIEW_URL, manifest.package.name),
+        package_name = manifest.package.name,
         description = manifest.package.description.as_ref().unwrap_or(&"".to_string()),
         version = manifest.package.version,
     )
@@ -161,5 +152,8 @@ static ALLOWED_LICENSES: [(&str, &str); 15] = [
     ("ISC", "ISC"),
     ("MIT OR Zlib OR Apache-2.0", "Apache 2.0"),
     ("0BSD OR MIT OR Apache-2.0", "Apache 2.0"),
-    ("Unicode-DFS-2016", "Unicode License Agreement - Data Files and Software (2016)"),
+    (
+        "(MIT OR Apache-2.0) AND Unicode-DFS-2016",
+        "Apache 2.0 AND Unicode License Agreement - Data Files and Software (2016)",
+    ),
 ];

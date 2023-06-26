@@ -28,7 +28,6 @@
 
 // FIXME: explain all uses of [CrossOrigin]
 [
-    CheckSecurity=Receiver,
     ImplementedAs=DOMWindow,
     Global=Window,
     Exposed=Window
@@ -55,6 +54,7 @@
     void stop();
     [CrossOrigin, CallWith=Isolate] void focus();
     [CrossOrigin] void blur();
+    [RuntimeEnabled=DesktopPWAsAdditionalWindowingControls] void minimize();
 
     // other browsing contexts
     [Replaceable, CrossOrigin, CachedAccessor=kWindowProxy] readonly attribute Window frames;
@@ -65,7 +65,7 @@
     [Replaceable, CrossOrigin] readonly attribute Window? parent;
     [CheckSecurity=ReturnValue, Custom=Getter] readonly attribute Element? frameElement;
 
-    [CallWith=Isolate, RaisesException] Window? open(optional USVString url="", optional DOMString target = "_blank", optional [TreatNullAs=EmptyString] DOMString features = "");
+    [CallWith=Isolate, RaisesException] Window? open(optional USVString url="", optional DOMString target = "_blank", optional [LegacyNullToEmptyString] DOMString features = "");
 
     // indexed properties
     // https://html.spec.whatwg.org/C/browsers.html#windowproxy-getownproperty

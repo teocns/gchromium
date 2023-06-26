@@ -8,7 +8,8 @@
 #include "ui/color/color_id.h"
 #include "ui/color/color_mixer.h"
 #include "ui/color/color_provider.h"
-#include "ui/color/color_provider_manager.h"
+#include "ui/color/color_provider_key.h"
+#include "ui/color/color_provider_utils.h"
 #include "ui/color/color_recipe.h"
 #include "ui/color/color_transform.h"
 #include "ui/color/win/accent_color_observer.h"
@@ -91,7 +92,7 @@ void AddHighContrastSysColors(ColorMixer& mixer) {
 }
 
 void AddNativeCoreColorMixer(ColorProvider* provider,
-                             const ColorProviderManager::Key& key) {
+                             const ColorProviderKey& key) {
   ColorMixer& mixer = provider->AddMixer();
 
   // TODO(pkasting): Not clear whether this is really the set of interest.
@@ -152,51 +153,48 @@ void AddNativeCoreColorMixer(ColorProvider* provider,
     mixer[kColorAccent] = PickGoogleColor(accent_color.value());
   }
 
-  if (key.contrast_mode == ColorProviderManager::ContrastMode::kHigh) {
+  if (key.contrast_mode == ColorProviderKey::ContrastMode::kHigh) {
     AddHighContrastSysColors(mixer);
   }
 }
 
 void AddNativeUiColorMixer(ColorProvider* provider,
-                           const ColorProviderManager::Key& key) {
-  if (key.contrast_mode == ColorProviderManager::ContrastMode::kNormal &&
-      !IsFluentScrollbarEnabled())
+                           const ColorProviderKey& key) {
+  if (key.contrast_mode == ColorProviderKey::ContrastMode::kNormal &&
+      !IsFluentScrollbarEnabled()) {
     return;
+  }
 
   ColorMixer& mixer = provider->AddMixer();
 
-  // Override scrollbar colors for the Fluent scrollbar.
-  // TODO(crbug.com/1378337): Implement high contrast mode for the Fluent
-  // scrollbar. Currently, normal and high contrast modes are the same.
   if (IsFluentScrollbarEnabled()) {
-    const bool dark_mode =
-        key.color_mode == ColorProviderManager::ColorMode::kDark;
+    if (key.contrast_mode == ColorProviderKey::ContrastMode::kNormal) {
+      const bool dark_mode =
+          key.color_mode == ColorProviderKey::ColorMode::kDark;
 
-    mixer[kColorScrollbarArrowForeground] = {
-        dark_mode ? SkColorSetA(SK_ColorWHITE, 0x8B)
-                  : SkColorSetA(SK_ColorBLACK, 0x72)};
-    mixer[kColorScrollbarArrowForegroundPressed] = {
-        dark_mode ? SkColorSetA(SK_ColorWHITE, 0xC8)
-                  : SkColorSetA(SK_ColorBLACK, 0x9B)};
-    mixer[kColorScrollbarCorner] = {dark_mode
-                                        ? SkColorSetRGB(0x2C, 0x2C, 0x2C)
-                                        : SkColorSetRGB(0xFC, 0xFC, 0xFC)};
-    mixer[kColorScrollbarArrowBackgroundHovered] = {kColorScrollbarCorner};
-    mixer[kColorScrollbarArrowBackgroundPressed] = {
-        kColorScrollbarArrowBackgroundHovered};
-    mixer[kColorScrollbarThumb] = {kColorScrollbarArrowForeground};
-    mixer[kColorScrollbarThumbHovered] = {
-        kColorScrollbarArrowForegroundPressed};
-    mixer[kColorScrollbarThumbInactive] = {kColorScrollbarThumb};
-    mixer[kColorScrollbarThumbPressed] = {kColorScrollbarThumbHovered};
-    mixer[kColorScrollbarTrack] = {kColorScrollbarCorner};
+      mixer[kColorScrollbarArrowForeground] = {
+          dark_mode ? SkColorSetA(SK_ColorWHITE, 0x8B)
+                    : SkColorSetA(SK_ColorBLACK, 0x72)};
+      mixer[kColorScrollbarArrowForegroundPressed] = {
+          dark_mode ? SkColorSetA(SK_ColorWHITE, 0xC8)
+                    : SkColorSetA(SK_ColorBLACK, 0x9B)};
+      mixer[kColorScrollbarCorner] = {dark_mode
+                                          ? SkColorSetRGB(0x2C, 0x2C, 0x2C)
+                                          : SkColorSetRGB(0xFC, 0xFC, 0xFC)};
+    } else {
+      mixer[kColorScrollbarArrowForeground] = {kColorNativeBtnText};
+      mixer[kColorScrollbarArrowForegroundPressed] = {kColorNativeHighlight};
+      mixer[kColorScrollbarCorner] = {kColorNativeBtnFace};
+    }
+    CompleteFluentScrollbarColorsDefinition(mixer);
   }
 
-  if (key.contrast_mode == ColorProviderManager::ContrastMode::kNormal)
+  if (key.contrast_mode == ColorProviderKey::ContrastMode::kNormal) {
     return;
+  }
 
   mixer[kColorRadioButtonForegroundChecked] = {
-      key.color_mode == ColorProviderManager::ColorMode::kDark
+      key.color_mode == ColorProviderKey::ColorMode::kDark
           ? gfx::kGoogleBlue100
           : gfx::kGoogleBlue900};
   mixer[kColorNotificationInputPlaceholderForeground] =
@@ -226,8 +224,8 @@ void AddNativeUiColorMixer(ColorProvider* provider,
   mixer[kColorTooltipForeground] = {kColorNativeWindowText};
 
   // Hyperlinks
-  mixer[kColorLinkForeground] = {kColorNativeHotlight};
-  mixer[kColorLinkForegroundPressed] = {kColorNativeHotlight};
+  mixer[kColorLinkForegroundDefault] = {kColorNativeHotlight};
+  mixer[kColorLinkForegroundPressedDefault] = {kColorNativeHotlight};
   mixer[kColorMenuItemForegroundHighlighted] = {kColorNativeHotlight};
 
   // Gray/Disabled Text

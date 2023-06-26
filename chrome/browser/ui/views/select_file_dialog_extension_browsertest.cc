@@ -216,10 +216,7 @@ class BaseSelectFileDialogExtensionBrowserTest
 
   void CheckJavascriptErrors() {
     content::RenderFrameHost* host = dialog_->GetPrimaryMainFrame();
-    base::Value value =
-        content::ExecuteScriptAndGetValue(host, "window.JSErrorCount");
-    int js_error_count = value.GetInt();
-    ASSERT_EQ(0, js_error_count);
+    ASSERT_EQ(0, content::EvalJs(host, "window.JSErrorCount"));
   }
 
   void ClickElement(const std::string& selector) {
@@ -589,7 +586,7 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest, FileInputElement) {
 
 IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionBrowserTest,
                        OpenDialogWithoutOwningWindow) {
-  gfx::NativeWindow owning_window = nullptr;
+  gfx::NativeWindow owning_window = gfx::NativeWindow();
 
   // Open the file dialog with no |owning_window|.
   ASSERT_NO_FATAL_FAILURE(OpenDialog(ui::SelectFileDialog::SELECT_OPEN_FILE,

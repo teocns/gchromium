@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_ASH_LOGIN_ENROLLMENT_MOCK_ENROLLMENT_SCREEN_H_
 #define CHROME_BROWSER_ASH_LOGIN_ENROLLMENT_MOCK_ENROLLMENT_SCREEN_H_
 
+#include "chrome/browser/ash/login/enrollment/enrollment_launcher.h"
 #include "chrome/browser/ash/login/enrollment/enrollment_screen.h"
 #include "chrome/browser/ash/login/enrollment/enrollment_screen_view.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
@@ -47,6 +48,7 @@ class MockEnrollmentScreenView : public EnrollmentScreenView {
   MOCK_METHOD(void, MockUnbind, ());
   MOCK_METHOD(void, ShowSigninScreen, ());
   MOCK_METHOD(void, ReloadSigninScreen, ());
+  MOCK_METHOD(void, ResetEnrollmentScreen, ());
   MOCK_METHOD(void, ShowUserError, (const std::string& email));
   MOCK_METHOD(void, ShowEnrollmentDuringTrialNotAllowedError, ());
   MOCK_METHOD(void, ShowSkipConfirmationDialog, ());
@@ -57,7 +59,7 @@ class MockEnrollmentScreenView : public EnrollmentScreenView {
   MOCK_METHOD(void, ShowEnrollmentTPMCheckingScreen, ());
   MOCK_METHOD(void, ShowEnrollmentWorkingScreen, ());
   MOCK_METHOD(void, ShowAuthError, (const GoogleServiceAuthError&));
-  MOCK_METHOD(void, ShowOtherError, (EnterpriseEnrollmentHelper::OtherError));
+  MOCK_METHOD(void, ShowOtherError, (EnrollmentLauncher::OtherError));
   MOCK_METHOD(void, ShowEnrollmentStatus, (policy::EnrollmentStatus status));
   MOCK_METHOD(void, Shutdown, ());
 };

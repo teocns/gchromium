@@ -11,6 +11,7 @@
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "ash/shortcut_viewer/keyboard_shortcut_viewer_metadata.h"
 #include "ash/shortcut_viewer/strings/grit/shortcut_viewer_strings.h"
+#include "ash/webui/shortcut_customization_ui/backend/search/search.mojom.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -19,8 +20,10 @@
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/app_list/search/common/icon_constants.h"
 #include "chrome/browser/ash/app_list/search/common/search_result_util.h"
+#include "chrome/browser/ash/app_list/search/search_features.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/string_matching/fuzzy_tokenized_string_match.h"
 #include "chromeos/ash/components/string_matching/tokenized_string.h"
 #include "chromeos/ash/components/string_matching/tokenized_string_match.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
@@ -32,6 +35,7 @@ namespace app_list {
 
 namespace {
 
+using ::ash::string_matching::FuzzyTokenizedStringMatch;
 using ::ash::string_matching::TokenizedString;
 using ::ash::string_matching::TokenizedStringMatch;
 using TextVector = ChromeSearchResult::TextVector;
@@ -39,6 +43,15 @@ using IconCode = ::ash::SearchResultTextItem::IconCode;
 using ::ui::KeyboardCode;
 
 constexpr char kKeyboardShortcutScheme[] = "keyboard_shortcut://";
+
+// Parameters for FuzzyTokenizedStringMatch.
+constexpr bool kUseWeightedRatio = false;
+
+// Flag to enable/disable diacritics stripping
+constexpr bool kStripDiacritics = true;
+
+// Flag to enable/disable acronym matcher.
+constexpr bool kUseAcronymMatcher = true;
 
 }  // namespace
 
@@ -263,6 +276,14 @@ KeyboardShortcutResult::KeyboardShortcutResult(Profile* profile,
   SetKeyboardShortcutTextVector(text_vector);
 }
 
+KeyboardShortcutResult::KeyboardShortcutResult(
+    Profile* profile,
+    const ash::shortcut_customization::mojom::SearchResultPtr& search_result)
+    : profile_(profile) {
+  set_relevance(search_result->relevance_score);
+  // TODO(xiangdongkong): Populate other properties.
+}
+
 KeyboardShortcutResult::~KeyboardShortcutResult() = default;
 
 void KeyboardShortcutResult::Open(int event_flags) {
@@ -289,13 +310,20 @@ double KeyboardShortcutResult::CalculateRelevance(
     return kDefaultRelevance;
   }
 
-  TokenizedStringMatch match;
-  return match.Calculate(query_tokenized, target_tokenized);
+  if (search_features::IsLauncherFuzzyMatchAcrossProvidersEnabled()) {
+    FuzzyTokenizedStringMatch fuzzy_match;
+    return fuzzy_match.Relevance(query_tokenized, target_tokenized,
+                                 kUseWeightedRatio, kStripDiacritics,
+                                 kUseAcronymMatcher);
+  } else {
+    TokenizedStringMatch match;
+    return match.Calculate(query_tokenized, target_tokenized);
+  }
 }
 
 void KeyboardShortcutResult::UpdateIcon() {
-  gfx::ImageSkia icon = gfx::CreateVectorIcon(
-      chromeos::kKeyboardShortcutsIcon, kAppIconDimension, SK_ColorTRANSPARENT);
+  ui::ImageModel icon = ui::ImageModel::FromVectorIcon(
+      chromeos::kKeyboardShortcutsIcon, SK_ColorTRANSPARENT, kAppIconDimension);
   SetIcon(IconInfo(icon, kAppIconDimension));
 }
 

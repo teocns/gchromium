@@ -33,14 +33,6 @@ const char kOobeOnboardingTime[] = "oobe.onboarding_time";
 // effect only if GAIA without SAML is used.
 const char kGaiaOfflineSigninTimeLimitDays[] = "gaia.offline_signin_time_limit";
 
-// A preference to keep track of the last time the user authenticated against
-// GAIA without using SAML. The preference is updated whenever the user
-// authenticates against GAIA: If GAIA performs the authentication itself, the
-// preference is set to the current time. If GAIA redirects to a SAML IdP, the
-// preference is cleared. The time is expressed as the serialization obtained
-// from PrefService::SetTime().
-const char kGaiaLastOnlineSignInTime[] = "gaia.last_online_sign_in_time";
-
 // Indicates that consolidated consent screen was shown. Used to show new terms
 // for reven board users after update from CloudReady to Flex.
 const char kRevenOobeConsolidatedConsentAccepted[] =
@@ -53,14 +45,6 @@ const char kRevenOobeConsolidatedConsentAccepted[] =
 // enforce online authentication. The limit is in effect only if GAIA redirected
 // the user to a SAML IdP during the last online authentication.
 const char kSAMLOfflineSigninTimeLimit[] = "saml.offline_signin_time_limit";
-
-// A preference to keep track of the last time the user authenticated against
-// GAIA using SAML. The preference is updated whenever the user authenticates
-// against GAIA: If GAIA redirects to a SAML IdP, the preference is set to the
-// current time. If GAIA performs the authentication itself, the preference is
-// cleared. The time is expressed as the serialization obtained from
-// PrefService::SetTime().
-const char kSAMLLastGAIASignInTime[] = "saml.last_gaia_sign_in_time";
 
 // Indicates the amount of time for which a user authenticated via GAIA
 // without SAML can use offline authentication against a cached password
@@ -96,9 +80,6 @@ const char kSamlPasswordExpirationAdvanceWarningDays[] =
 const char kLockScreenReauthenticationEnabled[] =
     "lock_screen_reauthentication_enabled";
 
-// SAML password sync token fetched from the external API.
-const char kSamlPasswordSyncToken[] = "saml.password_sync_token";
-
 const char kActivityTimeAfterOnboarding[] =
     "oobe.activity_time_after_onboarding";
 
@@ -111,6 +92,9 @@ const char kChoobeCompletedScreens[] = "oobe.choobe_completed_screens";
 
 //  A boolean pref of the drive pinning screen
 const char kOobeDrivePinningEnabledDeferred[] = "oobe.drive_pinning_defer";
+
+//  A double pref of the display size factor set in the display size screen.
+const char kOobeDisplaySizeFactorDeferred[] = "oobe.display_size_factor_defer";
 
 // *************** OOBE LOCAL STATE PREFS ***************
 
@@ -138,6 +122,9 @@ const char kOobeRevenUpdatedToFlex[] = "OobeRevenUpdatedToFlex";
 // metric when we exit the WelcomeScreen.
 const char kOobeLocaleChangedOnWelcomeScreen[] =
     "OobeLocaleChangedOnWelcomeScreen";
+
+// A boolean pref indicate if the critical update in OOBE applied.
+const char kOobeCriticalUpdate[] = "OobeCriticalUpdate";
 
 // A string pref containing url parameter name which can be used on SAML IdP web
 // page to autofill the username field.

@@ -291,7 +291,7 @@ TEST_F(SharedPasswordControllerTest, NoFormsArePropagatedOnNonHTMLPageLoad) {
   [[form_helper_ reject] findPasswordFormsInFrame:frame
                                 completionHandler:[OCMArg any]];
   OCMExpect([driver_helper_ PasswordManagerDriver:frame]);
-  OCMExpect([suggestion_helper_ processWithNoSavedCredentials]);
+  OCMExpect([suggestion_helper_ processWithNoSavedCredentialsWithFrame:frame]);
   EXPECT_CALL(password_manager_, OnPasswordFormsRendered);
   web_state_.OnPageLoaded(web::PageLoadCompletionStatus::SUCCESS);
 
@@ -438,12 +438,13 @@ TEST_F(SharedPasswordControllerTest, ReturnsSuggestionsIfAvailable) {
                   type:@"focus"
             typedValue:@""
                frameID:kTestFrameID];
-  FormSuggestion* suggestion =
-      [FormSuggestion suggestionWithValue:@"value"
-                       displayDescription:@"display-description"
-                                     icon:@"icon"
-                               identifier:0
-                           requiresReauth:NO];
+  FormSuggestion* suggestion = [FormSuggestion
+      suggestionWithValue:@"value"
+       displayDescription:@"display-description"
+                     icon:nil
+              popupItemId:autofill::PopupItemId::kAutocompleteEntry
+        backendIdentifier:nil
+           requiresReauth:NO];
 
   auto web_frame =
       web::FakeWebFrame::Create(SysNSStringToUTF8(kTestFrameID),
@@ -516,8 +517,8 @@ TEST_F(SharedPasswordControllerTest,
                                    id<FormSuggestionProvider> delegate) {
                  ASSERT_EQ(1UL, suggestions.count);
                  FormSuggestion* suggestion = suggestions.firstObject;
-                 EXPECT_EQ(autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY,
-                           suggestion.identifier);
+                 EXPECT_EQ(autofill::PopupItemId::kGeneratePasswordEntry,
+                           suggestion.popupItemId);
                  EXPECT_EQ(delegate, controller_);
                  completion_was_called = YES;
                }];
@@ -566,7 +567,8 @@ TEST_F(SharedPasswordControllerTest, SuggestsGeneratedPassword) {
       suggestionWithValue:@"test-value"
        displayDescription:@"test-description"
                      icon:nil
-               identifier:autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY
+              popupItemId:autofill::PopupItemId::kGeneratePasswordEntry
+        backendIdentifier:nil
            requiresReauth:NO];
 
   [[delegate_ expect] sharedPasswordController:controller_
@@ -634,7 +636,8 @@ TEST_F(SharedPasswordControllerTest, PresavesGeneratedPassword) {
       suggestionWithValue:@"test-value"
        displayDescription:@"test-description"
                      icon:nil
-               identifier:autofill::POPUP_ITEM_ID_GENERATE_PASSWORD_ENTRY
+              popupItemId:autofill::PopupItemId::kGeneratePasswordEntry
+        backendIdentifier:nil
            requiresReauth:NO];
 
   id decision_handler_arg =

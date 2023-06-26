@@ -181,7 +181,7 @@ absl::optional<SkColor> GetAccentColor(const ComputedStyle& style) {
   mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
   LayoutTheme& layout_theme = LayoutTheme::GetTheme();
   if (layout_theme.IsAccentColorCustomized(color_scheme)) {
-    return layout_theme.GetAccentColor(color_scheme).Rgb();
+    return layout_theme.GetSystemAccentColor(color_scheme).Rgb();
   }
 
   return absl::nullopt;
@@ -310,7 +310,7 @@ bool ThemePainterDefault::PaintMenuList(const Element& element,
   // FIXME: the normal Aura theme doesn't care about this, so we should
   // investigate if we really need fillContentArea.
   extra_params.menu_list.fill_content_area =
-      !style.HasBackgroundImage() && background_color.AlphaAsInteger();
+      !style.HasBackgroundImage() && !background_color.IsFullyTransparent();
 
   SetupMenuListArrow(document, style, rect, extra_params);
 
@@ -402,7 +402,11 @@ bool ThemePainterDefault::PaintSliderTrack(const Element& element,
     LayoutBox* thumb = thumb_element ? thumb_element->GetLayoutBox() : nullptr;
     LayoutBox* input_box = input->GetLayoutBox();
     if (thumb) {
-      gfx::Rect thumb_rect = ToPixelSnappedRect(thumb->FrameRect());
+      gfx::Rect thumb_rect =
+          RuntimeEnabledFeatures::LayoutNGNoLocationEnabled()
+              ? ToPixelSnappedRect(
+                    PhysicalRect(thumb->PhysicalLocation(), thumb->Size()))
+              : ToPixelSnappedRect(thumb->FrameRect());
       extra_params.slider.thumb_x = thumb_rect.x() +
                                     input_box->PaddingLeft().ToInt() +
                                     input_box->BorderLeft().ToInt();

@@ -17,7 +17,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "components/aggregation_service/aggregation_service.mojom.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
@@ -25,6 +24,7 @@
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_registration_time_config.mojom.h"
 #include "components/attribution_reporting/source_type.mojom-forward.h"
+#include "components/attribution_reporting/suitable_origin.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/attribution_reporting/aggregatable_histogram_contribution.h"
 #include "content/browser/attribution_reporting/attribution_info.h"
@@ -105,16 +105,15 @@ std::vector<AggregatableHistogramContribution> CreateAggregatableHistogram(
         100 * (buckets.size() - contributions.size()) / buckets.size());
   }
 
-  const int kExclusiveMaxHistogramValue = 101;
+  static_assert(
+      attribution_reporting::kMaxAggregationKeysPerSourceOrTrigger == 20,
+      "Bump the version for histogram "
+      "Conversions.AggregatableReport.NumContributionsPerReport2");
 
-  static_assert(attribution_reporting::kMaxAggregationKeysPerSourceOrTrigger <
-                    kExclusiveMaxHistogramValue,
-                "Bump the version for histogram "
-                "Conversions.AggregatableReport.NumContributionsPerReport");
-
-  base::UmaHistogramCounts100(
-      "Conversions.AggregatableReport.NumContributionsPerReport",
-      contributions.size());
+  base::UmaHistogramExactLinear(
+      "Conversions.AggregatableReport.NumContributionsPerReport2",
+      contributions.size(),
+      attribution_reporting::kMaxAggregationKeysPerSourceOrTrigger + 1);
 
   return contributions;
 }
@@ -132,7 +131,7 @@ absl::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
       base::Overloaded{
           [](const AttributionReport::EventLevelData&) { NOTREACHED(); },
           [&](const AttributionReport::AggregatableAttributionData& data) {
-            source_time = data.source.common_info().source_time();
+            source_time = data.source.source_time();
             source_debug_key = data.source.debug_key();
             common_aggregatable_data = &data.common_data;
             base::ranges::transform(
@@ -161,18 +160,20 @@ absl::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
           : AggregatableReportSharedInfo::DebugMode::kDisabled;
 
   base::Value::Dict additional_fields;
+  std::string serialized_source_time;
   switch (common_aggregatable_data->source_registration_time_config) {
     case attribution_reporting::mojom::SourceRegistrationTimeConfig::kInclude:
-      additional_fields.Set(
-          "source_registration_time",
-          SerializeTimeRoundedDownToWholeDayInSeconds(source_time));
+      serialized_source_time =
+          SerializeTimeRoundedDownToWholeDayInSeconds(source_time);
       break;
     case attribution_reporting::mojom::SourceRegistrationTimeConfig::kExclude:
-      // TODO(crbug.com/1432558): Bump
-      // `AttributionReport::CommonAggregatableData::kVersion` when enabling
-      // `kAttributionReportingNullAggregatableReports`.
+      // Use a default valid but impossible value to indicate exclusion of
+      // source registration time.
+      serialized_source_time = "0";
       break;
   }
+  additional_fields.Set("source_registration_time",
+                        std::move(serialized_source_time));
   additional_fields.Set(
       "attribution_destination",
       net::SchemefulSite(attribution_info.context_origin).Serialize());
@@ -181,7 +182,10 @@ absl::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
           AggregationServicePayloadContents::Operation::kHistogram,
           std::move(contributions),
           blink::mojom::AggregationServiceMode::kDefault,
-          common_aggregatable_data->aggregation_coordinator),
+          common_aggregatable_data->aggregation_coordinator_origin
+              ? absl::make_optional(
+                    **common_aggregatable_data->aggregation_coordinator_origin)
+              : absl::nullopt),
       AggregatableReportSharedInfo(
           report.initial_report_time(), report.external_report_id(),
           report.GetReportingOrigin(), debug_mode, std::move(additional_fields),

@@ -266,21 +266,17 @@ TEST_F(FrameTest, UserActivationTriggerHistograms) {
 }
 
 TEST_F(FrameTest, NavigateClearsScrollSnapshotClients) {
-  ScrollTimeline::Create(
-      &GetDocument(), GetDocument().ScrollingElementNoLayout(),
-      ScrollTimeline::ScrollAxis::kBlock, TimelineAttachment::kLocal);
+  ScrollTimeline::Create(&GetDocument(),
+                         GetDocument().ScrollingElementNoLayout(),
+                         ScrollTimeline::ScrollAxis::kBlock);
 
-  EXPECT_EQ(GetDocument()
-                .GetFrame()
-                ->GetUnvalidatedScrollSnapshotClientsForTesting()
-                .size(),
-            1U);
+  EXPECT_EQ(
+      GetDocument().GetFrame()->GetScrollSnapshotClientsForTesting().size(),
+      1U);
   NavigateSameDomain("page1");
-  EXPECT_EQ(GetDocument()
-                .GetFrame()
-                ->GetUnvalidatedScrollSnapshotClientsForTesting()
-                .size(),
-            0U);
+  EXPECT_EQ(
+      GetDocument().GetFrame()->GetScrollSnapshotClientsForTesting().size(),
+      0U);
 }
 
 }  // namespace blink

@@ -47,6 +47,20 @@ class MockPage : public shopping_list::mojom::Page {
                void(int64_t bookmark_id, bool is_tracked));
 };
 
+class MockDelegate : public ShoppingListHandler::Delegate {
+ public:
+  MockDelegate() { SetCurrentTabUrl(GURL("http://example.com")); }
+  ~MockDelegate() override = default;
+
+  MOCK_METHOD(absl::optional<GURL>, GetCurrentTabUrl, (), (override));
+  MOCK_METHOD(void, ShowInsightsSidePanelUI, (), (override));
+
+  void SetCurrentTabUrl(const GURL& url) {
+    ON_CALL(*this, GetCurrentTabUrl)
+        .WillByDefault(testing::Return(absl::make_optional<GURL>(url)));
+  }
+};
+
 void GetEvaluationProductInfos(
     base::OnceClosure closure,
     std::vector<shopping_list::mojom::BookmarkProductInfoPtr> expected,
@@ -95,7 +109,7 @@ class ShoppingListHandlerTest : public testing::Test {
         page_.BindAndGetRemote(),
         mojo::PendingReceiver<shopping_list::mojom::ShoppingListHandler>(),
         bookmark_model_.get(), shopping_service_.get(), pref_service_.get(),
-        &tracker_, "en-us");
+        &tracker_, "en-us", std::make_unique<MockDelegate>());
   }
 
   MockPage page_;
@@ -292,6 +306,9 @@ TEST_F(ShoppingListHandlerTest, TestGetProductInfo_FeatureEnabled) {
 
   std::vector<const bookmarks::BookmarkNode*> bookmark_list;
   bookmark_list.push_back(product);
+  shopping_service_->SetGetAllPriceTrackedBookmarksCallbackValue(bookmark_list);
+  shopping_service_->SetGetAllShoppingBookmarksValue(bookmark_list);
+
   std::vector<shopping_list::mojom::BookmarkProductInfoPtr> mojo_list =
       ShoppingListHandler::BookmarkListToMojoList(*bookmark_model_,
                                                   bookmark_list, "en-us");
@@ -315,6 +332,9 @@ TEST_F(ShoppingListHandlerTest, TestGetAllShoppingInfo_FeatureEnabled) {
   std::vector<const bookmarks::BookmarkNode*> bookmark_list;
   bookmark_list.push_back(product);
   bookmark_list.push_back(product2);
+  shopping_service_->SetGetAllPriceTrackedBookmarksCallbackValue(bookmark_list);
+  shopping_service_->SetGetAllShoppingBookmarksValue(bookmark_list);
+
   std::vector<shopping_list::mojom::BookmarkProductInfoPtr> mojo_list =
       ShoppingListHandler::BookmarkListToMojoList(*bookmark_model_,
                                                   bookmark_list, "en-us");
@@ -322,6 +342,92 @@ TEST_F(ShoppingListHandlerTest, TestGetAllShoppingInfo_FeatureEnabled) {
   handler_->GetAllShoppingBookmarkProductInfo(
       base::BindOnce(&GetEvaluationProductInfos, run_loop.QuitClosure(),
                      std::move(mojo_list)));
+}
+
+TEST_F(ShoppingListHandlerTest,
+       TestGetProductInfoForCurrentUrl_FeatureEligible) {
+  base::RunLoop run_loop;
+
+  absl::optional<commerce::ProductInfo> info;
+  info.emplace();
+  info->title = "example_title";
+  info->product_cluster_title = "example_cluster_title";
+  shopping_service_->SetResponseForGetProductInfoForUrl(info);
+
+  handler_->GetProductInfoForCurrentUrl(base::BindOnce(
+      [](base::RunLoop* run_loop,
+         shopping_list::mojom::ProductInfoPtr product_info) {
+        ASSERT_EQ("example_title", product_info->title);
+        ASSERT_EQ("example_cluster_title", product_info->cluster_title);
+        run_loop->Quit();
+      },
+      &run_loop));
+
+  run_loop.Run();
+}
+
+TEST_F(ShoppingListHandlerTest,
+       TestGetProductInfoForCurrentUrl_FeatureIneligible) {
+  base::RunLoop run_loop;
+
+  absl::optional<commerce::ProductInfo> info;
+  info.emplace();
+  info->title = "example_title";
+  shopping_service_->SetResponseForGetProductInfoForUrl(info);
+  shopping_service_->SetIsPriceInsightsEligible(false);
+
+  handler_->GetProductInfoForCurrentUrl(base::BindOnce(
+      [](base::RunLoop* run_loop,
+         shopping_list::mojom::ProductInfoPtr product_info) {
+        ASSERT_EQ("", product_info->title);
+        ASSERT_EQ("", product_info->cluster_title);
+        run_loop->Quit();
+      },
+      &run_loop));
+
+  run_loop.Run();
+}
+
+TEST_F(ShoppingListHandlerTest, TestGetPriceInsightsInfoForCurrentUrl) {
+  base::RunLoop run_loop;
+
+  absl::optional<commerce::PriceInsightsInfo> info;
+  info.emplace();
+  info->product_cluster_id = 123;
+  info->currency_code = "usd";
+  info->typical_low_price_micros = 1230000;
+  info->typical_high_price_micros = 2340000;
+  info->catalog_attributes = "Unlocked, 4GB";
+  info->jackpot_url = GURL("http://example.com/jackpot");
+  info->price_bucket = PriceBucket::kHighPrice;
+  info->has_multiple_catalogs = true;
+
+  shopping_service_->SetResponseForGetPriceInsightsInfoForUrl(info);
+
+  handler_->GetPriceInsightsInfoForCurrentUrl(base::BindOnce(
+      [](base::RunLoop* run_loop,
+         shopping_list::mojom::PriceInsightsInfoPtr info) {
+        ASSERT_EQ(123, info->cluster_id);
+        ASSERT_EQ("$1.23", info->typical_low_price);
+        ASSERT_EQ("$2.34", info->typical_high_price);
+        ASSERT_EQ("Unlocked, 4GB", info->catalog_attributes);
+        ASSERT_EQ("http://example.com/jackpot", info->jackpot.spec());
+        ASSERT_EQ(shopping_list::mojom::PriceInsightsInfo::PriceBucket::kHigh,
+                  info->bucket);
+        ASSERT_EQ(true, info->has_multiple_catalogs);
+        run_loop->Quit();
+      },
+      &run_loop));
+
+  run_loop.Run();
+}
+
+TEST_F(ShoppingListHandlerTest, TestShowInsightsSidePanelUI) {
+  auto delegate = std::make_unique<MockDelegate>();
+  EXPECT_CALL(*delegate, ShowInsightsSidePanelUI).Times(1);
+
+  handler_->SetDelegateForTesting(std::move(delegate));
+  handler_->ShowInsightsSidePanelUI();
 }
 
 class ShoppingListHandlerFeatureDisableTest : public testing::Test {
@@ -338,7 +444,7 @@ class ShoppingListHandlerFeatureDisableTest : public testing::Test {
         page_.BindAndGetRemote(),
         mojo::PendingReceiver<shopping_list::mojom::ShoppingListHandler>(),
         bookmark_model_.get(), shopping_service_.get(), pref_service_.get(),
-        &tracker_, "en-us");
+        &tracker_, "en-us", nullptr);
   }
 
   MockPage page_;

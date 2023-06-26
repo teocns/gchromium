@@ -7,6 +7,7 @@
 
 #include <list>
 #include <memory>
+#include <ostream>
 #include <set>
 #include <vector>
 
@@ -54,6 +55,7 @@ class WaylandSubsurface;
 class WaylandWindowDragController;
 class WaylandFrameManager;
 class WaylandPopup;
+class WaylandToplevelWindow;
 
 using WidgetSubsurfaceSet = base::flat_set<std::unique_ptr<WaylandSubsurface>>;
 
@@ -328,9 +330,10 @@ class WaylandWindow : public PlatformWindow,
   virtual bool IsActive() const;
 
   // WaylandWindow can be any type of object - WaylandToplevelWindow,
-  // WaylandPopup, WaylandAuxiliaryWindow. This method casts itself to
-  // WaylandPopup, if |this| has type of WaylandPopup.
+  // WaylandPopup. The following methods cast itself to WaylandPopup or
+  // WaylandToplevelWindow, if |this| is of that type.
   virtual WaylandPopup* AsWaylandPopup();
+  virtual WaylandToplevelWindow* AsWaylandToplevelWindow();
 
   // Returns true if the window's bounds is in screen coordinates.
   virtual bool IsScreenCoordinatesEnabled() const;
@@ -349,6 +352,8 @@ class WaylandWindow : public PlatformWindow,
   // Clears the state of the |frame_manager_| when the GPU channel is
   // destroyed.
   void OnChannelDestroyed();
+
+  virtual void DumpState(std::ostream& out) const;
 
 #if DCHECK_IS_ON()
   void disable_null_target_dcheck_for_testing() {
@@ -422,6 +427,14 @@ class WaylandWindow : public PlatformWindow,
   // be applied, even if requests are being throttled. This is used for client
   // requested changes (server requested changes may be throttled).
   void MaybeApplyLatestStateRequest(bool force);
+
+  // Returns the next state that will be applied, or the currently applied state
+  // if there are no later unapplied states. This is used when updating a single
+  // property (e.g. window scale) without wanting to modify the others.
+  PlatformWindowDelegate::State GetLatestRequestedState() const {
+    return in_flight_requests_.empty() ? applied_state_
+                                       : in_flight_requests_.back().state;
+  }
 
   // PendingConfigureState describes the content of a configure sent from the
   // wayland server.

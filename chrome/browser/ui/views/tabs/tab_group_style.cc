@@ -36,6 +36,7 @@ constexpr int kSavedEmptyChipSize = 22;
 constexpr int kChromeRefreshHeaderChipVerticalInset = 2;
 constexpr int kChromeRefreshEmptyChipSize = 20;
 constexpr int kChromeRefreshSyncIconWidth = 16;
+constexpr int kCromeRefreshCornerRadius = 6;
 
 }  // namespace
 
@@ -114,12 +115,7 @@ float TabGroupStyle::GetSyncIconWidth() const {
   return kSyncIconWidth;
 }
 
-float TabGroupStyle::GetSelectedTabOpacity() const {
-  return TabStyle::Get()->GetSelectedTabOpacity();
-}
-
-// static
-int TabGroupStyle::GetChipCornerRadius() {
+int TabGroupStyle::GetChipCornerRadius() const {
   return TabStyle::Get()->GetBottomCornerRadius() -
          TabGroupUnderline::kStrokeThickness;
 }
@@ -202,4 +198,8 @@ float ChromeRefresh2023TabGroupStyle::GetEmptyChipSize() const {
 
 float ChromeRefresh2023TabGroupStyle::GetSyncIconWidth() const {
   return kChromeRefreshSyncIconWidth;
+}
+
+int ChromeRefresh2023TabGroupStyle::GetChipCornerRadius() const {
+  return kCromeRefreshCornerRadius;
 }

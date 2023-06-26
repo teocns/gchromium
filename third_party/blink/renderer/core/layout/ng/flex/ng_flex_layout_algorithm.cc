@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_disable_side_effects_scope.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_input_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
@@ -485,7 +486,8 @@ NGConstraintSpace NGFlexLayoutAlgorithm::BuildSpaceForIntrinsicBlockSize(
   SetOrthogonalFallbackInlineSizeIfNeeded(Style(), flex_item, &space_builder);
   space_builder.SetCacheSlot(NGCacheSlot::kMeasure);
   space_builder.SetIsPaintedAtomically(true);
-  if (phase == Phase::kRowIntrinsicSize) {
+  if (phase == Phase::kRowIntrinsicSize &&
+      RuntimeEnabledFeatures::LayoutFlexNewRowAlgorithmEnabled()) {
     space_builder.SetIsInFlexIntrinsicSizing(true);
   }
 
@@ -835,6 +837,10 @@ void NGFlexLayoutAlgorithm::ConstructAndAppendFlexItems(
       if (!layout_result) {
         NGConstraintSpace child_space = BuildSpaceForIntrinsicBlockSize(
             child, max_content_contribution, phase);
+        absl::optional<NGDisableSideEffectsScope> disable_side_effects;
+        if (phase != Phase::kLayout && !Node().GetLayoutBox()->NeedsLayout()) {
+          disable_side_effects.emplace();
+        }
         layout_result = child.Layout(child_space, /* break_token */ nullptr);
         DCHECK(layout_result);
       }
@@ -1322,6 +1328,11 @@ void NGFlexLayoutAlgorithm::PlaceFlexItems(
                !flex_item.layout_result_)
             << "If we already have a 'measure' result from "
                "ConstructAndAppendFlexItems, we don't want to evict it.";
+        absl::optional<NGDisableSideEffectsScope> disable_side_effects;
+        if (is_computing_multiline_column_intrinsic_size &&
+            !flex_item.ng_input_node_.GetLayoutBox()->NeedsLayout()) {
+          disable_side_effects.emplace();
+        }
         flex_item.layout_result_ = flex_item.ng_input_node_.Layout(
             child_space, nullptr /*break token*/);
         // TODO(layout-dev): Handle abortions caused by block fragmentation.
@@ -2356,6 +2367,8 @@ class FlexFractionParts {
     }
   }
 
+  float ChosenFlexFraction() const { return chosen_flex_fraction_; }
+
  private:
   float chosen_flex_fraction_ = std::numeric_limits<float>::lowest();
 
@@ -2406,6 +2419,116 @@ NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfMultilineColumnContainer() {
           /* depends_on_block_constraints */ true};
 }
 
+MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfRowContainerV3() {
+  MinMaxSizes container_sizes;
+  bool depends_on_block_constraints = false;
+  DCHECK(!RuntimeEnabledFeatures::LayoutFlexNewRowAlgorithmEnabled());
+  DCHECK(!RuntimeEnabledFeatures::LayoutFlexNewRowAlgorithmV2Enabled());
+
+  // The intrinsic sizing algorithm uses lots of geometry and values from each
+  // item (e.g. flex base size, used minimum and maximum sizes including
+  // automatic minimum sizing), so re-use |ConstructAndAppendFlexItems| from the
+  // layout algorithm, which calculates all that.
+  // TODO(dgrogan): As an optimization, We can drop the call to
+  // ComputeMinMaxSizes in |ConstructAndAppendFlexItems| during this phase if
+  // the flex basis is not definite.
+  ConstructAndAppendFlexItems(Phase::kRowIntrinsicSize);
+
+  LayoutUnit largest_outer_min_content_contribution;
+  for (const FlexItem& item : algorithm_.all_items_) {
+    const NGBlockNode& child = item.ng_input_node_;
+
+    const NGConstraintSpace space = BuildSpaceForIntrinsicInlineSize(child);
+    MinMaxSizesResult min_max_content_contributions =
+        ComputeMinAndMaxContentContribution(Style(), child, space);
+    depends_on_block_constraints |=
+        min_max_content_contributions.depends_on_block_constraints;
+
+    MinMaxSizes item_final_contribution;
+    const ComputedStyle& child_style = item.style_;
+    const LayoutUnit flex_base_size_border_box =
+        item.flex_base_content_size_ + item.main_axis_border_padding_;
+    const bool is_used_flex_basis_definite =
+        IsUsedFlexBasisDefinite(item.ng_input_node_);
+
+    if (algorithm_.IsMultiline()) {
+      const LayoutUnit main_axis_margins =
+          is_horizontal_flow_ ? item.physical_margins_.HorizontalSum()
+                              : item.physical_margins_.VerticalSum();
+      largest_outer_min_content_contribution = std::max(
+          largest_outer_min_content_contribution,
+          min_max_content_contributions.sizes.min_size + main_axis_margins);
+    } else {
+      const LayoutUnit min_contribution =
+          min_max_content_contributions.sizes.min_size;
+      const bool cant_move = (min_contribution > flex_base_size_border_box &&
+                              child_style.ResolvedFlexGrow(Style()) == 0.f) ||
+                             (min_contribution < flex_base_size_border_box &&
+                              child_style.ResolvedFlexShrink(Style()) == 0.f);
+      if (cant_move && is_used_flex_basis_definite) {
+        item_final_contribution.min_size = flex_base_size_border_box;
+      } else {
+        item_final_contribution.min_size = min_contribution;
+      }
+    }
+
+    const LayoutUnit max_contribution =
+        min_max_content_contributions.sizes.max_size;
+    const bool cant_move = (max_contribution > flex_base_size_border_box &&
+                            child_style.ResolvedFlexGrow(Style()) == 0.f) ||
+                           (max_contribution < flex_base_size_border_box &&
+                            child_style.ResolvedFlexShrink(Style()) == 0.f);
+    if (cant_move && is_used_flex_basis_definite) {
+      item_final_contribution.max_size = flex_base_size_border_box;
+    } else {
+      item_final_contribution.max_size = max_contribution;
+    }
+
+    // TODO(dgrogan): Can probably remove these calls if we use
+    // hypothetical_main_size instead of flex_base_size_border_box in a few
+    // places above.
+    item_final_contribution.Constrain(item.min_max_main_sizes_.max_size +
+                                      item.main_axis_border_padding_);
+    item_final_contribution.Encompass(item.min_max_main_sizes_.min_size +
+                                      item.main_axis_border_padding_);
+
+    container_sizes += item_final_contribution;
+
+    const LayoutUnit main_axis_margins =
+        is_horizontal_flow_ ? item.physical_margins_.HorizontalSum()
+                            : item.physical_margins_.VerticalSum();
+    container_sizes += main_axis_margins;
+  }
+
+  const LayoutUnit gap_inline_size =
+      (algorithm_.NumItems() - 1) * algorithm_.gap_between_items_;
+  if (algorithm_.IsMultiline()) {
+    container_sizes.min_size = largest_outer_min_content_contribution;
+    container_sizes.max_size += gap_inline_size;
+  } else {
+    DCHECK_EQ(largest_outer_min_content_contribution, LayoutUnit())
+        << "largest_outer_min_content_contribution is not filled in for "
+           "singleline containers.";
+    container_sizes += gap_inline_size;
+  }
+
+  // Handle potential weirdness caused by items' negative margins.
+#if DCHECK_IS_ON()
+  if (container_sizes.max_size < container_sizes.min_size) {
+    DCHECK(algorithm_.IsMultiline())
+        << container_sizes
+        << " multiline row containers might have max < min due to negative "
+           "margins, but singleline containers cannot.";
+  }
+#endif
+  container_sizes.max_size =
+      std::max(container_sizes.max_size, container_sizes.min_size);
+  container_sizes.Encompass(LayoutUnit());
+
+  container_sizes += BorderScrollbarPadding().InlineSum();
+  return MinMaxSizesResult(container_sizes, depends_on_block_constraints);
+}
+
 MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfRowContainer() {
   // The goal of this algorithm is to find a container inline size such that
   // after running the flex algorithm, each item's final size will be at least
@@ -2415,6 +2538,8 @@ MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfRowContainer() {
   // So the intrinsic size algorithm is designed to make the container larger
   // than the sum of the contributions in cases where not every item is going to
   // be at its exact contribution size after the main flex algorithm runs.
+
+  DCHECK(!RuntimeEnabledFeatures::LayoutFlexNewRowAlgorithmV3Enabled());
 
   MinMaxSizes container_sizes;
   bool depends_on_block_constraints = false;
@@ -2431,12 +2556,14 @@ MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfRowContainer() {
 
   // First pass: look for the most restrictive items that will influence the
   // sizing of the rest.
+  Deque<LayoutUnit> min_contributions;
   for (const FlexItem& item : algorithm_.all_items_) {
     const NGBlockNode& child = item.ng_input_node_;
 
     const NGConstraintSpace space = BuildSpaceForIntrinsicInlineSize(child);
     const MinMaxSizesResult min_max_content_contributions =
         ComputeItemContributions(space, item);
+    min_contributions.push_back(min_max_content_contributions.sizes.min_size);
     depends_on_block_constraints |=
         min_max_content_contributions.depends_on_block_constraints;
 
@@ -2463,12 +2590,36 @@ MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfRowContainer() {
     const ComputedStyle& child_style = item.style_;
     const LayoutUnit flex_base_size_border_box =
         item.flex_base_content_size_ + item.main_axis_border_padding_;
-    MinMaxSizes item_final_contribution{flex_base_size_border_box,
+    MinMaxSizes item_final_contribution{LayoutUnit(),
                                         flex_base_size_border_box};
     if (!algorithm_.IsMultiline()) {
-      item_final_contribution.min_size +=
-          min_content_largest_fraction.ApplyLargestFlexFractionToItem(
-              child_style, item.flex_base_content_size_);
+      const LayoutUnit min_contribution = min_contributions.TakeFirst();
+      if (RuntimeEnabledFeatures::LayoutFlexNewRowAlgorithmV2Enabled() &&
+          min_content_largest_fraction.ChosenFlexFraction() <= 0.f) {
+        // If chosen fraction <= 0, no one is going to grow to meet their
+        // min contribution. That means everyone is going to be exactly at
+        // their flex-basis or is going to shrink from flex-basis to get to
+        // their min contribution.
+        const bool cant_move = (min_contribution > flex_base_size_border_box &&
+                                child_style.ResolvedFlexGrow(Style()) == 0.f) ||
+                               (min_contribution < flex_base_size_border_box &&
+                                child_style.ResolvedFlexShrink(Style()) == 0.f);
+        if (cant_move) {
+          item_final_contribution.min_size = flex_base_size_border_box;
+        } else {
+          // Note: |min_contribution| is not the traditional min content
+          // contribution defined by CSS. This one is max(specified width,
+          // min-content size). The currently shipping behavior uses traditional
+          // min content contribution here. Changing this to traditional would
+          // be a simple small step toward increased compatibility, if need be.
+          item_final_contribution.min_size = min_contribution;
+        }
+      } else {
+        item_final_contribution.min_size =
+            min_content_largest_fraction.ApplyLargestFlexFractionToItem(
+                child_style, item.flex_base_content_size_) +
+            flex_base_size_border_box;
+      }
     }
     item_final_contribution.max_size +=
         max_content_largest_fraction.ApplyLargestFlexFractionToItem(
@@ -2487,22 +2638,32 @@ MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizeOfRowContainer() {
     container_sizes += main_axis_margins;
   }
 
+  const LayoutUnit gap_inline_size =
+      (algorithm_.NumItems() - 1) * algorithm_.gap_between_items_;
   if (algorithm_.IsMultiline()) {
     container_sizes.min_size = largest_outer_min_content_contribution;
+    container_sizes.max_size += gap_inline_size;
   } else {
     DCHECK_EQ(largest_outer_min_content_contribution, LayoutUnit())
         << "largest_outer_min_content_contribution is not filled in for "
            "singleline containers.";
-    const LayoutUnit gap_inline_size =
-        (algorithm_.NumItems() - 1) * algorithm_.gap_between_items_;
     container_sizes += gap_inline_size;
   }
 
-  // Due to negative margins, it is possible that we calculated a negative
-  // intrinsic width. Make sure that we never return a negative width.
+  // Handle potential weirdness caused by items' negative margins.
+#if DCHECK_IS_ON()
+  if (container_sizes.max_size < container_sizes.min_size) {
+    DCHECK(algorithm_.IsMultiline())
+        << container_sizes
+        << " multiline row containers might have max < min due to negative "
+           "margins, but singleline containers cannot.";
+  }
+#endif
+  container_sizes.max_size =
+      std::max(container_sizes.max_size, container_sizes.min_size);
   container_sizes.Encompass(LayoutUnit());
+
   container_sizes += BorderScrollbarPadding().InlineSum();
-  DCHECK_GE(container_sizes.max_size, container_sizes.min_size);
   return MinMaxSizesResult(container_sizes, depends_on_block_constraints);
 }
 
@@ -2512,17 +2673,21 @@ MinMaxSizesResult NGFlexLayoutAlgorithm::ComputeMinMaxSizes(
           Node(), BorderScrollbarPadding()))
     return *result;
 
-  if (RuntimeEnabledFeatures::NewFlexboxSizingEnabled()) {
-    // TODO(crbug.com/240765): Implement all the cases here.
-    if (is_column_) {
-      if (algorithm_.IsMultiline()) {
-        return ComputeMinMaxSizeOfMultilineColumnContainer();
-      } else {
-        // singleline column flexbox
-      }
-    } else {
-      return ComputeMinMaxSizeOfRowContainer();
-    }
+  if (RuntimeEnabledFeatures::LayoutFlexNewColumnAlgorithmEnabled() &&
+      is_column_ && algorithm_.IsMultiline()) {
+    return ComputeMinMaxSizeOfMultilineColumnContainer();
+  }
+
+  if (RuntimeEnabledFeatures::LayoutFlexNewRowAlgorithmEnabled() &&
+      !is_column_) {
+    DCHECK(!RuntimeEnabledFeatures::LayoutFlexNewRowAlgorithmV3Enabled());
+    return ComputeMinMaxSizeOfRowContainer();
+  }
+
+  if (RuntimeEnabledFeatures::LayoutFlexNewRowAlgorithmV3Enabled() &&
+      !is_column_) {
+    DCHECK(!RuntimeEnabledFeatures::LayoutFlexNewRowAlgorithmEnabled());
+    return ComputeMinMaxSizeOfRowContainerV3();
   }
 
   MinMaxSizes sizes;

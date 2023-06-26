@@ -278,7 +278,7 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
     kWrongVersionOnEarlyData = 10,
     kHttp2PingFailed = 11,
     kHttp2ServerRefusedStream = 12,
-    kHttp2PushedStreamNotAvailable = 13,
+    // Entry 13 is removed.
     kHttp2ClaimedPushedStreamResetByServer = 14,
     kHttp2PushedResponseDoesNotMatch = 15,
     kQuicHandshakeFailed = 16,
@@ -493,6 +493,9 @@ class NET_EXPORT_PRIVATE HttpNetworkTransaction
   size_t num_restarts_ = 0;
 
   bool close_connection_on_destruction_ = false;
+
+  // Set to true when the server required HTTP/1.1 fallback.
+  bool http_1_1_was_required_ = false;
 
   absl::optional<base::TimeDelta> quic_protocol_error_retry_delay_;
 };

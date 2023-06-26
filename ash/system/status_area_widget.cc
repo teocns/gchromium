@@ -26,6 +26,7 @@
 #include "ash/system/holding_space/holding_space_tray.h"
 #include "ash/system/ime_menu/ime_menu_tray.h"
 #include "ash/system/media/media_tray.h"
+#include "ash/system/message_center/unified_message_center_bubble.h"
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/notification_center/notification_center_tray.h"
@@ -41,6 +42,7 @@
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/unified/date_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
+#include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/system/video_conference/video_conference_tray.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -50,7 +52,6 @@
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_macros.h"
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
-#include "media/base/media_switches.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
@@ -58,36 +59,6 @@
 #include "ui/message_center/message_center_types.h"
 
 namespace ash {
-
-////////////////////////////////////////////////////////////////////////////////
-// StatusAreaWidget::ScopedTrayBubbleCounter
-
-StatusAreaWidget::ScopedTrayBubbleCounter::ScopedTrayBubbleCounter(
-    StatusAreaWidget* status_area_widget)
-    : status_area_widget_(status_area_widget->weak_ptr_factory_.GetWeakPtr()) {
-  if (status_area_widget_->tray_bubble_count_ == 0) {
-    status_area_widget_->shelf()
-        ->shelf_layout_manager()
-        ->OnShelfTrayBubbleVisibilityChanged(/*bubble_shown=*/true);
-  }
-  ++status_area_widget_->tray_bubble_count_;
-}
-
-StatusAreaWidget::ScopedTrayBubbleCounter::~ScopedTrayBubbleCounter() {
-  // ScopedTrayBubbleCounter may live longer than StatusAreaWidget.
-  if (!status_area_widget_) {
-    return;
-  }
-
-  --status_area_widget_->tray_bubble_count_;
-  if (status_area_widget_->tray_bubble_count_ == 0) {
-    status_area_widget_->shelf()
-        ->shelf_layout_manager()
-        ->OnShelfTrayBubbleVisibilityChanged(/*bubble_shown=*/false);
-  }
-
-  DCHECK_GE(status_area_widget_->tray_bubble_count_, 0);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 // StatusAreaWidget
@@ -139,9 +110,7 @@ void StatusAreaWidget::Initialize() {
 
   palette_tray_ = AddTrayButton(std::make_unique<PaletteTray>(shelf_));
 
-  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForChromeOS)) {
-    media_tray_ = AddTrayButton(std::make_unique<MediaTray>(shelf_));
-  }
+  media_tray_ = AddTrayButton(std::make_unique<MediaTray>(shelf_));
 
   if (features::IsEcheSWAEnabled()) {
     eche_tray_ = AddTrayButton(std::make_unique<EcheTray>(shelf_));
@@ -159,7 +128,9 @@ void StatusAreaWidget::Initialize() {
   if (features::IsQsRevampEnabled()) {
     notification_center_tray_ =
         AddTrayButton(std::make_unique<NotificationCenterTray>(shelf_));
-    notification_center_tray_->views::View::AddObserver(this);
+    notification_center_tray_->AddObserver(this);
+    animation_controller_ = std::make_unique<StatusAreaAnimationController>(
+        notification_center_tray());
   }
 
   auto unified_system_tray = std::make_unique<UnifiedSystemTray>(shelf_);
@@ -185,11 +156,6 @@ void StatusAreaWidget::Initialize() {
 
   EnsureTrayOrder();
 
-  if (features::IsQsRevampEnabled()) {
-    animation_controller_ = std::make_unique<StatusAreaAnimationController>(
-        notification_center_tray());
-  }
-
   UpdateAfterLoginStatusChange(
       Shell::Get()->session_controller()->login_status());
   UpdateLayout(/*animate=*/false);
@@ -208,7 +174,7 @@ StatusAreaWidget::~StatusAreaWidget() {
   // some unittests. During the test environment tear-down, removing the
   // observer will lead to a crash.
   if (features::IsQsRevampEnabled() && notification_center_tray_) {
-    notification_center_tray_->views::View::RemoveObserver(this);
+    notification_center_tray_->RemoveObserver(this);
   }
 
   // If QsRevamp flag is enabled, reset `animation_controller_` before
@@ -216,6 +182,11 @@ StatusAreaWidget::~StatusAreaWidget() {
   if (features::IsQsRevampEnabled()) {
     animation_controller_.reset(nullptr);
   }
+
+  // `TrayBubbleView` might be deleted after `StatusAreaWidget`, so we reset the
+  // pointer here to avoid dangling pointer.
+  open_tray_bubble_ = nullptr;
+
   status_area_widget_delegate_->Shutdown();
 }
 
@@ -671,7 +642,7 @@ bool StatusAreaWidget::ShouldShowShelf() const {
   // Some TrayBackgroundViews' cache their bubble, the shelf should only be
   // forced to show if the bubble is visible, and we should not show the shelf
   // for cached, hidden bubbles.
-  if (tray_bubble_count_ > 0) {
+  if (open_tray_bubble_) {
     for (TrayBackgroundView* tray_button : tray_buttons_) {
       if (!tray_button->GetBubbleView()) {
         continue;
@@ -714,6 +685,38 @@ bool StatusAreaWidget::OnNativeWidgetActivationChanged(bool active) {
     status_area_widget_delegate_->SetPaneFocusAndFocusDefault();
   }
   return true;
+}
+
+void StatusAreaWidget::SetOpenTrayBubble(TrayBubbleView* open_tray_bubble) {
+  if (open_tray_bubble_ == open_tray_bubble) {
+    return;
+  }
+
+  DCHECK(unified_system_tray_);
+  // We will ignore the message center bubble, since this bubble is on top of
+  // the Quick Settings and will be consider a "secondary bubble". As a result,
+  // it should not be set to be `open_tray_bubble_`. Note that this bubble will
+  // be removed when `kQsRevamp` is enabled.
+  if (unified_system_tray_->message_center_bubble() &&
+      open_tray_bubble ==
+          unified_system_tray_->message_center_bubble()->GetBubbleView()) {
+    DCHECK(!features::IsQsRevampEnabled());
+    return;
+  }
+
+  if (open_tray_bubble) {
+    // We only keep track of bubbles that are anchored to the status area
+    // widget.
+    DCHECK(open_tray_bubble->IsAnchoredToStatusArea());
+
+    // There should not be 2 tray bubbles that are open at the same time (with
+    // the exception of message center bubble mentioned above).
+    DCHECK(!open_tray_bubble_);
+  }
+
+  open_tray_bubble_ = open_tray_bubble;
+  shelf()->shelf_layout_manager()->OnShelfTrayBubbleVisibilityChanged(
+      /*bubble_shown=*/open_tray_bubble_);
 }
 
 void StatusAreaWidget::OnViewVisibilityChanged(views::View* observed_view,

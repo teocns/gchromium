@@ -11,9 +11,12 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "components/omnibox/browser/on_device_tail_model_executor.h"
+#include "components/omnibox/common/omnibox_features.h"
 #include "components/optimization_guide/core/optimization_guide_model_provider.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
 #include "components/optimization_guide/proto/models.pb.h"
@@ -21,6 +24,9 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace {
+
+// The maximum idle time before the model executor is unloaded from memory.
+constexpr base::TimeDelta kMaxExecutorIdleSeconds = base::Seconds(60);
 
 void InitializeTailModelExecutor(
     OnDeviceTailModelExecutor* executor,
@@ -53,15 +59,30 @@ void InitializeTailModelExecutor(
 
 std::vector<OnDeviceTailModelExecutor::Prediction> RunTailModelExecutor(
     OnDeviceTailModelExecutor* executor,
-    const OnDeviceTailModelService::OnDeviceTailModelInput& input) {
+    const OnDeviceTailModelExecutor::ModelInput& input) {
   std::vector<OnDeviceTailModelExecutor::Prediction> predictions;
-  if (executor == nullptr || !executor->IsReady()) {
+
+  if (executor == nullptr) {
     return predictions;
   }
-  predictions = executor->GenerateSuggestionsForPrefix(
-      input.sanitized_input, input.previous_query, input.max_num_suggestions,
-      input.max_num_step, input.probability_threshold);
+
+  if (!executor->IsReady() && !executor->Init()) {
+    return predictions;
+  }
+
+  predictions = executor->GenerateSuggestionsForPrefix(input);
   return predictions;
+}
+
+void MaybeUnloadModelExecutor(OnDeviceTailModelExecutor* executor) {
+  if (executor == nullptr || !executor->IsReady()) {
+    return;
+  }
+
+  base::TimeTicks now = base::TimeTicks::Now();
+  if (now - executor->GetExecutorLastCalledTime() > kMaxExecutorIdleSeconds) {
+    executor->Reset();
+  }
 }
 
 }  // namespace
@@ -74,13 +95,26 @@ OnDeviceTailModelService::OnDeviceTailModelService(
           new OnDeviceTailModelExecutor(),
           base::OnTaskRunnerDeleter(model_executor_task_runner_)),
       model_provider_(model_provider) {
-  if (model_provider_) {
-    model_provider_->AddObserverForOptimizationTargetModel(
-        optimization_guide::proto::
-            OPTIMIZATION_TARGET_OMNIBOX_ON_DEVICE_TAIL_SUGGEST,
-        /* model_metadata= */ absl::nullopt, this);
+  if (model_provider_ == nullptr) {
+    return;
+  }
+
+  model_provider_->AddObserverForOptimizationTargetModel(
+      optimization_guide::proto::
+          OPTIMIZATION_TARGET_OMNIBOX_ON_DEVICE_TAIL_SUGGEST,
+      /* model_metadata= */ absl::nullopt, this);
+
+  if (base::GetFieldTrialParamByFeatureAsBool(omnibox::kOnDeviceTailModel,
+                                              "UnloadExecutorOnIdle", false)) {
+    timer_.Start(
+        FROM_HERE, kMaxExecutorIdleSeconds,
+        base::BindRepeating(&OnDeviceTailModelService::CheckIfModelExecutorIdle,
+                            weak_ptr_factory_.GetWeakPtr()));
   }
 }
+
+OnDeviceTailModelService::OnDeviceTailModelService()
+    : tail_model_executor_(nullptr, base::OnTaskRunnerDeleter(nullptr)) {}
 
 OnDeviceTailModelService::~OnDeviceTailModelService() {
   if (model_provider_) {
@@ -89,7 +123,9 @@ OnDeviceTailModelService::~OnDeviceTailModelService() {
             OPTIMIZATION_TARGET_OMNIBOX_ON_DEVICE_TAIL_SUGGEST,
         this);
     model_provider_ = nullptr;
+    timer_.Stop();
   }
+  weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
 void OnDeviceTailModelService::OnModelUpdated(
@@ -115,7 +151,6 @@ void OnDeviceTailModelService::OnModelUpdated(
     DVLOG(1) << "Failed to fetch metadata for Omnibox on device tail model";
     return;
   }
-
   model_executor_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&InitializeTailModelExecutor, tail_model_executor_.get(),
@@ -125,10 +160,24 @@ void OnDeviceTailModelService::OnModelUpdated(
 }
 
 void OnDeviceTailModelService::GetPredictionsForInput(
-    const OnDeviceTailModelInput& input,
+    const OnDeviceTailModelExecutor::ModelInput& input,
     ResultCallback result_callback) {
-  model_executor_task_runner_->PostTaskAndReplyWithResult(
-      FROM_HERE,
-      base::BindOnce(&RunTailModelExecutor, tail_model_executor_.get(), input),
-      std::move(result_callback));
+  if (model_executor_task_runner_) {
+    model_executor_task_runner_->PostTaskAndReplyWithResult(
+        FROM_HERE,
+        base::BindOnce(&RunTailModelExecutor, tail_model_executor_.get(),
+                       input),
+        std::move(result_callback));
+  } else {
+    std::move(result_callback)
+        .Run(std::vector<OnDeviceTailModelExecutor::Prediction>());
+  }
+}
+
+void OnDeviceTailModelService::CheckIfModelExecutorIdle() {
+  if (model_executor_task_runner_) {
+    model_executor_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&MaybeUnloadModelExecutor, tail_model_executor_.get()));
+  }
 }

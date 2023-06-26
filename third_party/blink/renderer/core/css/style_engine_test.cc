@@ -575,7 +575,7 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
       t8->GetComputedStyle()->VisitedDependentColor(GetCSSPropertyColor()));
 
   gfx::SizeF page_size(400, 400);
-  GetDocument().GetFrame()->StartPrinting(page_size, page_size, 1);
+  GetDocument().GetFrame()->StartPrinting(page_size, 1);
   ASSERT_TRUE(t8->GetComputedStyle());
   EXPECT_EQ(
       Color::FromRGB(0, 0, 0),
@@ -3145,7 +3145,7 @@ TEST_F(StyleEngineTest, PrintNoDarkColorScheme) {
       body->GetComputedStyle()->VisitedDependentColor(GetCSSPropertyColor()));
 
   gfx::SizeF page_size(400, 400);
-  GetDocument().GetFrame()->StartPrinting(page_size, page_size, 1);
+  GetDocument().GetFrame()->StartPrinting(page_size, 1);
   EXPECT_EQ(Color::kBlack, root->GetComputedStyle()->VisitedDependentColor(
                                GetCSSPropertyColor()));
   EXPECT_EQ(mojom::blink::ColorScheme::kLight,
@@ -3180,7 +3180,7 @@ TEST_F(StyleEngineTest, PrintNoForceDarkMode) {
             true);
 
   gfx::SizeF page_size(400, 400);
-  GetDocument().GetFrame()->StartPrinting(page_size, page_size, 1);
+  GetDocument().GetFrame()->StartPrinting(page_size, 1);
   EXPECT_EQ(frame_view->DocumentBackgroundColor(), Color::kWhite);
   EXPECT_EQ(GetDocument().documentElement()->GetComputedStyle()->ForceDark(),
             false);
@@ -3992,7 +3992,7 @@ TEST_F(StyleEngineContainerQueryTest,
   //
   // See implementation of `NodeLayoutUpgrade::ShouldUpgrade` for more
   // information.
-  GetDocument().UpdateStyleAndLayoutTreeForNode(a);
+  GetDocument().UpdateStyleAndLayoutTreeForNode(a, DocumentUpdateReason::kTest);
   EXPECT_FALSE(GetStyleEngine().StyleAffectedByLayout());
   EXPECT_FALSE(GetDocument().View()->NeedsLayout());
   EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdateForNode(*a));
@@ -4288,7 +4288,7 @@ TEST_F(StyleEngineTest, AudioUAStyleNameSpace) {
   EXPECT_FALSE(html_audio->GetComputedStyle());
 
   gfx::SizeF page_size(400, 400);
-  GetDocument().GetFrame()->StartPrinting(page_size, page_size, 1);
+  GetDocument().GetFrame()->StartPrinting(page_size, 1);
 
   // Also for printing.
   EXPECT_TRUE(audio->GetComputedStyle());
@@ -5930,44 +5930,6 @@ TEST_F(StyleEngineTest, BorderWidthsAreRecalculatedWhenZoomChanges) {
   checkBorderWidth(1.0f);
 }
 
-TEST_F(StyleEngineTest, SubsequentSiblingRecalcFlatTree) {
-  GetDocument()
-      .documentElement()
-      ->setInnerHTMLWithDeclarativeShadowDOMForTesting(R"HTML(
-    <div id="host">
-      <template shadowroot=open>
-        <slot name=a></slot>
-      </template>
-      <div slot=a id=target></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div slot=a></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div></div>
-      <div slot=a></div>
-    </div>
-  )HTML");
-
-  UpdateAllLifecyclePhasesForTest();
-
-  unsigned before_count = GetStyleEngine().StyleForElementCount();
-
-  Element* target = GetElementById("target");
-  ASSERT_TRUE(target);
-
-  target->SetInlineStyleProperty(CSSPropertyID::kScrollTimelineName, "foo");
-  UpdateAllLifecyclePhasesForTest();
-
-  unsigned after_count = GetStyleEngine().StyleForElementCount();
-
-  // Only the slotted elements should get style recalc.
-  EXPECT_EQ(3u, after_count - before_count);
-}
-
 TEST_F(StyleEngineTest, AnimationDelayShorthandFlags) {
   String css = "animation-delay:1s";
   {
@@ -6014,6 +5976,7 @@ TEST_F(StyleEngineTest, AnimationShorthandFlags) {
   {
     ScopedScrollTimelineForTest scroll_timeline_enabled(false);
     ScopedCSSAnimationDelayStartEndForTest start_end_enabled(false);
+    ScopedScrollTimelineCurrentTimeForTest current_time_enabled(false);
     const CSSPropertyValueSet* set =
         css_test_helpers::ParseDeclarationBlock(css);
     ASSERT_TRUE(set);
@@ -6078,7 +6041,7 @@ TEST_F(StyleEngineTest, InitialStyle_Recalc) {
     <style>
       #target {
         background-color: green;
-        @initial { background-color: red; }
+        @starting-style { background-color: red; }
       }
     </style>
     <div id="target"></div>
@@ -6096,12 +6059,12 @@ TEST_F(StyleEngineTest, InitialStyle_Recalc) {
   UpdateAllLifecyclePhasesForTest();
 
   EXPECT_EQ(GetStyleEngine().StyleForElementCount() - before_count, 1u)
-      << "The style recalc should not do a separate @initial pass since the "
-         "element already has a style";
+      << "The style recalc should not do a separate @starting-style pass since "
+         "the element already has a style";
   EXPECT_EQ(target->ComputedStyleRef().VisitedDependentColor(
                 GetCSSPropertyBackgroundColor()),
             green)
-      << "Make sure @initial rules do not apply for the second pass";
+      << "Make sure @starting-style rules do not apply for the second pass";
   EXPECT_EQ(
       target->ComputedStyleRef().VisitedDependentColor(GetCSSPropertyColor()),
       lime)
@@ -6113,7 +6076,7 @@ TEST_F(StyleEngineTest, InitialStyle_FromDisplayNone) {
     <style>
       #target {
         background-color: green;
-        @initial { background-color: red; }
+        @starting-style { background-color: red; }
       }
     </style>
     <div id="target" style="display:none"></div>
@@ -6131,11 +6094,11 @@ TEST_F(StyleEngineTest, InitialStyle_FromDisplayNone) {
 
   EXPECT_EQ(GetStyleEngine().StyleForElementCount() - before_count, 2u)
       << "The style recalc needs to do two passes because the element was "
-         "display:none and @initial styles are matching";
+         "display:none and @starting-style styles are matching";
   EXPECT_EQ(target->ComputedStyleRef().VisitedDependentColor(
                 GetCSSPropertyBackgroundColor()),
             green)
-      << "Make sure @initial do not apply for the second pass";
+      << "Make sure @starting-style do not apply for the second pass";
 }
 
 TEST_F(StyleEngineTest, InitialStyleCount_EnsureComputedStyle) {
@@ -6144,7 +6107,7 @@ TEST_F(StyleEngineTest, InitialStyleCount_EnsureComputedStyle) {
       #target {
         background-color: green;
         transition: background-color 100s step-end;
-        @initial { background-color: red; }
+        @starting-style { background-color: red; }
       }
     </style>
     <div id="target" style="display:none"></div>
@@ -6164,12 +6127,12 @@ TEST_F(StyleEngineTest, InitialStyleCount_EnsureComputedStyle) {
   ASSERT_TRUE(none_style);
 
   EXPECT_EQ(GetStyleEngine().StyleForElementCount() - before_count, 1u)
-      << "No @initial pass for EnsureComputedStyle";
+      << "No @starting-style pass for EnsureComputedStyle";
 
   EXPECT_EQ(target->ComputedStyleRef().VisitedDependentColor(
                 GetCSSPropertyBackgroundColor()),
             green)
-      << "Transitions are not started and @initial does not apply in "
+      << "Transitions are not started and @starting-style does not apply in "
          "display:none";
 }
 

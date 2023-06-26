@@ -405,7 +405,7 @@ void CertProvisioningWorkerStatic::GenerateKeyForVa() {
   tpm_challenge_key_subtle_impl_ =
       attestation::TpmChallengeKeySubtleFactory::Create();
   tpm_challenge_key_subtle_impl_->StartPrepareKeyStep(
-      GetVaKeyType(cert_scope_),
+      GetVaFlowType(cert_scope_),
       /*will_register_key=*/true, ::attestation::KEY_TYPE_RSA,
       GetKeyName(cert_profile_.profile_id), profile_,
       base::BindOnce(&CertProvisioningWorkerStatic::OnGenerateKeyForVaDone,
@@ -606,7 +606,7 @@ void CertProvisioningWorkerStatic::SignCsr() {
                             base::TimeTicks::Now()));
     return;
   }
-  platform_keys_service_->SignRSAPKCS1Digest(
+  platform_keys_service_->SignRsaPkcs1(
       GetPlatformKeysTokenId(cert_scope_), StrToBytes(csr_), public_key_,
       hashing_algorithm_.value(),
       base::BindRepeating(&CertProvisioningWorkerStatic::OnSignCsrDone,
@@ -975,7 +975,7 @@ void CertProvisioningWorkerStatic::InitAfterDeserialization() {
 
   tpm_challenge_key_subtle_impl_ =
       attestation::TpmChallengeKeySubtleFactory::CreateForPreparedKey(
-          GetVaKeyType(cert_scope_),
+          GetVaFlowType(cert_scope_),
           /*will_register_key=*/true, ::attestation::KEY_TYPE_RSA,
           GetKeyName(cert_profile_.profile_id), BytesToStr(public_key_),
           profile_);

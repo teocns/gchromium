@@ -16,6 +16,7 @@ import org.chromium.chrome.browser.flags.BooleanCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.DoubleCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
+import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
 import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -71,7 +72,17 @@ public class TabUiFeatureUtilities {
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_STRIP_REDESIGN,
                     TAB_STRIP_REDESIGN_DISABLE_NTB_ANCHOR_PARAM, false);
 
+    // Field trial parameter for disabling button style for tab strip redesign. This includes
+    // disabling NTB anchor and button bg style.
+    private static final String TAB_STRIP_REDESIGN_DISABLE_BUTTON_STYLE_PARAM = "disable_btn_style";
+    public static final BooleanCachedFieldTrialParameter TAB_STRIP_REDESIGN_DISABLE_BUTTON_STYLE =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_STRIP_REDESIGN,
+                    TAB_STRIP_REDESIGN_DISABLE_BUTTON_STYLE_PARAM, false);
+
     private static boolean sTabSelectionEditorLongPressEntryEnabled;
+
+    public static final MutableFlagWithSafeDefault sThumbnailPlaceholder =
+            new MutableFlagWithSafeDefault(ChromeFeatureList.THUMBNAIL_PLACEHOLDER, false);
 
     /**
      * Set whether the longpress entry for TabSelectionEditor is enabled. Currently only in tests.
@@ -85,6 +96,13 @@ public class TabUiFeatureUtilities {
      */
     public static boolean isTabStripNtbAnchorDisabled() {
         return TAB_STRIP_REDESIGN_DISABLE_NTB_ANCHOR.getValue();
+    }
+
+    /**
+     * @return Whether button style for tab strip redesign is disabled.
+     */
+    public static boolean isTabStripButtonStyleDisabled() {
+        return TAB_STRIP_REDESIGN_DISABLE_BUTTON_STYLE.getValue();
     }
 
     /**

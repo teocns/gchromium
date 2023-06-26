@@ -32,7 +32,7 @@
 #include "services/tracing/public/cpp/perfetto/macros.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_window_handle_event_info.pbzero.h"
 #include "third_party/skia/include/core/SkPath.h"
-#include "ui/accessibility/accessibility_switches.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
 #include "ui/accessibility/platform/ax_system_caret_win.h"
@@ -512,8 +512,9 @@ void HWNDMessageHandler::Init(HWND parent,
   // then ask element B for its fragment root, without having sent WM_GETOBJECT
   // to element B's window.
   // So we create the fragment root now to ensure it's ready if asked for.
-  if (::switches::IsExperimentalAccessibilityPlatformUIAEnabled())
+  if (::features::IsUiaProviderEnabled()) {
     ax_fragment_root_ = std::make_unique<ui::AXFragmentRootWin>(hwnd(), this);
+  }
 
   // Disable pen flicks (http://crbug.com/506977)
   base::win::DisableFlicks(hwnd());
@@ -1011,7 +1012,12 @@ void HWNDMessageHandler::FlashFrame(bool flash) {
 }
 
 void HWNDMessageHandler::ClearNativeFocus() {
-  ::SetFocus(hwnd());
+  // Headless windows don't get native focus, so just pretend we grabbed one.
+  if (IsHeadless()) {
+    delegate_->HandleNativeFocus(0);
+  } else {
+    ::SetFocus(hwnd());
+  }
 }
 
 void HWNDMessageHandler::SetCapture() {
@@ -1507,7 +1513,12 @@ void HWNDMessageHandler::SetInitialFocus() {
   if (!(GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_TRANSPARENT) &&
       !(GetWindowLong(hwnd(), GWL_EXSTYLE) & WS_EX_NOACTIVATE)) {
     // The window does not get keyboard messages unless we focus it.
-    SetFocus(hwnd());
+    // Headless windows don't get native focus, so just pretend we grabbed one.
+    if (IsHeadless()) {
+      delegate_->HandleNativeFocus(0);
+    } else {
+      ::SetFocus(hwnd());
+    }
   }
 }
 
@@ -1725,20 +1736,6 @@ void HWNDMessageHandler::ResetWindowRegion(bool force, bool redraw) {
     // SetWindowRgn takes ownership of the HRGN.
     SetWindowRgn(hwnd(), new_region.release(), redraw);
   }
-}
-
-void HWNDMessageHandler::UpdateDwmNcRenderingPolicy() {
-  if (IsFullscreen())
-    return;
-
-  DWMNCRENDERINGPOLICY policy =
-      custom_window_region_.is_valid() ||
-              delegate_->GetFrameMode() == FrameMode::CUSTOM_DRAWN
-          ? DWMNCRP_DISABLED
-          : DWMNCRP_ENABLED;
-
-  DwmSetWindowAttribute(hwnd(), DWMWA_NCRENDERING_POLICY, &policy,
-                        sizeof(DWMNCRENDERINGPOLICY));
 }
 
 LRESULT HWNDMessageHandler::DefWindowProcWithRedrawLock(UINT message,
@@ -2066,8 +2063,7 @@ LRESULT HWNDMessageHandler::OnGetObject(UINT message,
       delegate_->GetNativeViewAccessible()) {
     // Expose either the UIA or the MSAA implementation, but not both, depending
     // on the state of the feature flag.
-    if (is_uia_request &&
-        ::switches::IsExperimentalAccessibilityPlatformUIAEnabled()) {
+    if (is_uia_request && ::features::IsUiaProviderEnabled()) {
       // Retrieve UIA object for the root view.
       Microsoft::WRL::ComPtr<IRawElementProviderSimple> root;
       ax_fragment_root_->GetNativeViewAccessible()->QueryInterface(
@@ -2153,7 +2149,11 @@ LRESULT HWNDMessageHandler::OnKeyEvent(UINT message,
 }
 
 void HWNDMessageHandler::OnKillFocus(HWND focused_window) {
-  delegate_->HandleNativeBlur(focused_window);
+  // Headless windows are believed to always have focus, so avoid
+  // reporting native focus changes.
+  if (!IsHeadless()) {
+    delegate_->HandleNativeBlur(focused_window);
+  }
   SetMsgHandled(FALSE);
 }
 
@@ -2741,7 +2741,11 @@ LRESULT HWNDMessageHandler::OnSetCursor(UINT message,
 }
 
 void HWNDMessageHandler::OnSetFocus(HWND last_focused_window) {
-  delegate_->HandleNativeFocus(last_focused_window);
+  // Headless windows are believed to always have focus, so avoid
+  // reporting native focus changes.
+  if (!IsHeadless()) {
+    delegate_->HandleNativeFocus(last_focused_window);
+  }
   SetMsgHandled(FALSE);
 }
 
@@ -3580,34 +3584,10 @@ bool HWNDMessageHandler::IsSynthesizedMouseMessage(unsigned int message,
 }
 
 void HWNDMessageHandler::PerformDwmTransition() {
+  CHECK(IsFrameSystemDrawn());
+
   dwm_transition_desired_ = false;
-
-  UpdateDwmNcRenderingPolicy();
-  // Don't redraw the window here, because we need to hide and show the window
-  // which will also trigger a redraw.
-  ResetWindowRegion(true, false);
-  // The non-client view needs to update too.
   delegate_->HandleFrameChanged();
-  // This calls DwmExtendFrameIntoClientArea which must be called when DWM
-  // composition state changes.
-  UpdateDwmFrame();
-
-  if (IsVisible() && IsFrameSystemDrawn()) {
-    // For some reason, we need to hide the window after we change from a custom
-    // frame to a native frame.  If we don't, the client area will be filled
-    // with black.  This seems to be related to an interaction between DWM and
-    // SetWindowRgn, but the details aren't clear. Additionally, we need to
-    // specify SWP_NOZORDER here, otherwise if you have multiple chrome windows
-    // open they will re-appear with a non-deterministic Z-order.
-    // Note: caused http://crbug.com/895855, where a laptop lid close+reopen
-    // puts window in the background but acts like a foreground window. Fixed by
-    // not calling this unless DWM composition actually changes. Finally, since
-    // we don't want windows stealing focus if they're not already active, we
-    // set SWP_NOACTIVATE.
-    UINT flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE;
-    SetWindowPos(hwnd(), nullptr, 0, 0, 0, 0, flags | SWP_HIDEWINDOW);
-    SetWindowPos(hwnd(), nullptr, 0, 0, 0, 0, flags | SWP_SHOWWINDOW);
-  }
 }
 
 void HWNDMessageHandler::UpdateDwmFrame() {

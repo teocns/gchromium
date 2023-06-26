@@ -139,12 +139,6 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
                          const ui::AXNodeID& parent_node_id,
                          const ui::AXTreeUpdate& tree_update);
 
-  // Increment the number of remaining OCR requests by one. This function will
-  // be called whenever PdfAccessibilityTreeBuilder is about to send an OCR
-  // request to the Screen AI library. The number of remaining OCR requests
-  // will decrement by one in `OnOcrDataReceived()`.
-  void IncrementNumberOfRemainingOcrRequests();
-
   const ui::AXTree& tree_for_testing() const { return tree_; }
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
@@ -268,10 +262,12 @@ class PdfAccessibilityTree : public content::PluginAXTreeSource,
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   // The status node contains a notification message for the user.
+  std::unique_ptr<ui::AXNodeData> ocr_status_node_wrapper_;
   std::unique_ptr<ui::AXNodeData> ocr_status_node_;
   std::unique_ptr<PdfOcrService> ocr_service_;
-  // The number of remaining OCR service requests.
-  uint32_t num_remaining_ocr_requests_ = 0;
+
+  // Flag indicating if any text was converted from images by OCR.
+  bool was_text_converted_from_image_ = false;
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
   base::WeakPtrFactory<PdfAccessibilityTree> weak_ptr_factory_{this};

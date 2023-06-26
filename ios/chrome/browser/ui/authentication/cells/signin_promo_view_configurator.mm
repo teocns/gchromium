@@ -85,7 +85,6 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
       [self configureStandardSigninPromoView:signinPromoView];
       break;
     }
-    case SigninPromoViewStyleCompactTitled:
     case SigninPromoViewStyleCompactHorizontal:
     case SigninPromoViewStyleCompactVertical: {
       [self configureCompactPromoView:signinPromoView withStyle:promoViewStyle];
@@ -113,15 +112,18 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
     case SigninPromoViewModeNoAccounts: {
       DCHECK(!name);
       DCHECK(!self.userImage);
-      NSString* signInString = GetNSString(IDS_IOS_SYNC_PROMO_TURN_ON_SYNC);
-      [signinPromoView.primaryButton setTitle:signInString
-                                     forState:UIControlStateNormal];
+      NSString* signInString =
+          self.primaryButtonTitleNoAccountsModeOverride
+              ? self.primaryButtonTitleNoAccountsModeOverride
+              : GetNSString(IDS_IOS_SYNC_PROMO_TURN_ON_SYNC);
+      [signinPromoView configurePrimaryButtonWithTitle:signInString];
       break;
     }
     case SigninPromoViewModeSigninWithAccount: {
-      [signinPromoView.primaryButton
-          setTitle:GetNSStringF(IDS_IOS_SIGNIN_PROMO_CONTINUE_AS, name16)
-          forState:UIControlStateNormal];
+      [signinPromoView
+          configurePrimaryButtonWithTitle:GetNSStringF(
+                                              IDS_IOS_SIGNIN_PROMO_CONTINUE_AS,
+                                              name16)];
       [signinPromoView.secondaryButton
           setTitle:GetNSString(IDS_IOS_SIGNIN_PROMO_CHANGE_ACCOUNT)
           forState:UIControlStateNormal];
@@ -129,9 +131,9 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
       break;
     }
     case SigninPromoViewModeSyncWithPrimaryAccount: {
-      [signinPromoView.primaryButton
-          setTitle:GetNSString(IDS_IOS_SYNC_PROMO_TURN_ON_SYNC)
-          forState:UIControlStateNormal];
+      [signinPromoView
+          configurePrimaryButtonWithTitle:GetNSString(
+                                              IDS_IOS_SYNC_PROMO_TURN_ON_SYNC)];
       [self assignProfileImageToSigninPromoView:signinPromoView];
       break;
     }
@@ -147,20 +149,11 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
       // This function shouldn't be used for the standard promo.
       CHECK(NO);
       break;
-    case SigninPromoViewStyleCompactTitled:
-      signinPromoView.titleLabel.hidden = NO;
-      [signinPromoView.primaryButton
-          setTitle:GetNSString(IDS_IOS_NTP_FEED_SIGNIN_PROMO_CONTINUE)
-          forState:UIControlStateNormal];
-      [signinPromoView
-          setNonProfileImage:[UIImage imageNamed:kPromoViewImageName]];
-      break;
-    case SigninPromoViewStyleCompactHorizontal:
     case SigninPromoViewStyleCompactVertical:
+    case SigninPromoViewStyleCompactHorizontal:
       signinPromoView.titleLabel.hidden = YES;
-      [signinPromoView.primaryButton
-          setTitle:GetNSString(IDS_IOS_NTP_FEED_SIGNIN_PROMO_CONTINUE)
-          forState:UIControlStateNormal];
+      [signinPromoView configurePrimaryButtonWithTitle:
+                           GetNSString(IDS_IOS_NTP_FEED_SIGNIN_PROMO_CONTINUE)];
       switch (self.signinPromoViewMode) {
         case SigninPromoViewModeNoAccounts:
           DCHECK(!self.userImage);

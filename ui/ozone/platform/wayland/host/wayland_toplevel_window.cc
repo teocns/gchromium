@@ -20,6 +20,7 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/ozone/platform/wayland/host/dump_util.h"
 #include "ui/ozone/platform/wayland/host/gtk_shell1.h"
 #include "ui/ozone/platform/wayland/host/gtk_surface1.h"
 #include "ui/ozone/platform/wayland/host/shell_object_factory.h"
@@ -69,8 +70,7 @@ WaylandToplevelWindow::WaylandToplevelWindow(PlatformWindowDelegate* delegate,
                                              WaylandConnection* connection)
     : WaylandWindow(delegate, connection),
       state_(PlatformWindowState::kNormal),
-      screen_coordinates_enabled_(
-          features::IsWaylandScreenCoordinatesEnabled()) {
+      screen_coordinates_enabled_(kDefaultScreenCoordinateEnabled) {
   // Set a class property key, which allows |this| to be used for interactive
   // events, e.g. move or resize.
   SetWmMoveResizeHandler(this, AsWmMoveResizeHandler());
@@ -90,11 +90,15 @@ bool WaylandToplevelWindow::CreateShellToplevel() {
     LOG(ERROR) << "Failed to create a ShellToplevel.";
     return false;
   }
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   screen_coordinates_enabled_ &= shell_toplevel_->SupportsScreenCoordinates();
   screen_coordinates_enabled_ &= !use_native_frame_;
 
-  if (screen_coordinates_enabled_)
+  if (screen_coordinates_enabled_) {
     shell_toplevel_->EnableScreenCoordinates();
+  }
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   shell_toplevel_->SetAppId(window_unique_id_);
@@ -319,6 +323,13 @@ ZOrderLevel WaylandToplevelWindow::GetZOrderLevel() const {
   return z_order_;
 }
 
+void WaylandToplevelWindow::SetShape(std::unique_ptr<ShapeRects> native_shape,
+                                     const gfx::Transform& transform) {
+  if (shell_toplevel_) {
+    shell_toplevel_->SetShape(std::move(native_shape));
+  }
+}
+
 std::string WaylandToplevelWindow::GetWindowUniqueId() const {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   return window_unique_id_;
@@ -402,6 +413,29 @@ void WaylandToplevelWindow::UpdateWindowScale(bool update_bounds) {
   SizeConstraintsChanged();
 }
 
+void WaylandToplevelWindow::OnRotateFocus(uint32_t serial,
+                                          uint32_t direction,
+                                          bool restart) {
+  if (!is_active_ || !HasKeyboardFocus()) {
+    VLOG(1) << "requested focus rotation when surface is not active or does "
+               "not have keyboard focus {active, focus}: {"
+            << is_active_ << ", " << HasKeyboardFocus()
+            << "}. This might be caused by delay in exo. Ignoring request.";
+    shell_toplevel()->AckRotateFocus(
+        serial, ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_NOT_HANDLED);
+    return;
+  }
+
+  auto platform_direction =
+      direction == ZAURA_TOPLEVEL_ROTATE_DIRECTION_FORWARD
+          ? PlatformWindowDelegate::RotateDirection::kForward
+          : PlatformWindowDelegate::RotateDirection::kBackward;
+  bool rotated = delegate()->OnRotateFocus(platform_direction, restart);
+  shell_toplevel()->AckRotateFocus(
+      serial, rotated ? ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_HANDLED
+                      : ZAURA_TOPLEVEL_ROTATE_HANDLED_STATE_NOT_HANDLED);
+}
+
 void WaylandToplevelWindow::LockFrame() {
   OnFrameLockingChanged(true);
 }
@@ -452,6 +486,10 @@ void WaylandToplevelWindow::TooltipShown(const char* text,
 
 void WaylandToplevelWindow::TooltipHidden() {
   delegate()->OnTooltipHiddenOnServer();
+}
+
+WaylandToplevelWindow* WaylandToplevelWindow::AsWaylandToplevelWindow() {
+  return this;
 }
 
 void WaylandToplevelWindow::HandleToplevelConfigure(
@@ -643,8 +681,19 @@ void WaylandToplevelWindow::SetWindowGeometry(gfx::Size size_dip) {
   gfx::Rect geometry_dip(size_dip);
 
   const auto insets = GetDecorationInsetsInDIP();
-  if (state_ == PlatformWindowState::kNormal && !insets.IsEmpty())
+  if (state_ == PlatformWindowState::kNormal && !insets.IsEmpty()) {
     geometry_dip.Inset(insets);
+
+    // Shrinking the bounds by the decoration insets might result in empty
+    // bounds. For the reasons already explained in WaylandWindow::Initialize(),
+    // we mustn't request an empty window geometry.
+    if (geometry_dip.width() == 0) {
+      geometry_dip.set_width(1);
+    }
+    if (geometry_dip.height() == 0) {
+      geometry_dip.set_height(1);
+    }
+  }
   shell_toplevel_->SetWindowGeometry(geometry_dip);
 }
 
@@ -743,6 +792,12 @@ void WaylandToplevelWindow::SetImmersiveFullscreenStatus(bool status) {
     // TODO(https://crbug.com/1113900): Implement AuraShell support for
     // non-browser windows and replace this if-else clause by a DCHECK.
     NOTIMPLEMENTED_LOG_ONCE();
+  }
+}
+
+void WaylandToplevelWindow::SetTopInset(int height) {
+  if (shell_toplevel_) {
+    shell_toplevel_->SetTopInset(height);
   }
 }
 #endif
@@ -888,6 +943,21 @@ void WaylandToplevelWindow::SetSystemModal(bool modal) {
   system_modal_ = modal;
   if (shell_toplevel_)
     shell_toplevel_->SetSystemModal(modal);
+}
+
+void WaylandToplevelWindow::DumpState(std::ostream& out) const {
+  WaylandWindow::DumpState(out);
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  out << ", is_immersive_fullscreen=" << ToBoolString(is_immersive_fullscreen_);
+#endif
+  out << ", title=" << window_title_
+      << ", is_active=" << ToBoolString(is_active_)
+      << ", restore_session_id=" << restore_session_id_;
+  if (restore_window_id_source_) {
+    out << ", source=" << *restore_window_id_source_;
+  }
+  out << ", persistable=" << ToBoolString(persistable_)
+      << ", system_modal=" << ToBoolString(system_modal_);
 }
 
 void WaylandToplevelWindow::UpdateSystemModal() {

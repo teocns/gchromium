@@ -14,6 +14,7 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
+#include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/tabs/alert_indicator_button.h"
@@ -49,7 +50,7 @@ class TabTest : public ChromeViewsTestBase {
     // Prevent the fake clock from starting at 0 which is the null time.
     fake_clock_.Advance(base::Milliseconds(2000));
   }
-  ~TabTest() override {}
+  ~TabTest() override = default;
 
   static TabIcon* GetTabIcon(Tab* tab) { return tab->icon_; }
 
@@ -276,8 +277,8 @@ class AlertIndicatorButtonTest : public ChromeViewsTestBase {
   }
 
   // Owned by TabStrip.
-  raw_ptr<FakeBaseTabStripController> controller_ = nullptr;
-  raw_ptr<TabStrip> tab_strip_ = nullptr;
+  raw_ptr<FakeBaseTabStripController, DanglingUntriaged> controller_ = nullptr;
+  raw_ptr<TabStrip, DanglingUntriaged> tab_strip_ = nullptr;
   std::unique_ptr<views::Widget> widget_;
 };
 
@@ -323,7 +324,8 @@ TEST_F(TabTest, LayoutAndVisibilityOfElements) {
   SkBitmap bitmap;
   bitmap.allocN32Pixels(16, 16);
   TabRendererData data;
-  data.favicon = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
+  data.favicon =
+      ui::ImageModel::FromImageSkia(gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
 
   // Perform layout over all possible combinations, checking for correct
   // results.
@@ -353,8 +355,8 @@ TEST_F(TabTest, LayoutAndVisibilityOfElements) {
         } else {
           width = tab->tab_style()->GetStandardWidth();
           min_width = is_active_tab
-                          ? tab->tab_style_views()->GetMinimumActiveWidth()
-                          : tab->tab_style_views()->GetMinimumInactiveWidth();
+                          ? TabStyle::Get()->GetMinimumActiveWidth()
+                          : TabStyle::Get()->GetMinimumInactiveWidth();
         }
         const int height = GetLayoutConstant(TAB_HEIGHT);
         for (; width >= min_width; --width) {
@@ -636,14 +638,23 @@ TEST_F(TabTest, TitleTextHasSufficientContrast) {
   Tab* tab = widget->SetContentsView(std::make_unique<Tab>(controller.get()));
 
   for (const auto& colors : color_schemes) {
-    controller->SetTabColors(colors.bg_active, colors.fg_active,
-                             colors.bg_inactive, colors.fg_inactive);
+    tab->GetColorProvider()->SetColorForTesting(
+        kColorTabBackgroundActiveFrameActive, colors.bg_active);
+    tab->GetColorProvider()->SetColorForTesting(
+        kColorTabBackgroundActiveFrameInactive, colors.bg_active);
+    tab->GetColorProvider()->SetColorForTesting(
+        kColorTabBackgroundInactiveFrameActive, colors.bg_inactive);
+    tab->GetColorProvider()->SetColorForTesting(
+        kColorTabBackgroundInactiveFrameInactive, colors.bg_inactive);
+    controller->SetTabColors(colors.fg_active, colors.fg_inactive);
     for (TabActive active : {TabActive::kInactive, TabActive::kActive}) {
       controller->set_active_tab(active == TabActive::kActive ? tab : nullptr);
       tab->UpdateForegroundColors();
       const SkColor fg_color = tab->title_->GetEnabledColor();
-      const SkColor bg_color = controller->GetTabBackgroundColor(
-          active, BrowserFrameActiveState::kUseCurrent);
+      const SkColor bg_color = TabStyle::Get()->GetTabBackgroundColor(
+          active == TabActive::kActive ? TabStyle::TabSelectionState::kActive
+                                       : TabStyle::TabSelectionState::kInactive,
+          tab->GetWidget()->ShouldPaintAsActive(), *tab->GetColorProvider());
       const float contrast = color_utils::GetContrastRatio(fg_color, bg_color);
       EXPECT_GE(contrast, color_utils::kMinimumReadableContrastRatio);
     }

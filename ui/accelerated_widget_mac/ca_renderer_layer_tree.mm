@@ -12,7 +12,6 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_functions.h"
@@ -29,6 +28,17 @@
 
 namespace ui {
 
+// Transitioning between AVSampleBufferDisplayLayer and CALayer with IOSurface
+// contents can cause flickering.
+// https://crbug.com/1441762
+BASE_FEATURE(kFullscreenLowPowerBackdropMac,
+             "FullscreenLowPowerBackdropMac",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kCALayerTreeOptimization,
+             "CALayerTreeOptimization",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 namespace {
 
 class ComparatorSkColor4f {
@@ -37,10 +47,6 @@ class ComparatorSkColor4f {
     return std::tie(a.fR, a.fG, a.fB, a.fA) < std::tie(b.fR, b.fG, b.fB, b.fA);
   }
 };
-
-BASE_FEATURE(kCALayerTreeOptimization,
-             "CALayerTreeOptimization",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 void RecordIOSurfaceHistograms(
     int changed_io_surfaces_during_commit,
@@ -231,7 +237,8 @@ class CARendererLayerTree::SolidColorContents
  private:
   friend class base::RefCounted<SolidColorContents>;
 
-  SolidColorContents(SkColor4f color, IOSurfaceRef io_surface);
+  SolidColorContents(SkColor4f color,
+                     base::ScopedCFTypeRef<IOSurfaceRef> io_surface);
   ~SolidColorContents();
 
   using Map = std::map<SkColor4f,
@@ -265,7 +272,8 @@ CARendererLayerTree::SolidColorContents::Get(SkColor4f color) {
     color_space = gfx::ColorSpace::CreateDisplayP3D65();
   }
 
-  IOSurfaceRef io_surface = CreateIOSurface(size, buffer_format);
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface =
+      CreateIOSurface(size, buffer_format);
   if (!io_surface)
     return nullptr;
   IOSurfaceSetColorSpace(io_surface, color_space);
@@ -296,8 +304,8 @@ IOSurfaceRef CARendererLayerTree::SolidColorContents::GetIOSurfaceRef() const {
 
 CARendererLayerTree::SolidColorContents::SolidColorContents(
     SkColor4f color,
-    IOSurfaceRef io_surface)
-    : color_(color), io_surface_(io_surface) {
+    base::ScopedCFTypeRef<IOSurfaceRef> io_surface)
+    : color_(color), io_surface_(std::move(io_surface)) {
   auto* map = GetMap();
   DCHECK(map->find(color_) == map->end());
   map->insert(std::make_pair(color_, this));
@@ -606,6 +614,10 @@ void CARendererLayerTree::TransformLayer::CALayerFallBack() {
 }
 
 bool CARendererLayerTree::RootLayer::WantsFullscreenLowPowerBackdrop() const {
+  if (!base::FeatureList::IsEnabled(kFullscreenLowPowerBackdropMac)) {
+    return false;
+  }
+
   bool found_video_layer = false;
   for (auto& clip_layer : clip_and_sorting_layers_) {
     for (auto& transform_layer : clip_layer.transform_layers_) {
@@ -819,9 +831,9 @@ CARendererLayerTree::ContentLayer::ContentLayer(
   if (type_ == CALayerType::kVideo) {
     // If the layer's aspect ratio could be made to match the video's aspect
     // ratio by expanding either dimension by a fractional pixel, do so. The
-    // mismatch probably resulted from rounding the dimensions to integers.
-    // This works around a macOS 10.13 bug which breaks detached fullscreen
-    // playback of slightly distorted videos (https://crbug.com/792632).
+    // mismatch probably resulted from rounding the dimensions to integers. This
+    // works around a macOS bug which breaks detached fullscreen playback of
+    // slightly distorted videos (https://crbug.com/792632).
     const auto av_rect(cv_pixel_buffer
                            ? gfx::RectF(CVPixelBufferGetWidth(cv_pixel_buffer),
                                         CVPixelBufferGetHeight(cv_pixel_buffer))

@@ -4,7 +4,7 @@
 
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
 
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
@@ -40,7 +40,8 @@
 // static
 ChromeBrowsingDataRemoverDelegateFactory*
 ChromeBrowsingDataRemoverDelegateFactory::GetInstance() {
-  return base::Singleton<ChromeBrowsingDataRemoverDelegateFactory>::get();
+  static base::NoDestructor<ChromeBrowsingDataRemoverDelegateFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -54,7 +55,12 @@ ChromeBrowsingDataRemoverDelegateFactory::
     ChromeBrowsingDataRemoverDelegateFactory()
     : ProfileKeyedServiceFactory(
           "BrowsingDataRemover",
-          ProfileSelections::BuildForRegularAndIncognito()) {
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOwnInstance)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOwnInstance)
+              .Build()) {
   DependsOn(autofill::PersonalDataManagerFactory::GetInstance());
 #if BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(ENABLE_FEED_V2)
@@ -85,7 +91,7 @@ ChromeBrowsingDataRemoverDelegateFactory::
 }
 
 ChromeBrowsingDataRemoverDelegateFactory::
-    ~ChromeBrowsingDataRemoverDelegateFactory() {}
+    ~ChromeBrowsingDataRemoverDelegateFactory() = default;
 
 KeyedService* ChromeBrowsingDataRemoverDelegateFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {

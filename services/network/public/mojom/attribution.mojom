@@ -18,11 +18,8 @@ struct TriggerVerification {
 // See https://github.com/WICG/attribution-reporting-api/blob/main/app_to_web.md.
 enum AttributionSupport {
   kWeb,
-  [EnableIf=is_android]
   kWebAndOs,
-  [EnableIf=is_android]
   kOs,
-  [EnableIf=is_android]
   kNone,
 };
 
@@ -43,4 +40,10 @@ enum AttributionReportingEligibility {
   kTrigger,
   // The header contains `event-source, trigger`.
   kEventSourceOrTrigger,
+};
+
+// Wraps whether Attribution Reporting API related runtime features are
+// enabled.
+struct AttributionReportingRuntimeFeatures {
+  bool cross_app_web_enabled;
 };

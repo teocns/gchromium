@@ -31,6 +31,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
+#include "ui/accessibility/platform/sequence_affine_com_object_root_win.h"
 #include "ui/accessibility/platform/test_ax_node_wrapper.h"
 #include "ui/base/win/atl_module.h"
 
@@ -6151,12 +6152,13 @@ TEST_F(AXPlatformNodeWinTest, GetPatternProviderSupportedPatterns) {
   constexpr AXNodeID tree_item_unchecked_id = 24;
   constexpr AXNodeID tree_item_id = 25;
   constexpr AXNodeID tab_id = 26;
+  constexpr AXNodeID toggle_button_with_popup_id = 27;
 
   AXTreeUpdate update;
   update.tree_data.tree_id = ui::AXTreeID::CreateNewAXTreeID();
   update.has_tree_data = true;
   update.root_id = root_id;
-  update.nodes.resize(26);
+  update.nodes.resize(27);
   update.nodes[0].id = root_id;
   update.nodes[0].role = ax::mojom::Role::kRootWebArea;
   update.nodes[0].child_ids = {text_field_with_combo_box_id,
@@ -6173,7 +6175,8 @@ TEST_F(AXPlatformNodeWinTest, GetPatternProviderSupportedPatterns) {
                                tree_item_checked_id,
                                tree_item_unchecked_id,
                                tree_item_id,
-                               tab_id};
+                               tab_id,
+                               toggle_button_with_popup_id};
   update.nodes[1].id = text_field_with_combo_box_id;
   update.nodes[1].role = ax::mojom::Role::kTextFieldWithComboBox;
   update.nodes[1].AddState(ax::mojom::State::kEditable);
@@ -6250,6 +6253,11 @@ TEST_F(AXPlatformNodeWinTest, GetPatternProviderSupportedPatterns) {
   update.nodes[24].role = ax::mojom::Role::kTreeItem;
   update.nodes[25].id = tab_id;
   update.nodes[25].role = ax::mojom::Role::kTab;
+  update.nodes[26].id = toggle_button_with_popup_id;
+  update.nodes[26].role = ax::mojom::Role::kToggleButton;
+  update.nodes[26].AddIntAttribute(
+      ax::mojom::IntAttribute::kHasPopup,
+      static_cast<int32_t>(ax::mojom::HasPopup::kTrue));
 
   Init(update);
 
@@ -6330,11 +6338,11 @@ TEST_F(AXPlatformNodeWinTest, GetPatternProviderSupportedPatterns) {
   EXPECT_EQ(PatternSet({UIA_ScrollItemPatternId, UIA_InvokePatternId,
                         UIA_TextChildPatternId}),
             GetSupportedPatternsFromNodeId(button_without_value));
-  EXPECT_EQ(PatternSet({UIA_ScrollItemPatternId, UIA_TogglePatternId,
-                        UIA_ExpandCollapsePatternId, UIA_TextChildPatternId}),
+  EXPECT_EQ(PatternSet({UIA_ScrollItemPatternId, UIA_ExpandCollapsePatternId,
+                        UIA_TextChildPatternId}),
             GetSupportedPatternsFromNodeId(tree_item_checked_id));
-  EXPECT_EQ(PatternSet({UIA_ScrollItemPatternId, UIA_TogglePatternId,
-                        UIA_ExpandCollapsePatternId, UIA_TextChildPatternId}),
+  EXPECT_EQ(PatternSet({UIA_ScrollItemPatternId, UIA_ExpandCollapsePatternId,
+                        UIA_TextChildPatternId}),
             GetSupportedPatternsFromNodeId(tree_item_checked_id));
   EXPECT_EQ(PatternSet({UIA_ScrollItemPatternId, UIA_ExpandCollapsePatternId,
                         UIA_TextChildPatternId}),
@@ -6342,6 +6350,9 @@ TEST_F(AXPlatformNodeWinTest, GetPatternProviderSupportedPatterns) {
   EXPECT_EQ(PatternSet({UIA_SelectionItemPatternId, UIA_ScrollItemPatternId,
                         UIA_TextChildPatternId}),
             GetSupportedPatternsFromNodeId(tab_id));
+  EXPECT_EQ(PatternSet({UIA_ScrollItemPatternId, UIA_ExpandCollapsePatternId,
+                        UIA_TextChildPatternId}),
+            GetSupportedPatternsFromNodeId(toggle_button_with_popup_id));
 }
 
 TEST_F(AXPlatformNodeWinTest, GetPatternProviderExpandCollapsePattern) {
@@ -7710,7 +7721,7 @@ TEST_F(AXPlatformNodeWinTest, SanitizeStringAttributeForIA2) {
 //
 
 class TestIChromeAccessibleDelegate
-    : public CComObjectRootEx<CComMultiThreadModel>,
+    : public SequenceAffineComObjectRoot,
       public IDispatchImpl<IChromeAccessibleDelegate> {
   using IDispatchImpl::Invoke;
 

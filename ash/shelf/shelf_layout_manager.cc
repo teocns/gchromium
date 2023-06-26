@@ -939,6 +939,13 @@ bool ShelfLayoutManager::ProcessGestureEvent(
     return false;
   }
 
+  // In certain edge cases, SHOW_PRESS gesture may come just as scroll starts.
+  // Ignore it, as it's not actoinable, and should not cancel drag and drop.
+  // See b/277846859 for more details.
+  if (event_in_screen.type() == ui::ET_GESTURE_SHOW_PRESS) {
+    return true;
+  }
+
   if (event_in_screen.type() == ui::ET_GESTURE_SCROLL_UPDATE) {
     UpdateGestureDrag(event_in_screen);
     return true;
@@ -1011,8 +1018,7 @@ void ShelfLayoutManager::ProcessScrollOffset(int offset,
     return;
   }
 
-  if (app_list_features::IsQuickActionShowBubbleLauncherEnabled() &&
-      !IsLocationInBubbleLauncherShowBounds(event.root_location())) {
+  if (!IsLocationInBubbleLauncherShowBounds(event.root_location())) {
     return;
   }
 
@@ -1037,9 +1043,6 @@ void ShelfLayoutManager::ProcessScrollEventFromShelf(ui::ScrollEvent* event) {
 }
 
 bool ShelfLayoutManager::IsBubbleLauncherShowOnGestureScrollAvailable() {
-  if (!app_list_features::IsQuickActionShowBubbleLauncherEnabled())
-    return false;
-
   if (!state_.IsShelfVisible())
     return false;
 
@@ -1456,8 +1459,11 @@ void ShelfLayoutManager::OnDeskSwitchAnimationLaunching() {
 void ShelfLayoutManager::OnDeskSwitchAnimationFinished() {
   --suspend_visibility_update_;
   DCHECK_GE(suspend_visibility_update_, 0);
-  if (!suspend_visibility_update_)
-    UpdateVisibilityState(/*force_layout=*/false);
+  if (!suspend_visibility_update_) {
+    // Force layout so the desk button will show after a desk switch from
+    // overview.
+    UpdateVisibilityState(/*force_layout=*/true);
+  }
 }
 
 float ShelfLayoutManager::GetOpacity() const {
@@ -1996,11 +2002,29 @@ void ShelfLayoutManager::UpdateWorkAreaInsetsAndNotifyObservers(
 }
 
 void ShelfLayoutManager::HandleScrollableShelfContainerBoundsChange() const {
-  if (ash::features::IsDeskButtonEnabled()) {
+  if (DeskButtonWidget* desk_button = shelf_widget_->desk_button_widget()) {
     // The desk button widget bounds depend on the scrollable shelf container
     // bounds.
-    shelf_widget_->desk_button_widget()->CalculateTargetBounds();
-    shelf_widget_->desk_button_widget()->UpdateLayout(true);
+    ScrollableShelfView* scrollable_shelf_view =
+        shelf_->hotseat_widget()->scrollable_shelf_view();
+
+    // In horizontal shelf we shrink the button if it causes shelf overflow when
+    // expanded. We calculate this hypothetically before we recalculate target
+    // bounds because we want to avoid a cycle where the button shrinks, the
+    // shelf is no longer overflown, the button expands because the shelf is no
+    // longer overflown, the shelf is overflown again, etc.
+    if (shelf_->IsHorizontalAlignment()) {
+      desk_button->SetExpanded(
+          !scrollable_shelf_view->CalculateShelfOverflowForAvailableLength(
+              scrollable_shelf_view->GetLocalBounds().width() +
+              desk_button->GetPreferredLength() -
+              desk_button->GetPreferredExpandedWidth()));
+    } else {
+      // `SetExpanded` already calculates and sets the target bounds, so we only
+      // have to do this when the shelf is vertical.
+      desk_button->CalculateTargetBounds();
+      desk_button->UpdateLayout(true);
+    }
   }
 }
 
@@ -3116,6 +3140,14 @@ void ShelfLayoutManager::UpdateVisibilityStateForTrayBubbleChange(
 void ShelfLayoutManager::HandleShelfAlignmentChange() {
   base::AutoReset<bool> immediate_transition(&state_change_animation_disabled_,
                                              true);
+
+  // The desk button widget needs to know that the alignment is changing early
+  // so that it can calculate the correct preferred length.
+  if (features::IsDeskButtonEnabled()) {
+    shelf_->desk_button_widget()->PrepareForAlignmentChange(
+        shelf_->alignment());
+  }
+
   UpdateVisibilityState(/*force_layout=*/true);
 }
 

@@ -32,18 +32,25 @@ android_resources("java_resources") {
 }
 
 android_library("java") {
-  sources = [
-    "java/src/org/chromium/chrome/browser/vr/AndroidVSyncHelper.java",
-    "java/src/org/chromium/chrome/browser/vr/OnDispatchTouchEventCallback.java",
-    "java/src/org/chromium/chrome/browser/vr/VrCoreInstallUtils.java",
-    "java/src/org/chromium/chrome/browser/vr/VrCoreVersionChecker.java",
-    "java/src/org/chromium/chrome/browser/vr/VrDaydreamApi.java",
-    "java/src/org/chromium/chrome/browser/vr/VrDelegateImpl.java",
-    "java/src/org/chromium/chrome/browser/vr/VrDelegateProviderImpl.java",
-    "java/src/org/chromium/chrome/browser/vr/VrShell.java",
-    "java/src/org/chromium/chrome/browser/vr/VrShellDelegate.java",
-    "java/src/org/chromium/chrome/browser/vr/VrWindowAndroid.java",
-  ]
+  srcjar_deps = [ ":split_jni_headers" ]
+  sources = []
+  if (enable_gvr_services) {
+    sources += [
+      "java/src/org/chromium/chrome/browser/vr/AndroidVSyncHelper.java",
+      "java/src/org/chromium/chrome/browser/vr/OnDispatchTouchEventCallback.java",
+      "java/src/org/chromium/chrome/browser/vr/VrCoreInstallUtils.java",
+      "java/src/org/chromium/chrome/browser/vr/VrCoreVersionChecker.java",
+      "java/src/org/chromium/chrome/browser/vr/VrDaydreamApi.java",
+      "java/src/org/chromium/chrome/browser/vr/VrDelegateImpl.java",
+      "java/src/org/chromium/chrome/browser/vr/VrDelegateProviderImpl.java",
+      "java/src/org/chromium/chrome/browser/vr/VrShell.java",
+      "java/src/org/chromium/chrome/browser/vr/VrShellDelegate.java",
+      "java/src/org/chromium/chrome/browser/vr/VrWindowAndroid.java",
+    ]
+  } else {
+    sources +=
+        [ "dummy/java/src/org/chromium/chrome/browser/vr/VrShellDelegate.java" ]
+  }
 
   deps = [
     ":java_resources",
@@ -85,7 +92,6 @@ android_library("java") {
     deps += [ "//device/vr:java" ]
   }
 
-  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   resources_package = "org.chromium.chrome.vr"
 }
 
@@ -97,8 +103,4 @@ generate_jni("split_jni_headers") {
     "java/src/org/chromium/chrome/browser/vr/VrShellDelegate.java",
   ]
   split_name = "vr"
-}
-
-generate_jni("base_jni_headers") {
-  sources = [ "java/src/org/chromium/chrome/browser/vr/VrModuleProvider.java" ]
 }

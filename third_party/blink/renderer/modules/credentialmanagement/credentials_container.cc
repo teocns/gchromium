@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
@@ -1129,8 +1130,7 @@ ScriptPromise CredentialsContainer::get(ScriptState* script_state,
     required_origin_type = RequiredOriginType::
         kSecureAndPermittedByWebOTPAssertionPermissionsPolicy;
   } else if (options->hasIdentity() && options->identity()->hasProviders() &&
-             options->identity()->providers().size() == 1 &&
-             RuntimeEnabledFeatures::FedCmIframeSupportEnabled(context)) {
+             options->identity()->providers().size() == 1) {
     required_origin_type =
         RequiredOriginType::kSecureAndPermittedByFederatedPermissionsPolicy;
   }
@@ -1338,11 +1338,6 @@ ScriptPromise CredentialsContainer::get(ScriptState* script_state,
     // TODO(https://crbug.com/1441075): Ideally the logic should be handled in
     // CredentialManager via Get. However currently it's only for password
     // management and we should refactor the logic to make it generic.
-    if (!RuntimeEnabledFeatures::FedCmEnabled(context)) {
-      resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kNotSupportedError, "FedCM is not supported"));
-      return promise;
-    }
 
     ContentSecurityPolicy* policy =
         resolver->GetExecutionContext()
@@ -1368,10 +1363,19 @@ ScriptPromise CredentialsContainer::get(ScriptState* script_state,
       UseCounter::Count(resolver->GetExecutionContext(),
                         WebFeature::kFedCmIframe);
     }
-
+    // Track when websites use FedCM with the IDP sign-in status opt-in
+    if (RuntimeEnabledFeatures::FedCmIdpSigninStatusEnabled(
+            resolver->GetExecutionContext())) {
+      UseCounter::Count(resolver->GetExecutionContext(),
+                        WebFeature::kFedCmIdpSigninStatusApi);
+    }
     int provider_index = 0;
     Vector<mojom::blink::IdentityProviderPtr> identity_provider_ptrs;
     for (const auto& provider : options->identity()->providers()) {
+      if (provider->hasLoginHint()) {
+        UseCounter::Count(resolver->GetExecutionContext(),
+                          WebFeature::kFedCmLoginHint);
+      }
       if (RuntimeEnabledFeatures::WebIdentityMDocsEnabled() &&
           !RuntimeEnabledFeatures::FedCmMultipleIdentityProvidersEnabled()) {
         // TODO(https://crbug.com/1416939): make sure the MDocs API
@@ -1423,11 +1427,13 @@ ScriptPromise CredentialsContainer::get(ScriptState* script_state,
     }
 
     mojom::blink::RpContext rp_context = mojom::blink::RpContext::kSignIn;
-    if (RuntimeEnabledFeatures::FedCmRpContextEnabled() &&
-        options->identity()->hasContext()) {
+    if (options->identity()->hasContext()) {
+      UseCounter::Count(resolver->GetExecutionContext(),
+                        WebFeature::kFedCmRpContext);
       rp_context = mojo::ConvertTo<mojom::blink::RpContext>(
           options->identity()->context());
     }
+    base::UmaHistogramEnumeration("Blink.FedCm.RpContext", rp_context);
 
     CredentialMediationRequirement mediation_requirement;
     if (options->mediation() == "conditional") {

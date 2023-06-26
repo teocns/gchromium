@@ -27,8 +27,8 @@ class ExtensionsToolbarButton : public ToolbarButton,
   enum class State {
     // All extensions have blocked access to the current site.
     kAllExtensionsBlocked,
-    // TODO(crbug.com/1239772): Add new icon when 1+ extensions have access to
-    // the current site.
+    // At least one extension has access to the current site.
+    kAnyExtensionHasAccess,
     kDefault,
   };
 
@@ -47,14 +47,15 @@ class ExtensionsToolbarButton : public ToolbarButton,
 
   void UpdateState(State state);
 
-  // Accessors used by tests:
-  State GetStateForTesting() { return state_; }
+  State state() { return state_; }
 
   // ToolbarButton:
   gfx::Size CalculatePreferredSize() const override;
   gfx::Size GetMinimumSize() const override;
+  std::u16string GetTooltipText(const gfx::Point& p) const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void UpdateIcon() override;
+  bool ShouldShowInkdropAfterIphInteraction() override;
 
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;

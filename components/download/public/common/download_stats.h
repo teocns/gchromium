@@ -144,36 +144,6 @@ enum DownloadCountTypes {
   DOWNLOAD_COUNT_TYPES_LAST_ENTRY
 };
 
-// Enum for in-progress download DB, used in histogram
-// "Download.InProgressDB.Counts".
-enum InProgressDBCountTypes : uint8_t {
-  // Count of initialization attempts.
-  kInitializationCount = 0,
-
-  // Count of initialization attempts that succeeded.
-  kInitializationSucceededCount = 1,
-
-  // Count of initialization attempts that failed.
-  kInitializationFailedCount = 2,
-
-  // Count of load attempts that succeeded.
-  kLoadSucceededCount = 3,
-
-  // Count of load attempts that failed.
-  kLoadFailedCount = 4,
-
-  // Count of in-progress cache migration attempts.
-  kCacheMigrationCount = 5,
-
-  // Count of in-progress cache migration attempts that succeeded.
-  kCacheMigrationSucceededCount = 6,
-
-  // Count of in-progress cache migration attempts that failed.
-  kCacheMigrationFailedCount = 7,
-
-  kMaxValue = kCacheMigrationFailedCount
-};
-
 // Events for user scheduled downloads. Used in histograms, don't reuse or
 // remove items. Keep in sync with DownloadLaterEvent in enums.xml.
 enum class DownloadLaterEvent {
@@ -350,9 +320,6 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadHttpResponseCode(
     int response_code,
     bool is_background_mode);
 
-COMPONENTS_DOWNLOAD_EXPORT void RecordInProgressDBCount(
-    InProgressDBCountTypes type);
-
 // Records the interrupt reason that causes download to restart.
 COMPONENTS_DOWNLOAD_EXPORT void RecordResumptionStrongValidators(
     DownloadInterruptReason reason);
@@ -360,11 +327,7 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordResumptionStrongValidators(
 COMPONENTS_DOWNLOAD_EXPORT void RecordParallelRequestCreationFailure(
     DownloadInterruptReason reason);
 
-// Record download later events.
-COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadLaterEvent(
-    DownloadLaterEvent event);
-
-// Record download later events.
+// Records the input stream read error type.
 COMPONENTS_DOWNLOAD_EXPORT void RecordInputStreamReadError(
     MojoResult mojo_result);
 

@@ -9,8 +9,8 @@
 
 #include "base/functional/bind.h"
 #include "components/sync/base/passphrase_enums.h"
-#include "components/sync/driver/sync_client.h"
-#include "components/sync/driver/sync_service_impl.h"
+#include "components/sync/service/sync_client.h"
+#include "components/sync/service/sync_service_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 ServerPassphraseTypeChecker::ServerPassphraseTypeChecker(
@@ -75,6 +75,18 @@ bool PassphraseAcceptedChecker::IsExitConditionSatisfied(std::ostream* os) {
       break;
   }
   return !service()->GetUserSettings()->IsPassphraseRequired();
+}
+
+PassphraseTypeChecker::PassphraseTypeChecker(
+    syncer::SyncServiceImpl* service,
+    syncer::PassphraseType expected_passphrase_type)
+    : SingleClientStatusChangeChecker(service),
+      expected_passphrase_type_(expected_passphrase_type) {}
+
+bool PassphraseTypeChecker::IsExitConditionSatisfied(std::ostream* os) {
+  *os << "Checking expected passhrase type";
+  return service()->GetUserSettings()->GetPassphraseType() ==
+         expected_passphrase_type_;
 }
 
 TrustedVaultKeyRequiredStateChecker::TrustedVaultKeyRequiredStateChecker(

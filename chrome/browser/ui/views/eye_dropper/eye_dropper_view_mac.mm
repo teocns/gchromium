@@ -14,12 +14,16 @@
 #include "skia/ext/skia_utils_mac.h"
 #include "ui/base/ui_base_features.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 EyeDropperViewMac::EyeDropperViewMac(content::EyeDropperListener* listener)
     : listener_(listener), weak_ptr_factory_(this) {
   if (!listener_)
     return;
   if (@available(macOS 10.15, *)) {
-    color_sampler_.reset([[NSColorSampler alloc] init]);
+    color_sampler_ = [[NSColorSampler alloc] init];
     // Used to ensure that EyeDropperViewMac is still alive when the handler is
     // called.
     base::WeakPtr<EyeDropperViewMac> weak_this = weak_ptr_factory_.GetWeakPtr();
@@ -38,8 +42,8 @@ EyeDropperViewMac::EyeDropperViewMac(content::EyeDropperListener* listener)
 EyeDropperViewMac::~EyeDropperViewMac() = default;
 
 struct EyeDropperView::PreEventDispatchHandler::ObjCStorage {
-  id click_event_tap_ = nil;
-  id notification_observer_ = nil;
+  id __strong click_event_tap = nil;
+  id __strong notification_observer = nil;
 };
 
 EyeDropperView::PreEventDispatchHandler::PreEventDispatchHandler(
@@ -47,7 +51,7 @@ EyeDropperView::PreEventDispatchHandler::PreEventDispatchHandler(
     gfx::NativeView parent)
     : view_(view), objc_storage_(std::make_unique<ObjCStorage>()) {
   // Ensure that this handler is called before color popup handler.
-  objc_storage_->click_event_tap_ = [NSEvent
+  objc_storage_->click_event_tap = [NSEvent
       addLocalMonitorForEventsMatchingMask:NSEventMaskAny
                                    handler:^NSEvent*(NSEvent* event) {
                                      NSEventType eventType = [event type];
@@ -69,28 +73,25 @@ EyeDropperView::PreEventDispatchHandler::PreEventDispatchHandler(
 
   // Needed because the local event monitor doesn't see the click on the
   // menubar.
-  NSNotificationCenter* notificationCenter =
-      [NSNotificationCenter defaultCenter];
-  objc_storage_->notification_observer_ =
-      [notificationCenter addObserverForName:NSMenuDidBeginTrackingNotification
-                                      object:[NSApp mainMenu]
-                                       queue:[NSOperationQueue mainQueue]
-                                  usingBlock:^(NSNotification* note) {
-                                    view_->OnColorSelected();
-                                  }];
+  objc_storage_->notification_observer = [NSNotificationCenter.defaultCenter
+      addObserverForName:NSMenuDidBeginTrackingNotification
+                  object:NSApp.mainMenu
+                   queue:NSOperationQueue.mainQueue
+              usingBlock:^(NSNotification* note) {
+                view_->OnColorSelected();
+              }];
 }
 
 EyeDropperView::PreEventDispatchHandler::~PreEventDispatchHandler() {
-  if (objc_storage_->click_event_tap_) {
-    [NSEvent removeMonitor:objc_storage_->click_event_tap_];
-    objc_storage_->click_event_tap_ = nil;
+  if (objc_storage_->click_event_tap) {
+    [NSEvent removeMonitor:objc_storage_->click_event_tap];
+    objc_storage_->click_event_tap = nil;
   }
 
-  if (objc_storage_->notification_observer_) {
-    NSNotificationCenter* notificationCenter =
-        [NSNotificationCenter defaultCenter];
-    [notificationCenter removeObserver:objc_storage_->notification_observer_];
-    objc_storage_->notification_observer_ = nil;
+  if (objc_storage_->notification_observer) {
+    [NSNotificationCenter.defaultCenter
+        removeObserver:objc_storage_->notification_observer];
+    objc_storage_->notification_observer = nil;
   }
 }
 
@@ -103,7 +104,7 @@ void EyeDropperView::MoveViewToFront() {
   // Moves the window to the front of the screen list within the popup level
   // since the eye dropper can be opened from the color picker.
   NSWindow* window = GetWidget()->GetNativeWindow().GetNativeNSWindow();
-  [window setLevel:NSPopUpMenuWindowLevel];
+  window.level = NSPopUpMenuWindowLevel;
   [window makeKeyAndOrderFront:nil];
 }
 

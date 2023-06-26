@@ -29,6 +29,7 @@
 #include "ash/system/video_conference/video_conference_tray.h"
 #include "ash/system/video_conference/video_conference_tray_controller.h"
 #include "ash/touch/touch_devices_controller.h"
+#include "ash/virtual_trackpad/virtual_trackpad_view.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/float/float_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -227,15 +228,8 @@ void HandleTriggerHUDDisplay() {
   hud_display::HUDDisplayView::Toggle();
 }
 
-void HandleTuckFloatedWindow(AcceleratorAction action) {
-  auto* floated_window = window_util::GetFloatedWindowForActiveDesk();
-  DCHECK(floated_window);
-
-  const float velocity_x =
-      action == DEBUG_TUCK_FLOATED_WINDOW_LEFT ? -500.f : 500.f;
-  Shell::Get()->float_controller()->OnFlingOrSwipeForTablet(floated_window,
-                                                            velocity_x,
-                                                            /*velocity_y=*/0.f);
+void HandleToggleVirtualTrackpad() {
+  VirtualTrackpadView::Toggle();
 }
 
 // Toast debug shortcut constants.
@@ -278,10 +272,6 @@ void PrintUIHierarchies() {
   HandlePrintViewHierarchy();
 }
 
-bool CanTuckFloatedWindow() {
-  return !!window_util::GetFloatedWindowForActiveDesk();
-}
-
 bool DebugAcceleratorsEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kAshDebugShortcuts);
@@ -297,62 +287,61 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
     return;
 
   switch (action) {
-    case DEBUG_KEYBOARD_BACKLIGHT_TOGGLE:
+    case AcceleratorAction::kDebugKeyboardBacklightToggle:
       HandleToggleKeyboardBacklight();
       break;
-    case DEBUG_MICROPHONE_MUTE_TOGGLE:
+    case AcceleratorAction::kDebugMicrophoneMuteToggle:
       HandleToggleMicrophoneMute();
       break;
-    case DEBUG_PRINT_LAYER_HIERARCHY:
+    case AcceleratorAction::kDebugPrintLayerHierarchy:
       HandlePrintLayerHierarchy();
       break;
-    case DEBUG_PRINT_VIEW_HIERARCHY:
+    case AcceleratorAction::kDebugPrintViewHierarchy:
       HandlePrintViewHierarchy();
       break;
-    case DEBUG_PRINT_WINDOW_HIERARCHY:
+    case AcceleratorAction::kDebugPrintWindowHierarchy:
       HandlePrintWindowHierarchy();
       break;
-    case DEBUG_SHOW_TOAST:
+    case AcceleratorAction::kDebugShowToast:
       HandleShowToast();
       break;
-    case DEBUG_SYSTEM_UI_STYLE_VIEWER:
+    case AcceleratorAction::kDebugSystemUiStyleViewer:
       SystemUIComponentsStyleViewerView::CreateAndShowWidget();
       break;
-    case DEBUG_TOGGLE_DARK_MODE:
+    case AcceleratorAction::kDebugToggleDarkMode:
       HandleToggleDarkMode();
       break;
-    case DEBUG_TOGGLE_DYNAMIC_COLOR:
+    case AcceleratorAction::kDebugToggleDynamicColor:
       HandleToggleDynamicColor();
       break;
-    case DEBUG_TOGGLE_GLANCEABLES:
+    case AcceleratorAction::kDebugToggleGlanceables:
       HandleToggleGlanceables();
       break;
-    case DEBUG_TOGGLE_POWER_BUTTON_MENU:
+    case AcceleratorAction::kDebugTogglePowerButtonMenu:
       HandleTogglePowerButtonMenu();
       break;
-    case DEBUG_TOGGLE_TOUCH_PAD:
+    case AcceleratorAction::kDebugToggleTouchPad:
       HandleToggleTouchpad();
       break;
-    case DEBUG_TOGGLE_TOUCH_SCREEN:
+    case AcceleratorAction::kDebugToggleTouchScreen:
       HandleToggleTouchscreen();
       break;
-    case DEBUG_TOGGLE_TABLET_MODE:
+    case AcceleratorAction::kDebugToggleTabletMode:
       HandleToggleTabletMode();
       break;
-    case DEBUG_TOGGLE_WALLPAPER_MODE:
+    case AcceleratorAction::kDebugToggleWallpaperMode:
       HandleToggleWallpaperMode();
       break;
-    case DEBUG_TRIGGER_CRASH:
+    case AcceleratorAction::kDebugTriggerCrash:
       HandleTriggerCrash();
       break;
-    case DEBUG_TOGGLE_HUD_DISPLAY:
+    case AcceleratorAction::kDebugToggleHudDisplay:
       HandleTriggerHUDDisplay();
       break;
-    case DEBUG_TUCK_FLOATED_WINDOW_LEFT:
-    case DEBUG_TUCK_FLOATED_WINDOW_RIGHT:
-      HandleTuckFloatedWindow(action);
+    case AcceleratorAction::kDebugToggleVirtualTrackpad:
+      HandleToggleVirtualTrackpad();
       break;
-    case DEBUG_TOGGLE_VIDEO_CONFERENCE_CAMERA_TRAY_ICON:
+    case AcceleratorAction::kDebugToggleVideoConferenceCameraTrayIcon:
       HandleToggleVideoConferenceCameraTrayIcon();
       break;
     default:

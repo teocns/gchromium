@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ui/views/user_education/browser_user_education_service.h"
 
+#include <algorithm>
+#include <iterator>
 #include <vector>
 
+#include "base/functional/bind.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -19,10 +22,15 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/performance_controls/performance_controls_metrics.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
+#include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/user_education/user_education_service_factory.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
+#include "chrome/browser/ui/views/web_apps/pwa_confirmation_bubble_view.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
+#include "chrome/browser/ui/webui/password_manager/password_manager_ui.h"
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_ui.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -66,12 +74,13 @@
 namespace {
 
 const char kTabGroupTutorialMetricPrefix[] = "TabGroup";
-const char kTabGroupWithGroupTutorialMetricPrefix[] = "TabGroupWithGroup";
 const char kSidePanelReadingListTutorialMetricPrefix[] = "SidePanelReadingList";
 const char kCustomizeChromeTutorialMetricPrefix[] = "CustomizeChromeSidePanel";
 const char kSideSearchTutorialMetricPrefix[] = "SideSearch";
+const char kPasswordManagerTutorialMetricPrefix[] = "PasswordManager";
 constexpr char kTabGroupHeaderElementName[] = "TabGroupHeader";
 constexpr char kReadingListItemElementName[] = "ReadingListItem";
+constexpr char kChromeThemeBackElementName[] = "ChromeThemeBackElement";
 
 class BrowserHelpBubbleDelegate : public user_education::HelpBubbleDelegate {
  public:
@@ -171,16 +180,33 @@ class FloatingWebUIHelpBubbleFactoryBrowser
 
 DEFINE_FRAMEWORK_SPECIFIC_METADATA(FloatingWebUIHelpBubbleFactoryBrowser)
 
+class IfView : public user_education::TutorialDescription::If {
+ public:
+  template <typename V>
+  IfView(user_education::TutorialDescription::ElementSpecifier element,
+         base::RepeatingCallback<bool(const V*)> if_condition)
+      : If(element,
+           base::BindRepeating(
+               [](base::RepeatingCallback<bool(const V*)> if_condition,
+                  const ui::TrackedElement* el) {
+                 return if_condition.Run(views::AsViewClass<V>(
+                     el->AsA<views::TrackedElementViews>()->view()));
+               },
+               std::move(if_condition))) {}
+};
+
+bool HasTabGroups(const BrowserView* browser_view) {
+  return !browser_view->browser()
+              ->tab_strip_model()
+              ->group_model()
+              ->ListTabGroups()
+              .empty();
+}
+
 }  // namespace
 
-const char kSidePanelCustomizeChromeTutorialId[] =
-    "Side Panel Customize Chrome Tutorial";
-const char kTabGroupTutorialId[] = "Tab Group Tutorial";
-const char kTabGroupWithExistingGroupTutorialId[] =
-    "Tab Group With Existing Group Tutorial";
 const char kSidePanelReadingListTutorialId[] =
     "Side Panel Reading List Tutorial";
-
 const char kSideSearchTutorialId[] = "Side Search Tutorial";
 
 user_education::HelpBubbleDelegate* GetHelpBubbleDelegate() {
@@ -304,6 +330,14 @@ void MaybeRegisterChromeFeaturePromos(
           .SetCustomActionIsDefault(true)
           .SetCustomActionDismissText(IDS_PROMO_SNOOZE_BUTTON)));
 
+  // kIPHExtensionsMenuFeature:
+  registry.RegisterFeature(std::move(
+      user_education::FeaturePromoSpecification::CreateForSnoozePromo(
+          feature_engagement::kIPHExtensionsMenuFeature,
+          kExtensionsMenuButtonElementId,
+          IDS_EXTENSIONS_MENU_IPH_ENTRY_POINT_BODY)
+          .SetBubbleTitleText(IDS_EXTENSIONS_MENU_IPH_ENTRY_POINT_TITLE)));
+
   // kIPHLiveCaptionFeature:
   registry.RegisterFeature(FeaturePromoSpecification::CreateForToastPromo(
       feature_engagement::kIPHLiveCaptionFeature, kMediaButtonElementId,
@@ -349,10 +383,26 @@ void MaybeRegisterChromeFeaturePromos(
       IDS_PASSWORD_MANAGER_IPH_MANAGEMENT_BUBBLE_DURING_SIGNIN_SCREENREADER,
       FeaturePromoSpecification::AcceleratorInfo()));
 
+  registry.RegisterFeature(std::move(
+      FeaturePromoSpecification::CreateForTutorialPromo(
+          feature_engagement::kIPHPasswordManagerShortcutFeature,
+          kPasswordsOmniboxKeyIconElementId,
+          IDS_PASSWORD_MANAGER_IPH_CREATE_SHORTCUT_BODY,
+          kPasswordManagerTutorialId)
+          .SetBubbleArrow(HelpBubbleArrow::kBottomRight)
+          .SetBubbleIcon(&vector_icons::kLightbulbOutlineIcon)
+          .SetBubbleTitleText(IDS_PASSWORD_MANAGER_IPH_CREATE_SHORTCUT_TITLE)));
+
   // kIPHPowerBookmarksSidePanelFeature:
   registry.RegisterFeature(FeaturePromoSpecification::CreateForSnoozePromo(
       feature_engagement::kIPHPowerBookmarksSidePanelFeature,
       kSidePanelButtonElementId, IDS_POWER_BOOKMARKS_SIDE_PANEL_PROMO));
+
+  // kIPHCompanionSidePanelFeature:
+  registry.RegisterFeature(FeaturePromoSpecification::CreateForSnoozePromo(
+      feature_engagement::kIPHCompanionSidePanelFeature,
+      kSidePanelCompanionToolbarButtonElementId,
+      IDS_SIDE_PANEL_COMPANION_PROMO));
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   // kIPHSwitchProfileFeature:
@@ -385,11 +435,10 @@ void MaybeRegisterChromeFeaturePromos(
       &feature_engagement::kIPHReadingListInSidePanelFeature,
       kSidePanelButtonElementId, IDS_READING_LIST_IN_SIDE_PANEL_PROMO));
 
-  // kIPHReopenTabFeature:
-  registry.RegisterFeature(FeaturePromoSpecification::CreateForToastPromo(
-      feature_engagement::kIPHReopenTabFeature, kAppMenuButtonElementId,
-      IDS_REOPEN_TAB_PROMO, IDS_REOPEN_TAB_PROMO_SCREENREADER,
-      FeaturePromoSpecification::AcceleratorInfo(IDC_RESTORE_TAB)));
+  // kIPHReadingModeSidePanelFeature:
+  registry.RegisterFeature(FeaturePromoSpecification::CreateForSnoozePromo(
+      feature_engagement::kIPHReadingModeSidePanelFeature,
+      kSidePanelButtonElementId, IDS_READING_MODE_SIDE_PANEL_PROMO));
 
   // kIPHSideSearchFeature:
   registry.RegisterFeature(std::move(
@@ -472,9 +521,11 @@ void MaybeRegisterChromeFeaturePromos(
 
   // kIPHDownloadToolbarButtonFeature:
   registry.RegisterFeature(
-      std::move(FeaturePromoSpecification::CreateForSnoozePromo(
+      std::move(FeaturePromoSpecification::CreateForToastPromo(
                     feature_engagement::kIPHDownloadToolbarButtonFeature,
-                    kDownloadToolbarButtonElementId, IDS_DOWNLOAD_BUBBLE_PROMO)
+                    kDownloadToolbarButtonElementId, IDS_DOWNLOAD_BUBBLE_PROMO,
+                    IDS_DOWNLOAD_BUBBLE_PROMO_SCREENREADER,
+                    FeaturePromoSpecification::AcceleratorInfo())
                     .SetBubbleArrow(HelpBubbleArrow::kTopRight)
                     .SetBubbleTitleText(IDS_DOWNLOAD_BUBBLE_PROMO_TITLE)));
 
@@ -497,341 +548,247 @@ void MaybeRegisterChromeTutorials(
     user_education::TutorialRegistry& tutorial_registry) {
   using user_education::HelpBubbleArrow;
   using user_education::TutorialDescription;
+  using BubbleStep = user_education::TutorialDescription::BubbleStep;
+  using EventStep = user_education::TutorialDescription::EventStep;
+  using HiddenStep = user_education::TutorialDescription::HiddenStep;
 
   // TODO (dfried): we might want to do something more sophisticated in the
   // future.
   if (tutorial_registry.IsTutorialRegistered(kTabGroupTutorialId))
     return;
 
-  {  // Tab Group Tutorials
-
-    // The Description for kTabGroupTutorialId.
-    TutorialDescription without_group_description;
-
-    // The Description for kTabGroupWithExistingGroupTutorialId.
-    TutorialDescription with_group_description;
-
-    // The initial step. This is the only step that differs between
-    // kTabGroupTutorialId and kTabGroupWithExistingGroupTutorialId.
-    TutorialDescription::Step create_tabgroup_step(
-        0, IDS_TUTORIAL_TAB_GROUP_ADD_TAB_TO_GROUP,
-        ui::InteractionSequence::StepType::kShown, kTabStripRegionElementId,
-        std::string(), HelpBubbleArrow::kNone);
-    without_group_description.steps.emplace_back(create_tabgroup_step);
-
-    TutorialDescription::Step create_tabgroup_with_existing_group_step(
-        0, IDS_TUTORIAL_ADD_TAB_TO_GROUP_WITH_EXISTING_GROUP_IN_TAB_STRIP,
-        ui::InteractionSequence::StepType::kShown, kTabStripRegionElementId,
-        std::string(), HelpBubbleArrow::kNone);
-    with_group_description.steps.emplace_back(
-        create_tabgroup_with_existing_group_step);
-
-    // Getting the new tab group (hidden step).
-    TutorialDescription::Step new_tab_group_step(
-        0, 0, ui::InteractionSequence::StepType::kShown,
-        kTabGroupHeaderElementId, std::string(), HelpBubbleArrow::kNone,
-        ui::CustomElementEventType(), /* must_remain_visible =*/true,
-        /* transition_only_on_event =*/true,
-        base::BindRepeating(
-            [](ui::InteractionSequence* sequence, ui::TrackedElement* element) {
-              sequence->NameElement(
-                  element, base::StringPiece(kTabGroupHeaderElementName));
-              return true;
-            }));
-    without_group_description.steps.emplace_back(new_tab_group_step);
-    with_group_description.steps.emplace_back(new_tab_group_step);
-
-    // The menu step.
-    TutorialDescription::Step bubble_menu_edit_step(
-        0, IDS_TUTORIAL_TAB_GROUP_EDIT_BUBBLE,
-        ui::InteractionSequence::StepType::kShown, kTabGroupEditorBubbleId,
-        std::string(), HelpBubbleArrow::kLeftCenter,
-        ui::CustomElementEventType(),
-        /*must_remain_visible =*/false);
-    without_group_description.steps.emplace_back(bubble_menu_edit_step);
-    with_group_description.steps.emplace_back(bubble_menu_edit_step);
-
-    TutorialDescription::Step bubble_menu_edit_ended_step(
-        0, 0, ui::InteractionSequence::StepType::kHidden,
-        kTabGroupEditorBubbleId, std::string(), HelpBubbleArrow::kNone,
-        ui::CustomElementEventType(),
-        /*must_remain_visible =*/false);
-    without_group_description.steps.emplace_back(bubble_menu_edit_ended_step);
-    with_group_description.steps.emplace_back(bubble_menu_edit_ended_step);
-
-    // Drag tab into the group.
-    TutorialDescription::Step drag_tab_into_group_step(
-        0, IDS_TUTORIAL_TAB_GROUP_DRAG_TAB,
-        ui::InteractionSequence::StepType::kShown, kTabStripRegionElementId,
-        std::string(), HelpBubbleArrow::kNone);
-    without_group_description.steps.emplace_back(drag_tab_into_group_step);
-    with_group_description.steps.emplace_back(drag_tab_into_group_step);
-
-    TutorialDescription::Step successfully_drag_tab_into_group_step(
-        0, 0, ui::InteractionSequence::StepType::kCustomEvent,
-        ui::ElementIdentifier(), std::string(), HelpBubbleArrow::kTopCenter,
-        kTabGroupedCustomEventId, /*must_remain_visible =*/true);
-    without_group_description.steps.emplace_back(
-        successfully_drag_tab_into_group_step);
-    with_group_description.steps.emplace_back(
-        successfully_drag_tab_into_group_step);
-
-    // Click to collapse the tab group.
-    TutorialDescription::Step collapse_step(
-        0, IDS_TUTORIAL_TAB_GROUP_COLLAPSE,
-        ui::InteractionSequence::StepType::kShown, ui::ElementIdentifier(),
-        kTabGroupHeaderElementName, HelpBubbleArrow::kTopCenter);
-    without_group_description.steps.emplace_back(collapse_step);
-    with_group_description.steps.emplace_back(collapse_step);
-
-    TutorialDescription::Step detect_collapse_step(
-        0, 0, ui::InteractionSequence::StepType::kActivated,
-        kTabGroupHeaderElementId, std::string(), HelpBubbleArrow::kNone);
-    without_group_description.steps.emplace_back(detect_collapse_step);
-    with_group_description.steps.emplace_back(detect_collapse_step);
-
-    // Completion of the tutorial.
-    TutorialDescription::Step success_step(
-        IDS_TUTORIAL_GENERIC_SUCCESS_TITLE,
-        IDS_TUTORIAL_TAB_GROUP_SUCCESS_DESCRIPTION,
-        ui::InteractionSequence::StepType::kShown, kTabStripRegionElementId,
-        std::string(), HelpBubbleArrow::kNone);
-    without_group_description.steps.emplace_back(success_step);
-    with_group_description.steps.emplace_back(success_step);
-
-    without_group_description.histograms =
-        user_education::MakeTutorialHistograms<kTabGroupTutorialMetricPrefix>(
-            without_group_description.steps.size());
-    tutorial_registry.AddTutorial(kTabGroupTutorialId,
-                                  std::move(without_group_description));
-
-    with_group_description.histograms = user_education::MakeTutorialHistograms<
-        kTabGroupWithGroupTutorialMetricPrefix>(
-        with_group_description.steps.size());
-    tutorial_registry.AddTutorial(kTabGroupWithExistingGroupTutorialId,
-                                  std::move(with_group_description));
+  {  // Menu item bubble test.
+    TutorialDescription test_description;
+    test_description.steps = {
+        BubbleStep(kAppMenuButtonElementId)
+            .SetBubbleBodyText(IDS_OK)
+            .SetBubbleArrow(HelpBubbleArrow::kTopRight),
+        BubbleStep(AppMenuModel::kDownloadsMenuItem)
+            .SetBubbleBodyText(IDS_OK)
+            .SetBubbleArrow(HelpBubbleArrow::kRightCenter),
+        HiddenStep::WaitForHidden(AppMenuModel::kDownloadsMenuItem),
+        BubbleStep(kTopContainerElementId).SetBubbleBodyText(IDS_OK)};
+    tutorial_registry.AddTutorial("Menu item bubble test tutorial",
+                                  std::move(test_description));
   }
 
-  {  // Side panel customize chrome
+  // Tab Group tutorial.
+  tutorial_registry.AddTutorial(
+      kTabGroupTutorialId,
+      TutorialDescription::Create<kTabGroupTutorialMetricPrefix>(
+          // The initial step. This is the only step that differs depending on
+          // whether there is an existing group.
+          IfView(kBrowserViewElementId, base::BindRepeating(&HasTabGroups))
+              .Then(
+                  BubbleStep(kTabStripRegionElementId)
+                      .SetBubbleBodyText(
+                          IDS_TUTORIAL_ADD_TAB_TO_GROUP_WITH_EXISTING_GROUP_IN_TAB_STRIP))
+              .Else(BubbleStep(kTabStripRegionElementId)
+                        .SetBubbleBodyText(
+                            IDS_TUTORIAL_TAB_GROUP_ADD_TAB_TO_GROUP)),
 
-    // The Description for kSidePanelCustomizeChromeTutorialId
-    TutorialDescription customize_chrome_description;
+          // Getting the new tab group (hidden step).
+          HiddenStep::WaitForShowEvent(kTabGroupHeaderElementId)
+              .NameElement(kTabGroupHeaderElementName),
 
-    // Bubble step - customize chrome button
-    TutorialDescription::Step open_customize_chrome_step(
-        0, IDS_TUTORIAL_CUSTOMIZE_CHROME_OPEN_SIDE_PANEL,
-        ui::InteractionSequence::StepType::kShown,
-        NewTabPageUI::kCustomizeChromeButtonElementId, std::string(),
-        HelpBubbleArrow::kBottomRight, ui::CustomElementEventType(),
-        absl::nullopt,
-        /* transition_only_on_event =*/false,
-        user_education::TutorialDescription::NameElementsCallback(),
-        TutorialDescription::ContextMode::kAny);
-    customize_chrome_description.steps.emplace_back(open_customize_chrome_step);
+          // The menu step.
+          BubbleStep(kTabGroupEditorBubbleId)
+              .SetBubbleBodyText(IDS_TUTORIAL_TAB_GROUP_EDIT_BUBBLE)
+              .SetBubbleArrow(HelpBubbleArrow::kLeftCenter)
+              .AbortIfVisibilityLost(false),
 
-    // Bubble step - change theme button
-    TutorialDescription::Step change_chrome_theme_step(
-        0, IDS_TUTORIAL_CUSTOMIZE_CHROME_CHANGE_THEME,
-        ui::InteractionSequence::StepType::kShown,
-        CustomizeChromeUI::kChangeChromeThemeButtonElementId, std::string(),
-        HelpBubbleArrow::kRightCenter, ui::CustomElementEventType(),
-        /* must_remain_visible =*/false,
-        /* transition_only_on_event =*/false,
-        user_education::TutorialDescription::NameElementsCallback(),
-        TutorialDescription::ContextMode::kAny);
-    customize_chrome_description.steps.emplace_back(change_chrome_theme_step);
+          HiddenStep::WaitForHidden(kTabGroupEditorBubbleId),
 
-    // Bubble step - select collection
-    TutorialDescription::Step select_collection_step(
-        0, IDS_TUTORIAL_CUSTOMIZE_CHROME_SELECT_COLLECTION,
-        ui::InteractionSequence::StepType::kShown,
-        CustomizeChromeUI::kChromeThemeCollectionElementId, std::string(),
-        HelpBubbleArrow::kRightCenter, ui::CustomElementEventType(),
-        /* must_remain_visible =*/false,
-        /* transition_only_on_event =*/false,
-        user_education::TutorialDescription::NameElementsCallback(),
-        TutorialDescription::ContextMode::kAny);
-    customize_chrome_description.steps.emplace_back(select_collection_step);
+          // Drag tab into the group.
+          BubbleStep(kTabStripRegionElementId)
+              .SetBubbleBodyText(IDS_TUTORIAL_TAB_GROUP_DRAG_TAB),
 
-    // Bubble step - select theme
-    TutorialDescription::Step select_theme_step(
-        0, IDS_TUTORIAL_CUSTOMIZE_CHROME_APPLY_THEME,
-        ui::InteractionSequence::StepType::kShown,
-        CustomizeChromeUI::kChromeThemeElementId, std::string(),
-        HelpBubbleArrow::kRightCenter, ui::CustomElementEventType(),
-        /* must_remain_visible =*/false,
-        /* transition_only_on_event =*/false,
-        user_education::TutorialDescription::NameElementsCallback(),
-        TutorialDescription::ContextMode::kAny);
-    customize_chrome_description.steps.emplace_back(select_theme_step);
+          EventStep(kTabGroupedCustomEventId).AbortIfVisibilityLost(true),
 
-    // Event step - select theme event
-    TutorialDescription::Step select_theme_event_step(
-        0, 0, ui::InteractionSequence::StepType::kCustomEvent,
-        kBrowserViewElementId, std::string(), HelpBubbleArrow::kNone,
-        kBrowserThemeChangedEventId,
-        /* must_remain_visible =*/false);
-    select_theme_event_step.must_be_visible = false;
-    customize_chrome_description.steps.emplace_back(select_theme_event_step);
+          // Click to collapse the tab group.
+          BubbleStep(kTabGroupHeaderElementName)
+              .SetBubbleBodyText(IDS_TUTORIAL_TAB_GROUP_COLLAPSE)
+              .SetBubbleArrow(HelpBubbleArrow::kTopCenter),
 
-    // Bubble step - back button
-    TutorialDescription::Step back_button_step(
-        0, IDS_TUTORIAL_CUSTOMIZE_CHROME_CLICK_BACK_ARROW,
-        ui::InteractionSequence::StepType::kShown,
-        CustomizeChromeUI::kChromeThemeBackElementId, std::string(),
-        HelpBubbleArrow::kRightCenter, ui::CustomElementEventType(),
-        /* must_remain_visible =*/false,
-        /* transition_only_on_event =*/false,
-        user_education::TutorialDescription::NameElementsCallback(),
-        TutorialDescription::ContextMode::kAny);
-    customize_chrome_description.steps.emplace_back(back_button_step);
+          HiddenStep::WaitForActivated(kTabGroupHeaderElementId),
 
-    // Completion of the tutorial.
-    TutorialDescription::Step success_step(
-        IDS_TUTORIAL_GENERIC_SUCCESS_TITLE,
-        IDS_TUTORIAL_CUSTOMIZE_CHROME_SUCCESS_BODY,
-        ui::InteractionSequence::StepType::kShown, kTopContainerElementId,
-        std::string(), HelpBubbleArrow::kNone, ui::CustomElementEventType(),
-        /* must_remain_visible =*/false,
-        /* transition_only_on_event =*/false,
-        user_education::TutorialDescription::NameElementsCallback(),
-        TutorialDescription::ContextMode::kAny);
-    customize_chrome_description.steps.emplace_back(success_step);
+          // Completion of the tutorial.
+          BubbleStep(kTabStripRegionElementId)
+              .SetBubbleTitleText(IDS_TUTORIAL_GENERIC_SUCCESS_TITLE)
+              .SetBubbleBodyText(IDS_TUTORIAL_TAB_GROUP_SUCCESS_DESCRIPTION)));
 
-    customize_chrome_description.histograms =
-        user_education::MakeTutorialHistograms<
-            kCustomizeChromeTutorialMetricPrefix>(
-            customize_chrome_description.steps.size());
+  // Side panel customize chrome
+  tutorial_registry.AddTutorial(
+      kSidePanelCustomizeChromeTutorialId,
+      TutorialDescription::Create<kCustomizeChromeTutorialMetricPrefix>(
+          // Bubble step - customize chrome button
+          BubbleStep(NewTabPageUI::kCustomizeChromeButtonElementId)
+              .SetBubbleBodyText(IDS_TUTORIAL_CUSTOMIZE_CHROME_OPEN_SIDE_PANEL)
+              .SetBubbleArrow(HelpBubbleArrow::kBottomRight)
+              .InAnyContext(),
 
-    tutorial_registry.AddTutorial(kSidePanelCustomizeChromeTutorialId,
-                                  std::move(customize_chrome_description));
-  }
+          // Bubble step - change theme button
+          BubbleStep(CustomizeChromeUI::kChangeChromeThemeButtonElementId)
+              .SetBubbleBodyText(IDS_TUTORIAL_CUSTOMIZE_CHROME_CHANGE_THEME)
+              .SetBubbleArrow(HelpBubbleArrow::kRightCenter)
+              .AbortIfVisibilityLost(false)
+              .InAnyContext(),
 
-  {  // Side panel reading list tutorial
+          // Bubble step - select collection
+          BubbleStep(CustomizeChromeUI::kChromeThemeCollectionElementId)
+              .SetBubbleBodyText(
+                  IDS_TUTORIAL_CUSTOMIZE_CHROME_SELECT_COLLECTION)
+              .SetBubbleArrow(HelpBubbleArrow::kRightCenter)
+              .AbortIfVisibilityLost(false)
+              .InAnyContext(),
 
-    // The Description for kSidePanelReadingListTutorialId
-    TutorialDescription side_panel_description;
+          // Bubble step - select theme
+          BubbleStep(CustomizeChromeUI::kChromeThemeElementId)
+              .SetBubbleBodyText(IDS_TUTORIAL_CUSTOMIZE_CHROME_APPLY_THEME)
+              .SetBubbleArrow(HelpBubbleArrow::kRightCenter)
+              .AbortIfVisibilityLost(false)
+              .InAnyContext(),
 
-    // Open side panel
-    TutorialDescription::Step open_side_panel_step(
-        0, IDS_TUTORIAL_SIDE_PANEL_READING_LIST_OPEN_SIDE_PANEL,
-        ui::InteractionSequence::StepType::kShown, kSidePanelButtonElementId,
-        std::string(), HelpBubbleArrow::kTopRight);
-    side_panel_description.steps.emplace_back(open_side_panel_step);
+          // Event step - select theme event
+          EventStep(kBrowserThemeChangedEventId, kBrowserViewElementId),
 
-    // Click "Add current tab"
-    TutorialDescription::Step add_current_tab_step(
-        0, IDS_TUTORIAL_SIDE_PANEL_READING_LIST_ADD_TAB,
-        ui::InteractionSequence::StepType::kShown,
-        kAddCurrentTabToReadingListElementId, std::string(),
-        HelpBubbleArrow::kRightTop, ui::CustomElementEventType(), absl::nullopt,
-        /* transition_only_on_event =*/false,
-        user_education::TutorialDescription::NameElementsCallback(),
-        TutorialDescription::ContextMode::kAny);
-    side_panel_description.steps.emplace_back(add_current_tab_step);
+          // Bubble step - back button
+          BubbleStep(CustomizeChromeUI::kChromeThemeBackElementId)
+              .SetBubbleBodyText(IDS_TUTORIAL_CUSTOMIZE_CHROME_CLICK_BACK_ARROW)
+              .SetBubbleArrow(HelpBubbleArrow::kRightCenter)
+              .NameElement(kChromeThemeBackElementName)
+              .AbortIfVisibilityLost(false)
+              .InAnyContext(),
 
-    // When shown, name the element
-    TutorialDescription::Step new_reading_list_item_step(
-        0, 0, ui::InteractionSequence::StepType::kShown,
-        kSidePanelReadingListUnreadElementId, std::string(),
-        HelpBubbleArrow::kNone, ui::CustomElementEventType(),
-        /* must_remain_visible =*/true,
-        /* transition_only_on_event =*/true,
-        base::BindRepeating(
-            [](ui::InteractionSequence* sequence, ui::TrackedElement* element) {
-              sequence->NameElement(
-                  element, base::StringPiece(kReadingListItemElementName));
-              return true;
-            }),
-        TutorialDescription::ContextMode::kAny);
-    side_panel_description.steps.emplace_back(new_reading_list_item_step);
+          // Hidden step - back button
+          HiddenStep::WaitForHidden(kChromeThemeBackElementName),
 
-    // Mark as read
-    TutorialDescription::Step mark_as_read_step(
-        0, IDS_TUTORIAL_SIDE_PANEL_READING_LIST_MARK_READ,
-        ui::InteractionSequence::StepType::kShown, ui::ElementIdentifier(),
-        kReadingListItemElementName, HelpBubbleArrow::kRightTop);
-    side_panel_description.steps.emplace_back(mark_as_read_step);
+          // Completion of the tutorial.
+          BubbleStep(kTopContainerElementId)
+              .SetBubbleTitleText(IDS_TUTORIAL_GENERIC_SUCCESS_TITLE)
+              .SetBubbleBodyText(IDS_TUTORIAL_CUSTOMIZE_CHROME_SUCCESS_BODY)
+              .InAnyContext()));
 
-    TutorialDescription::Step detect_mark_as_read_step(
-        0, 0, ui::InteractionSequence::StepType::kCustomEvent,
-        ui::ElementIdentifier(), kReadingListItemElementName,
-        HelpBubbleArrow::kNone, kSidePanelReadingMarkedAsReadEventId);
-    side_panel_description.steps.emplace_back(detect_mark_as_read_step);
+  // Side panel reading list tutorial
+  tutorial_registry.AddTutorial(
+      kSidePanelReadingListTutorialId,
+      TutorialDescription::Create<kSidePanelReadingListTutorialMetricPrefix>(
 
-    // Click drop down
-    TutorialDescription::Step click_dropdown_step(
-        0, IDS_TUTORIAL_SIDE_PANEL_READING_LIST_CLICK_DROPDOWN,
-        ui::InteractionSequence::StepType::kShown, kSidePanelComboboxElementId,
-        std::string(), HelpBubbleArrow::kTopLeft);
-    side_panel_description.steps.emplace_back(click_dropdown_step);
+          // Open side panel
+          BubbleStep(kSidePanelButtonElementId)
+              .SetBubbleBodyText(
+                  IDS_TUTORIAL_SIDE_PANEL_READING_LIST_OPEN_SIDE_PANEL)
+              .SetBubbleArrow(HelpBubbleArrow::kTopRight),
 
-    TutorialDescription::Step detect_click_dropdown_step(
-        0, 0, ui::InteractionSequence::StepType::kCustomEvent,
-        kSidePanelComboboxElementId, std::string(), HelpBubbleArrow::kNone,
-        kSidePanelComboboxChangedCustomEventId);
-    side_panel_description.steps.emplace_back(detect_click_dropdown_step);
+          // Click "Add current tab"
+          BubbleStep(kAddCurrentTabToReadingListElementId)
+              .SetBubbleBodyText(IDS_TUTORIAL_SIDE_PANEL_READING_LIST_ADD_TAB)
+              .SetBubbleArrow(HelpBubbleArrow::kRightTop)
+              .InAnyContext(),
 
-    // Completion of the tutorial.
-    TutorialDescription::Step success_step(
-        IDS_TUTORIAL_GENERIC_SUCCESS_TITLE,
-        IDS_TUTORIAL_SIDE_PANEL_READING_LIST_SUCCESS_BODY,
-        ui::InteractionSequence::StepType::kShown, kTabStripRegionElementId,
-        std::string(), HelpBubbleArrow::kNone);
-    side_panel_description.steps.emplace_back(success_step);
+          // When shown, name the element
+          HiddenStep::WaitForShowEvent(kSidePanelReadingListUnreadElementId)
+              .InAnyContext()
+              .NameElement(kReadingListItemElementName),
 
-    side_panel_description.histograms = user_education::MakeTutorialHistograms<
-        kSidePanelReadingListTutorialMetricPrefix>(
-        side_panel_description.steps.size());
-    tutorial_registry.AddTutorial(kSidePanelReadingListTutorialId,
-                                  std::move(side_panel_description));
-  }
+          // Mark as read
+          BubbleStep(kReadingListItemElementName)
+              .SetBubbleBodyText(IDS_TUTORIAL_SIDE_PANEL_READING_LIST_MARK_READ)
+              .SetBubbleArrow(HelpBubbleArrow::kRightTop),
 
-  {
-    TutorialDescription side_search_description;
+          EventStep(kSidePanelReadingMarkedAsReadEventId,
+                    kReadingListItemElementName),
 
-    // 1st bubble appears and prompts users to open side search
-    TutorialDescription::Step open_side_search_in_panel_step(
-        0, IDS_SIDE_SEARCH_TUTORIAL_OPEN_SIDE_PANEL,
-        ui::InteractionSequence::StepType::kShown, kSideSearchButtonElementId,
-        std::string(), HelpBubbleArrow::kBottomCenter);
-    side_search_description.steps.emplace_back(open_side_search_in_panel_step);
+          // Click drop down
+          BubbleStep(kSidePanelComboboxElementId)
+              .SetBubbleBodyText(
+                  IDS_TUTORIAL_SIDE_PANEL_READING_LIST_CLICK_DROPDOWN)
+              .SetBubbleArrow(HelpBubbleArrow::kTopLeft),
 
-    // 2nd bubble appears and prompts users to open a link
-    TutorialDescription::Step see_side_search(
-        0, IDS_SIDE_SEARCH_TUTORIAL_OPEN_A_LINK_TO_TAB,
-        ui::InteractionSequence::StepType::kShown, kSideSearchWebViewElementId,
-        std::string(), HelpBubbleArrow::kLeftCenter);
-    side_search_description.steps.emplace_back(see_side_search);
+          EventStep(kSidePanelComboboxChangedCustomEventId,
+                    kSidePanelComboboxElementId),
 
-    // Hidden step that detects a link is pressed
-    TutorialDescription::Step detect_side_search_result_clicked(
-        0, 0, ui::InteractionSequence::StepType::kCustomEvent,
-        kSideSearchWebViewElementId, std::string(), HelpBubbleArrow::kNone,
-        kSideSearchResultsClickedCustomEventId);
-    side_search_description.steps.emplace_back(
-        detect_side_search_result_clicked);
+          // Completion of the tutorial.
+          BubbleStep(kTabStripRegionElementId)
+              .SetBubbleTitleText(IDS_TUTORIAL_GENERIC_SUCCESS_TITLE)
+              .SetBubbleBodyText(
+                  IDS_TUTORIAL_SIDE_PANEL_READING_LIST_SUCCESS_BODY)));
 
-    // 3rd bubble appears and prompts users to press close button
-    TutorialDescription::Step click_close(
-        0, IDS_SIDE_SEARCH_TUTORIAL_CLOSE_SIDE_PANEL,
-        ui::InteractionSequence::StepType::kShown,
-        kSidePanelCloseButtonElementId, std::string(),
-        HelpBubbleArrow::kTopRight);
-    side_search_description.steps.emplace_back(click_close);
+  {  // Side Search tutorial
+    auto side_search_tutorial =
+        TutorialDescription::Create<kSideSearchTutorialMetricPrefix>(
+            // 1st bubble appears and prompts users to open side search
+            BubbleStep(kSideSearchButtonElementId)
+                .SetBubbleBodyText(IDS_SIDE_SEARCH_TUTORIAL_OPEN_SIDE_PANEL)
+                .SetBubbleArrow(HelpBubbleArrow::kBottomCenter),
 
-    // Completion of the tutorial.
-    TutorialDescription::Step success_step(
-        IDS_TUTORIAL_GENERIC_SUCCESS_TITLE, IDS_SIDE_SEARCH_PROMO,
-        ui::InteractionSequence::StepType::kShown, kSideSearchButtonElementId,
-        std::string(), HelpBubbleArrow::kTopRight);
-    side_search_description.steps.emplace_back(success_step);
+            // 2nd bubble appears and prompts users to open a link
+            BubbleStep(kSideSearchWebViewElementId)
+                .SetBubbleBodyText(IDS_SIDE_SEARCH_TUTORIAL_OPEN_A_LINK_TO_TAB)
+                .SetBubbleArrow(HelpBubbleArrow::kLeftCenter),
 
-    side_search_description.histograms =
-        user_education::MakeTutorialHistograms<kSideSearchTutorialMetricPrefix>(
-            side_search_description.steps.size());
-    side_search_description.can_be_restarted = true;
+            // Hidden step that detects a link is pressed
+            EventStep(kSideSearchResultsClickedCustomEventId,
+                      kSideSearchWebViewElementId),
+
+            // 3rd bubble appears and prompts users to press close button
+            BubbleStep(kSidePanelCloseButtonElementId)
+                .SetBubbleBodyText(IDS_SIDE_SEARCH_TUTORIAL_CLOSE_SIDE_PANEL)
+                .SetBubbleArrow(HelpBubbleArrow::kTopRight),
+
+            // Completion of the tutorial.
+            BubbleStep(kSideSearchButtonElementId)
+                .SetBubbleTitleText(IDS_TUTORIAL_GENERIC_SUCCESS_TITLE)
+                .SetBubbleBodyText(IDS_SIDE_SEARCH_PROMO)
+                .SetBubbleArrow(HelpBubbleArrow::kTopRight));
+    side_search_tutorial.can_be_restarted = true;
     tutorial_registry.AddTutorial(kSideSearchTutorialId,
-                                  std::move(side_search_description));
+                                  std::move(side_search_tutorial));
   }
+
+  // Password Manager tutorial
+  tutorial_registry.AddTutorial(
+      kPasswordManagerTutorialId,
+      TutorialDescription::Create<kPasswordManagerTutorialMetricPrefix>(
+          // Bubble step - Browser app menu
+          TutorialDescription::BubbleStep(kAppMenuButtonElementId)
+              .SetBubbleBodyText(IDS_TUTORIAL_PASSWORD_MANAGER_OPEN_APP_MENU)
+              .SetBubbleArrow(HelpBubbleArrow::kTopRight),
+
+          // Bubble step - "Password Manager" menu item
+          TutorialDescription::BubbleStep(
+              AppMenuModel::kPasswordManagerMenuItem)
+              .SetBubbleBodyText(
+                  IDS_TUTORIAL_PASSWORD_MANAGER_CLICK_PASSWORD_MANAGER)
+              .SetBubbleArrow(HelpBubbleArrow::kRightCenter)
+              .AbortIfVisibilityLost(false),
+
+          // Bubble step - "Add shortcut" row
+          TutorialDescription::BubbleStep(
+              PasswordManagerUI::kAddShortcutElementId)
+              .SetBubbleBodyText(IDS_TUTORIAL_PASSWORD_MANAGER_ADD_SHORTCUT)
+              .SetBubbleArrow(HelpBubbleArrow::kTopCenter)
+              .InAnyContext(),
+
+          // Event step - Click on "Add shortcut"
+          TutorialDescription::EventStep(
+              PasswordManagerUI::kAddShortcutCustomEventId)
+              .InSameContext(),
+
+          // Bubble step - "Install" row
+          TutorialDescription::BubbleStep(
+              PWAConfirmationBubbleView::kInstallButton)
+              .SetBubbleBodyText(IDS_TUTORIAL_PASSWORD_MANAGER_CLICK_INSTALL)
+              .SetBubbleArrow(HelpBubbleArrow::kTopRight),
+
+          // Event step - Click on "Add shortcut"
+          TutorialDescription::EventStep(
+              PWAConfirmationBubbleView::kInstalledPWAEventId)
+              .InSameContext(),
+
+          // Completion of the tutorial.
+          TutorialDescription::BubbleStep(kTopContainerElementId)
+              .SetBubbleTitleText(IDS_TUTORIAL_GENERIC_SUCCESS_TITLE)
+              .SetBubbleBodyText(IDS_TUTORIAL_PASSWORD_MANAGER_SUCCESS_BODY)
+              .SetBubbleArrow(HelpBubbleArrow::kNone)));
 }

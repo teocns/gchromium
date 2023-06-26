@@ -67,10 +67,6 @@ int FakeTabSlotController::GetBackgroundOffset() const {
   return 0;
 }
 
-bool FakeTabSlotController::ShouldPaintAsActiveFrame() const {
-  return true;
-}
-
 int FakeTabSlotController::GetStrokeThickness() const {
   return 0;
 }
@@ -85,13 +81,6 @@ bool FakeTabSlotController::HasVisibleBackgroundTabShapes() const {
 
 SkColor FakeTabSlotController::GetTabSeparatorColor() const {
   return SK_ColorBLACK;
-}
-
-SkColor FakeTabSlotController::GetTabBackgroundColor(
-    TabActive active,
-    BrowserFrameActiveState active_state) const {
-  return active == TabActive::kActive ? tab_bg_color_active_
-                                      : tab_bg_color_inactive_;
 }
 
 SkColor FakeTabSlotController::GetTabForegroundColor(TabActive active) const {

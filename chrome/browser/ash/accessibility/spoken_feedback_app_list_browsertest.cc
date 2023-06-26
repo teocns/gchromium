@@ -12,6 +12,7 @@
 #include "ash/public/cpp/test/app_list_test_api.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/shell.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -205,7 +206,7 @@ class SpokenFeedbackAppListBaseTest : public LoggedInSpokenFeedbackTest {
   int MoveToFirstTestApp() {
     // Focus the shelf. This selects the launcher button.
     sm_.Call([this]() {
-      EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::FOCUS_SHELF));
+      EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::kFocusShelf));
     });
     sm_.ExpectSpeechPattern("Launcher");
     sm_.ExpectSpeech("Button");
@@ -340,7 +341,7 @@ class SpokenFeedbackAppListSearchTest
     } else {
       // Focus the home button and press it to open the bubble launcher.
       sm_.Call([this]() {
-        EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::FOCUS_SHELF));
+        EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::kFocusShelf));
       });
       sm_.ExpectSpeechPattern("Launcher");
       sm_.ExpectSpeech("Button");
@@ -355,8 +356,12 @@ class SpokenFeedbackAppListSearchTest
   // Whether the test runs in tablet mode.
   const bool tablet_mode_;
 
-  TestSearchProvider* apps_provider_ = nullptr;
-  TestSearchProvider* web_provider_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION TestSearchProvider* apps_provider_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #addr-of
+  RAW_PTR_EXCLUSION TestSearchProvider* web_provider_ = nullptr;
 };
 
 // Instantiate test by user variant and tablet mode state.
@@ -381,7 +386,7 @@ IN_PROC_BROWSER_TEST_P(NotificationSpokenFeedbackAppListTest,
 
   // Focus the shelf. This selects the launcher button.
   sm_.Call([this]() {
-    EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::FOCUS_SHELF));
+    EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::kFocusShelf));
   });
   sm_.ExpectSpeechPattern("Launcher");
   sm_.ExpectSpeech("Button");
@@ -420,7 +425,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest,
 
   // Focus the shelf. This selects the launcher button.
   sm_.Call([this]() {
-    EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::FOCUS_SHELF));
+    EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::kFocusShelf));
   });
   sm_.ExpectSpeechPattern("Launcher");
   sm_.ExpectSpeech("Button");
@@ -460,7 +465,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest,
 
   // Focus the shelf. This selects the launcher button.
   sm_.Call([this]() {
-    EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::FOCUS_SHELF));
+    EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::kFocusShelf));
   });
   sm_.ExpectSpeechPattern("Launcher");
   sm_.ExpectSpeech("Button");
@@ -541,7 +546,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackAppListTest, ClamshellLauncher) {
 
   // Focus the shelf. This selects the launcher button.
   sm_.Call([this]() {
-    EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::FOCUS_SHELF));
+    EXPECT_TRUE(PerformAcceleratorAction(AcceleratorAction::kFocusShelf));
   });
   sm_.ExpectSpeechPattern("Launcher");
   sm_.ExpectSpeech("Button");

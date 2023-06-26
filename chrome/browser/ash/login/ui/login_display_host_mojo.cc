@@ -14,6 +14,7 @@
 #include "ash/public/cpp/login_screen_model.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
+#include "ash/style/color_palette_controller.h"
 #include "ash/system/model/enterprise_domain_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "base/command_line.h"
@@ -33,8 +34,6 @@
 #include "chrome/browser/ash/login/screens/chrome_user_selection_screen.h"
 #include "chrome/browser/ash/login/screens/gaia_screen.h"
 #include "chrome/browser/ash/login/security_token_session_controller.h"
-#include "chrome/browser/ash/login/ui/login_display.h"
-#include "chrome/browser/ash/login/ui/login_display_mojo.h"
 #include "chrome/browser/ash/login/user_board_view_mojo.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -212,8 +211,7 @@ LoginDisplayHostMojo::AuthState::AuthState(
 LoginDisplayHostMojo::AuthState::~AuthState() = default;
 
 LoginDisplayHostMojo::LoginDisplayHostMojo(DisplayedScreen displayed_screen)
-    : login_display_(std::make_unique<LoginDisplayMojo>()),
-      user_board_view_mojo_(std::make_unique<UserBoardViewMojo>()),
+    : user_board_view_mojo_(std::make_unique<UserBoardViewMojo>()),
       user_selection_screen_(
           std::make_unique<ChromeUserSelectionScreen>(displayed_screen)),
       system_info_updater_(std::make_unique<MojoSystemInfoDispatcher>()) {
@@ -376,10 +374,6 @@ void LoginDisplayHostMojo::HandleDisplayCaptivePortal() {
   } else {
     dialog_->SetShouldDisplayCaptivePortal(true);
   }
-}
-
-LoginDisplay* LoginDisplayHostMojo::GetLoginDisplay() {
-  return login_display_.get();
 }
 
 ExistingUserController* LoginDisplayHostMojo::GetExistingUserController() {
@@ -758,6 +752,7 @@ void LoginDisplayHostMojo::HandleAuthenticateUserWithChallengeResponse(
 void LoginDisplayHostMojo::HandleOnFocusPod(const AccountId& account_id) {
   user_selection_screen_->HandleFocusPod(account_id);
   WallpaperControllerClientImpl::Get()->ShowUserWallpaper(account_id);
+  Shell::Get()->color_palette_controller()->SelectLocalAccount(account_id);
   if (features::IsInputDeviceSettingsSplitEnabled()) {
     InputDeviceSettingsController::Get()->OnLoginScreenFocusedPodChanged(
         account_id);
@@ -767,12 +762,6 @@ void LoginDisplayHostMojo::HandleOnFocusPod(const AccountId& account_id) {
     MaybeUpdateOfflineLoginLinkVisibility(account_id);
   }
   focused_pod_account_id_ = account_id;
-}
-
-void LoginDisplayHostMojo::HandleOnNoPodFocused() {
-  user_selection_screen_->HandleNoPodFocused();
-  focused_pod_account_id_ = EmptyAccountId();
-  ErrorScreen::AllowOfflineLoginPerUser(true);
 }
 
 bool LoginDisplayHostMojo::HandleFocusLockScreenApps(bool reverse) {

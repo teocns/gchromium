@@ -25,19 +25,14 @@ namespace media {
 class Bitrate;
 
 namespace test {
-class Video;
+class RawVideo;
 
 // Test environment for video encoder tests. Performs setup and teardown once
 // for the entire test run.
 class VideoEncoderTestEnvironment : public VideoTestEnvironment {
  public:
-  // VideoEncoderTest uses at most 60 frames in the given video file.
-  // This limitation is required as a long video stream might not fit in
-  // a device's memory or the number of allocatable handles in the system.
-  // TODO(hiroh): Streams frames from disk so we can avoid this limitation when
-  // encoding long video streams.
-  static constexpr size_t kMaxReadFrames = 60;
-
+  // |read_all_frames_in_video| is weather we read all the frames in
+  // |video_path|. If it is false, it reads up to RawVideo::kLimitedReadFrames.
   static VideoEncoderTestEnvironment* Create(
       const base::FilePath& video_path,
       const base::FilePath& video_metadata_path,
@@ -45,12 +40,11 @@ class VideoEncoderTestEnvironment : public VideoTestEnvironment {
       const base::FilePath& output_folder,
       const std::string& codec,
       const std::string& svc_mode,
-      size_t num_temporal_layers,
-      size_t num_spatial_layers,
       bool save_output_bitstream,
       absl::optional<uint32_t> output_bitrate,
       Bitrate::Mode bitrate_mode,
       bool reverse,
+      bool read_all_frames_in_video,
       const FrameOutputConfig& frame_output_config = FrameOutputConfig(),
       const std::vector<base::test::FeatureRef>& enabled_features = {},
       const std::vector<base::test::FeatureRef>& disabled_features = {});
@@ -58,9 +52,9 @@ class VideoEncoderTestEnvironment : public VideoTestEnvironment {
   ~VideoEncoderTestEnvironment() override;
 
   // Get the video the tests will be ran on.
-  media::test::Video* Video() const;
+  media::test::RawVideo* Video() const;
   // Generate the nv12 video from |video_| the test will be ran on.
-  media::test::Video* GenerateNV12Video();
+  media::test::RawVideo* GenerateNV12Video();
   // Whether bitstream validation is enabled.
   bool IsBitstreamValidatorEnabled() const;
   // Get the output folder.
@@ -75,6 +69,11 @@ class VideoEncoderTestEnvironment : public VideoTestEnvironment {
   const VideoBitrateAllocation& BitrateAllocation() const;
   // Whether the encoded bitstream is saved to disk.
   bool SaveOutputBitstream() const;
+  // Get the output file path for a bitstream to be saved to disk.
+  base::FilePath OutputFilePath(const VideoCodec& codec,
+                                bool svc_enable = false,
+                                int spatial_idx = 0,
+                                int temporal_idx = 0) const;
   // True if the video should play backwards at reaching the end of video.
   // Otherwise the video loops. See the comment in AlignedDataHelper for detail.
   bool Reverse() const;
@@ -88,16 +87,14 @@ class VideoEncoderTestEnvironment : public VideoTestEnvironment {
   // individual test is completed.
   gpu::GpuMemoryBufferFactory* GetGpuMemoryBufferFactory() const;
 
-  // Returns whether kepler will be used in the test.
-  bool IsKeplerUsed() const;
-
  private:
   // TODO(crbug.com/1335251): merge |use_vbr| and |bitrate| into a single
   // Bitrate-typed field.
   VideoEncoderTestEnvironment(
-      std::unique_ptr<media::test::Video> video,
+      std::unique_ptr<media::test::RawVideo> video,
       bool enable_bitstream_validator,
       const base::FilePath& output_folder,
+      const base::FilePath& output_bitstream_file_base_name,
       VideoCodecProfile profile,
       VideoEncodeAccelerator::Config::InterLayerPredMode inter_layer_pred_mode,
       size_t num_temporal_layers,
@@ -110,13 +107,15 @@ class VideoEncoderTestEnvironment : public VideoTestEnvironment {
       const std::vector<base::test::FeatureRef>& disabled_features);
 
   // Video file to be used for testing.
-  const std::unique_ptr<media::test::Video> video_;
+  const std::unique_ptr<media::test::RawVideo> video_;
   // NV12 video file to be used for testing.
-  std::unique_ptr<media::test::Video> nv12_video_;
+  std::unique_ptr<media::test::RawVideo> nv12_video_;
   // Whether bitstream validation should be enabled while testing.
   const bool enable_bitstream_validator_;
   // Output folder to be used to store test artifacts (e.g. perf metrics).
   const base::FilePath output_folder_;
+  // The base name of the file to be used to store the bitstream.
+  const base::FilePath output_bitstream_file_base_name_;
   // VideoCodecProfile to be produced by VideoEncoder.
   const VideoCodecProfile profile_;
   // Inter layer predict mode.

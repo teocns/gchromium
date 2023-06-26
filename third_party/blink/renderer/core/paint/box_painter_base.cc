@@ -150,8 +150,7 @@ void BoxPainterBase::PaintNormalBoxShadow(const PaintInfo& info,
   bool has_border_radius = style.HasBorderRadius();
   bool has_opaque_background =
       !background_is_skipped &&
-      style.VisitedDependentColor(GetCSSPropertyBackgroundColor())
-              .AlphaAsInteger() == 255;
+      style.VisitedDependentColor(GetCSSPropertyBackgroundColor()).IsOpaque();
 
   GraphicsContextStateSaver state_saver(context, false);
 
@@ -161,7 +160,7 @@ void BoxPainterBase::PaintNormalBoxShadow(const PaintInfo& info,
     if (shadow.Style() != ShadowStyle::kNormal)
       continue;
 
-    gfx::Vector2dF shadow_offset = shadow.Location().OffsetFromOrigin();
+    gfx::Vector2dF shadow_offset = shadow.Offset();
     float shadow_blur = shadow.Blur();
     float shadow_spread = shadow.Spread();
 
@@ -280,7 +279,7 @@ inline gfx::RectF AreaCastingShadowInHole(const gfx::RectF& hole_rect,
     bounds.Outset(-shadow.Spread());
 
   gfx::RectF offset_bounds = bounds;
-  offset_bounds.Offset(-shadow.Location().OffsetFromOrigin());
+  offset_bounds.Offset(-shadow.Offset());
   return gfx::UnionRects(bounds, offset_bounds);
 }
 
@@ -354,8 +353,7 @@ void BoxPainterBase::PaintInsetBoxShadow(const PaintInfo& info,
     }
 
     DrawLooperBuilder draw_looper_builder;
-    draw_looper_builder.AddShadow(shadow.Location().OffsetFromOrigin(),
-                                  shadow.Blur(), shadow_color,
+    draw_looper_builder.AddShadow(shadow.Offset(), shadow.Blur(), shadow_color,
                                   DrawLooperBuilder::kShadowRespectsTransforms,
                                   DrawLooperBuilder::kShadowIgnoresAlpha);
     context.SetDrawLooper(draw_looper_builder.DetachDrawLooper());
@@ -443,7 +441,7 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
     // Note that we can't reuse this variable below because the bgColor might
     // be changed.
     bool should_paint_background_color =
-        is_bottom_layer && color.AlphaAsInteger();
+        is_bottom_layer && !color.IsFullyTransparent();
     if (image || should_paint_background_color) {
       color = Color::kWhite;
       image = nullptr;
@@ -478,7 +476,7 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
   // artifacts in order to run the animation on the compositor.
   should_paint_color =
       is_bottom_layer &&
-      (color.AlphaAsInteger() || composite_bgcolor_animation) &&
+      (!color.IsFullyTransparent() || composite_bgcolor_animation) &&
       (!should_paint_image || !layer.ImageOccludesNextLayers(doc, style));
   should_paint_color_with_paint_worklet_image =
       should_paint_color && composite_bgcolor_animation;
@@ -573,6 +571,16 @@ absl::optional<gfx::RectF> OptimizeToSingleTileDraw(
         intrinsic_tile_size, visible_src_rect);
   }
   return visible_src_rect;
+}
+
+PhysicalRect GetSubsetDestRectForImage(const BackgroundImageGeometry& geometry,
+                                       const Image& image) {
+  // Use the snapped size if the image does not have any intrinsic dimensions,
+  // since in that case the image will have been sized according to tile size.
+  const PhysicalRect& rect = image.HasIntrinsicSize()
+                                 ? geometry.UnsnappedDestRect()
+                                 : geometry.SnappedDestRect();
+  return {geometry.SnappedDestRect().offset, rect.size};
 }
 
 // The unsnapped_subset_size should be the target painting area implied by the
@@ -809,10 +817,8 @@ inline bool PaintFastBottomLayer(const Document* document,
       // If the destination is not a rounded fill, then use the same rectangle
       // as in DrawTiledBackground() to get consistent results.
       const PhysicalRect dest_rect =
-          info.is_rounded_fill
-              ? PhysicalRect::FastAndLossyFromRectF(image_rect)
-              : PhysicalRect(geometry.SnappedDestRect().offset,
-                             geometry.UnsnappedDestRect().size);
+          info.is_rounded_fill ? PhysicalRect::FastAndLossyFromRectF(image_rect)
+                               : GetSubsetDestRectForImage(geometry, *image);
 
       absl::optional<gfx::RectF> single_tile_src = OptimizeToSingleTileDraw(
           geometry, dest_rect, *image, info.respect_image_orientation);

@@ -10,9 +10,17 @@ namespace policy {
 
 namespace features {
 
+BASE_FEATURE(kCrowdstrikeSignalReporting,
+             "CrowdstrikeSignalReporting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kEnableUserCloudSigninRestrictionPolicyFetcher,
              "UserCloudSigninRestrictionPolicyFetcher",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnablePolicyTestPage,
+             "EnablePolicyTestPage",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kListPoliciesAcceptCommaSeparatedStringsAndroid,
@@ -21,11 +29,11 @@ BASE_FEATURE(kListPoliciesAcceptCommaSeparatedStringsAndroid,
 
 BASE_FEATURE(kPolicyLogsPageAndroid,
              "PolicyLogsPageAndroid",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSafeSitesFilterBehaviorPolicyAndroid,
              "SafeSitesFilterBehaviorPolicyAndroid",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 BASE_FEATURE(kPolicyMergeMultiSource,
@@ -35,9 +43,14 @@ BASE_FEATURE(kPolicyMergeMultiSource,
 #if BUILDFLAG(IS_IOS)
 BASE_FEATURE(kPolicyLogsPageIOS,
              "PolicyLogsPageIOS",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_IOS)
 
+#if !BUILDFLAG(IS_IOS) || !BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kPolicyLogsPageDesktop,
+             "PolicyLogsPageDesktop",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif  // !BUILDFLAG(IS_IOS) || !!BUILDFLAG(IS_ANDROID)
 }  // namespace features
 
 }  // namespace policy

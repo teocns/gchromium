@@ -26,16 +26,10 @@ class ExceptionState;
 class ResponseInit;
 class ScriptState;
 
-class CORE_EXPORT Response final : public ScriptWrappable,
-                                   public ActiveScriptWrappable<Response>,
-                                   public Body {
+class CORE_EXPORT Response final : public ScriptWrappable, public Body {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  // Checks whether `status` is a null body status.
-  // Spec: https://fetch.spec.whatwg.org/#null-body-status
-  static bool IsNullBodyStatus(uint16_t status);
-
   // These "create" function which takes a ScriptState* must be called with
   // entering an appropriate V8 context.
   // From Response.idl:
@@ -94,9 +88,6 @@ class CORE_EXPORT Response final : public ScriptWrappable,
   // From Response.idl:
   // This function must be called with entering an appropriate V8 context.
   Response* clone(ScriptState*, ExceptionState&);
-
-  // ScriptWrappable
-  bool HasPendingActivity() const final;
 
   // Does not contain the blob response body or any side data blob.
   // |request_url| is the current request URL that resulted in the response. It

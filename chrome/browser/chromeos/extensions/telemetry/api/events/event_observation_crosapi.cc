@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/extensions/telemetry/api/events/events_api_converters.h"
 #include "chrome/common/chromeos/extensions/api/events.h"
@@ -89,6 +90,85 @@ class DefaultEventDelegate : public EventObservationCrosapi::Delegate {
             browser_context_);
         break;
       }
+      case crosapi::internal::TelemetryEventInfo_Data::TelemetryEventInfo_Tag::
+          kPowerEventInfo: {
+        base::Value::List args;
+        args.Append(
+            converters::ConvertStructPtr<api::os_events::PowerEventInfo>(
+                std::move(info->get_power_event_info()))
+                .ToValue());
+        event = std::make_unique<extensions::Event>(
+            extensions::events::OS_EVENTS_ON_POWER_EVENT,
+            api::os_events::OnPowerEvent::kEventName, std::move(args),
+            browser_context_);
+        break;
+      }
+      case crosapi::internal::TelemetryEventInfo_Data::TelemetryEventInfo_Tag::
+          kKeyboardDiagnosticEventInfo: {
+        base::Value::List args;
+        args.Append(converters::ConvertStructPtr<
+                        api::os_events::KeyboardDiagnosticEventInfo>(
+                        std::move(info->get_keyboard_diagnostic_event_info()))
+                        .ToValue());
+
+        event = std::make_unique<extensions::Event>(
+            extensions::events::OS_EVENTS_ON_KEYBOARD_DIAGNOSTIC_EVENT,
+            api::os_events::OnKeyboardDiagnosticEvent::kEventName,
+            std::move(args), browser_context_);
+        break;
+      }
+      case crosapi::internal::TelemetryEventInfo_Data::TelemetryEventInfo_Tag::
+          kStylusGarageEventInfo: {
+        base::Value::List args;
+        args.Append(
+            converters::ConvertStructPtr<api::os_events::StylusGarageEventInfo>(
+                std::move(info->get_stylus_garage_event_info()))
+                .ToValue());
+        event = std::make_unique<extensions::Event>(
+            extensions::events::OS_EVENTS_ON_STYLUS_GARAGE_EVENT,
+            api::os_events::OnStylusGarageEvent::kEventName, std::move(args),
+            browser_context_);
+        break;
+      }
+      case crosapi::internal::TelemetryEventInfo_Data::TelemetryEventInfo_Tag::
+          kTouchpadButtonEventInfo: {
+        base::Value::List args;
+        args.Append(converters::ConvertStructPtr<
+                        api::os_events::TouchpadButtonEventInfo>(
+                        std::move(info->get_touchpad_button_event_info()))
+                        .ToValue());
+        event = std::make_unique<extensions::Event>(
+            extensions::events::OS_EVENTS_ON_TOUCHPAD_BUTTON_EVENT,
+            api::os_events::OnTouchpadButtonEvent::kEventName, std::move(args),
+            browser_context_);
+        break;
+      }
+      case crosapi::internal::TelemetryEventInfo_Data::TelemetryEventInfo_Tag::
+          kTouchpadTouchEventInfo: {
+        base::Value::List args;
+        args.Append(converters::ConvertStructPtr<
+                        api::os_events::TouchpadTouchEventInfo>(
+                        std::move(info->get_touchpad_touch_event_info()))
+                        .ToValue());
+        event = std::make_unique<extensions::Event>(
+            extensions::events::OS_EVENTS_ON_TOUCHPAD_TOUCH_EVENT,
+            api::os_events::OnTouchpadTouchEvent::kEventName, std::move(args),
+            browser_context_);
+        break;
+      }
+      case crosapi::internal::TelemetryEventInfo_Data::TelemetryEventInfo_Tag::
+          kTouchpadConnectedEventInfo: {
+        base::Value::List args;
+        args.Append(converters::ConvertStructPtr<
+                        api::os_events::TouchpadConnectedEventInfo>(
+                        std::move(info->get_touchpad_connected_event_info()))
+                        .ToValue());
+        event = std::make_unique<extensions::Event>(
+            extensions::events::OS_EVENTS_ON_TOUCHPAD_CONNECTED_EVENT,
+            api::os_events::OnTouchpadConnectedEvent::kEventName,
+            std::move(args), browser_context_);
+        break;
+      }
     }
 
     extensions::EventRouter::Get(browser_context_)
@@ -96,7 +176,7 @@ class DefaultEventDelegate : public EventObservationCrosapi::Delegate {
   }
 
  private:
-  raw_ptr<content::BrowserContext> browser_context_;
+  raw_ptr<content::BrowserContext, DanglingUntriaged> browser_context_;
 };
 
 }  // namespace

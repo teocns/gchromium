@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/wm/overview/overview_observer.h"
 #include "base/containers/flat_map.h"
 #include "base/observer_list.h"
 
@@ -24,7 +25,7 @@ class SnapGroup;
 // of this class will be created and owned by `Shell`. It controls the creation
 // and destruction of the `SnapGroup`.
 // TODO: It should also implement the `OverviewObserver` and `TabletObserver`.
-class ASH_EXPORT SnapGroupController {
+class ASH_EXPORT SnapGroupController : public OverviewObserver {
  public:
   class Observer : public base::CheckedObserver {
    public:
@@ -41,7 +42,7 @@ class ASH_EXPORT SnapGroupController {
   SnapGroupController();
   SnapGroupController(const SnapGroupController&) = delete;
   SnapGroupController& operator=(const SnapGroupController&) = delete;
-  ~SnapGroupController();
+  ~SnapGroupController() override;
 
   // Returns true if `window1` and `window2` are in the same snap group.
   bool AreWindowsInSnapGroup(aura::Window* window1,
@@ -65,6 +66,10 @@ class ASH_EXPORT SnapGroupController {
   // snap group or nullptr otherwise.
   SnapGroup* GetSnapGroupForGivenWindow(aura::Window* window);
 
+  // Used to decide whether showing overview on window snapped is allowed in
+  // clamshell with `kSnapGroup` arm1 enabled.
+  bool CanEnterOverview() const;
+
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
@@ -78,9 +83,15 @@ class ASH_EXPORT SnapGroupController {
   // create the snap group when the lock option shows up on two windows snapped.
   bool IsArm2ManuallyLockEnabled() const;
 
+  // OverviewObserver:
+  void OnOverviewModeEnded() override;
+
   const SnapGroups& snap_groups_for_testing() const { return snap_groups_; }
   const WindowToSnapGroupMap& window_to_snap_group_map_for_testing() const {
     return window_to_snap_group_map_;
+  }
+  void set_can_enter_overview_for_testing(bool can_enter_overview) {
+    can_enter_overview_ = can_enter_overview;
   }
 
  private:
@@ -99,6 +110,11 @@ class ASH_EXPORT SnapGroupController {
   WindowToSnapGroupMap window_to_snap_group_map_;
 
   base::ObserverList<Observer> observers_;
+
+  // If false, overview will not be allowed to show on the other side of the
+  // screen on one window snapped, which is an instant way to snap window when
+  // restoring the window snapped state.
+  bool can_enter_overview_ = true;
 };
 
 }  // namespace ash

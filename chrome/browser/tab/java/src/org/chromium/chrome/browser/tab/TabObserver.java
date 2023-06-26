@@ -218,6 +218,13 @@ public interface TabObserver {
     void onDidStartNavigationInPrimaryMainFrame(Tab tab, NavigationHandle navigationHandle);
 
     /**
+     * TODO(crbug.com/1434461) Temporary fix for LocationBarModel not properly
+     * caching same document navigation state. Will be removed later, see bug for more
+     * details.
+     */
+    void onDidFinishNavigationEnd();
+
+    /**
      * Called when a navigation is redirected in the WebContents.
      * @param tab The notifying {@link Tab}.
      * @param navigationHandle Pointer to a NavigationHandle representing the navigation.
@@ -330,4 +337,9 @@ public interface TabObserver {
      * @param scrolling {@code true} if scrolling started; {@code false} if stopped.
      */
     void onContentViewScrollingStateChanged(boolean scrolling);
+
+    /**
+     * Back press refactor related. Called when navigation state is invalidated.
+     */
+    void onNavigationStateChanged();
 }

@@ -2,110 +2,81 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-use gnrt_lib::*;
+use crate::*;
 
-use crates::{ChromiumVendoredCrate, StdVendoredCrate};
+use crates::{Epoch, ThirdPartySource, VendoredCrate};
 use manifest::*;
 
 use crate::util::{check_exit_ok, check_spawn, check_wait_with_output, create_dirs_if_needed};
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process;
 
-use anyhow::{ensure, format_err, Context, Result};
+use anyhow::{bail, ensure, format_err, Context, Result};
 
 pub fn generate(args: &clap::ArgMatches, paths: &paths::ChromiumPaths) -> Result<()> {
-    if args.get_flag("for-std") {
-        // This is not fully implemented. Currently, it will print data helpful
-        // for development then quit.
-        generate_for_std(&args, &paths)
+    if args.get_one::<String>("for-std").is_some() {
+        generate_for_std(args, paths)
     } else {
-        generate_for_third_party(&args, &paths)
+        generate_for_third_party(args, paths)
     }
 }
 
 fn generate_for_third_party(args: &clap::ArgMatches, paths: &paths::ChromiumPaths) -> Result<()> {
-    let manifest_contents =
-        String::from_utf8(fs::read(paths.third_party.join("third_party.toml")).unwrap()).unwrap();
-    let mut third_party_manifest: ThirdPartyManifest =
-        toml::de::from_str(&manifest_contents).context("Could not parse third_party.toml")?;
-
-    // Collect special fields from third_party.toml.
-    //
-    // TODO(crbug.com/1291994): handle visibility separately for each kind.
-    let mut deps_visibility = HashMap::<ChromiumVendoredCrate, crates::Visibility>::new();
-    let mut build_script_outputs = HashMap::<ChromiumVendoredCrate, Vec<String>>::new();
-    let mut gn_variables_libs = HashMap::<ChromiumVendoredCrate, String>::new();
-
-    let mut walk_deps = |dep_name: &str, dep_spec: &Dependency, visibility: crates::Visibility| {
-        let (version_req, is_public, dep_outputs, gn_variables_lib): (
-            &_,
-            bool,
-            &[_],
-            Option<&String>,
-        ) = match dep_spec {
-            Dependency::Short(version_req) => (version_req, true, &[], None),
-            Dependency::Full(dep) => (
-                dep.version.as_ref().unwrap(),
-                dep.allow_first_party_usage,
-                &dep.build_script_outputs,
-                dep.gn_variables_lib.as_ref(),
-            ),
-        };
-        let epoch = crates::Epoch::from_version_req_str(&version_req.0);
-        let crate_id = ChromiumVendoredCrate { name: dep_name.to_string(), epoch };
-        deps_visibility.insert(
-            crate_id.clone(),
-            if is_public { visibility } else { crates::Visibility::ThirdParty },
-        );
-        if !dep_outputs.is_empty() {
-            build_script_outputs.insert(crate_id.clone(), dep_outputs.to_vec());
-        }
-        if gn_variables_lib.is_some() {
-            gn_variables_libs.insert(crate_id, gn_variables_lib.unwrap().clone());
-        }
-    };
-
-    for (dep_name, dep_spec) in &third_party_manifest.dependency_spec.dev_dependencies {
-        walk_deps(dep_name, dep_spec, crates::Visibility::TestOnlyAndThirdParty)
-    }
-    for (dep_name, dep_spec) in &third_party_manifest.dependency_spec.dependencies {
-        walk_deps(dep_name, dep_spec, crates::Visibility::Public)
-    }
-    // [build-dependencies] is not used in third_party.toml.
-
-    // For crates used in first-party tests, we do not build a separate library from
-    // production (unlike standard Rust tests, and those found in third-party
-    // crates.) So we merge the dev_dependencies from third_party.toml into the
-    // regular dependencies.
-    third_party_manifest
-        .dependency_spec
-        .dependencies
-        .extend(std::mem::take(&mut third_party_manifest.dependency_spec.dev_dependencies));
-
-    // Rebind as immutable.
-    let (third_party_manifest, deps_visibility, build_script_outputs, gn_variables_libs) =
-        (third_party_manifest, deps_visibility, build_script_outputs, gn_variables_libs);
-
     // Traverse our third-party directory to collect the set of vendored crates.
     // Used to generate Cargo.toml [patch] sections, and later to check against
     // `cargo metadata`'s dependency resolution to ensure we have all the crates
     // we need. We sort `crates` for a stable ordering of [patch] sections.
-    let mut crates = crates::collect_third_party_crates(paths.third_party.clone()).unwrap();
-    crates.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    let source = crates::ThirdPartySource::new(paths.third_party)?;
+
+    let manifest_contents =
+        String::from_utf8(fs::read(paths.third_party.join("third_party.toml")).unwrap()).unwrap();
+    let third_party_manifest: ThirdPartyManifest =
+        toml::de::from_str(&manifest_contents).context("Could not parse third_party.toml")?;
+
+    let mut crates_metadata = HashMap::<VendoredCrate, gn::PerCrateMetadata>::new();
+
+    // Collect the Chromium-specific fields from third_party.toml and store them
+    // in `crates_metadata`.
+    for (dep_name, dep_spec, dep_vis) in [
+        (&third_party_manifest.testonly_dependencies, crates::Visibility::TestOnlyAndThirdParty),
+        (&third_party_manifest.dependencies, crates::Visibility::Public),
+    ]
+    .into_iter()
+    .flat_map(|(list, vis)| list.iter().map(move |(name, spec)| (name, spec, vis)))
+    {
+        let full_dep: ThirdPartyFullDependency = dep_spec.clone().into_full();
+
+        let version_req = full_dep.version.to_version_req();
+        let crate_id = source.find_match(dep_name, &version_req).ok_or_else(|| {
+            format_err!(
+                "{dep_name} {version_req} was requested in third_party.toml \
+                but not present in vendored crates"
+            )
+        })?;
+
+        crates_metadata.insert(
+            crate_id,
+            gn::PerCrateMetadata {
+                build_script_outputs: full_dep.build_script_outputs,
+                gn_variables: full_dep.gn_variables_lib,
+                visibility: if full_dep.allow_first_party_usage {
+                    dep_vis
+                } else {
+                    crates::Visibility::ThirdParty
+                },
+            },
+        );
+    }
+
+    // Rebind as immutable.
+    let (third_party_manifest, crates_metadata) = (third_party_manifest, crates_metadata);
 
     // Generate a fake root Cargo.toml for dependency resolution.
-    let cargo_manifest = generate_fake_cargo_toml(
-        third_party_manifest,
-        crates.iter().map(|(c, _)| manifest::PatchSpecification {
-            package_name: c.name.clone(),
-            patch_name: c.patch_name(),
-            path: c.crate_path(),
-        }),
-    );
+    let cargo_manifest = generate_fake_cargo_toml(third_party_manifest, source.cargo_patches());
 
     if args.get_flag("output-cargo-toml") {
         println!("{}", toml::ser::to_string(&cargo_manifest).unwrap());
@@ -124,15 +95,21 @@ fn generate_for_third_party(args: &clap::ArgMatches, paths: &paths::ChromiumPath
     create_dirs_if_needed(&paths.third_party.join("src")).unwrap();
     write!(
         io::BufWriter::new(fs::File::create(paths.third_party.join("src/main.rs")).unwrap()),
-        "// {}",
-        AUTOGENERATED_FILE_HEADER
+        "// {AUTOGENERATED_FILE_HEADER}"
     )
     .unwrap();
 
     // Run `cargo metadata` and process the output to get a list of crates we
     // depend on.
     let mut command = cargo_metadata::MetadataCommand::new();
-    command.current_dir(&paths.third_party);
+    if let Some(cargo_path) = args.get_one::<String>("cargo-path") {
+        command.cargo_path(cargo_path);
+    }
+    if let Some(rustc_path) = args.get_one::<String>("rustc-path") {
+        command.env("RUSTC", rustc_path);
+    }
+
+    command.current_dir(paths.third_party);
     let dependencies = deps::collect_dependencies(&command.exec().unwrap(), None, None);
 
     // Compare cargo's dependency resolution with the crates we have on disk. We
@@ -142,21 +119,27 @@ fn generate_for_third_party(args: &clap::ArgMatches, paths: &paths::ChromiumPath
     // * Each discovered crate matches with a resolved dependency (no unused
     //   crates).
     let mut has_error = false;
-    let present_crates: HashSet<&ChromiumVendoredCrate> = crates.iter().map(|(c, _)| c).collect();
+    let present_crates = source.present_crates();
 
     // Construct the set of requested third-party crates, ensuring we don't have
     // duplicate epochs. For example, if we resolved two versions of a
     // dependency with the same major version, we cannot continue.
-    let mut req_crates = HashSet::<ChromiumVendoredCrate>::new();
-    for package in &dependencies {
-        if !req_crates.insert(package.third_party_crate_id()) {
-            panic!("found another requested package with the same name and epoch: {:?}", package);
+    let mut req_crates = HashMap::<(String, Epoch), Version>::new();
+    for dep in &dependencies {
+        let crate_id = dep.crate_id();
+        let epoch = crates::Epoch::from_version(&crate_id.version);
+        if let Some(conflict) =
+            req_crates.insert((crate_id.name.clone(), epoch), crate_id.version.clone())
+        {
+            bail!(
+                "Cargo resolved two different package versions of the same epoch: {} {} vs {}",
+                dep.package_name,
+                dep.version,
+                conflict
+            );
         }
-    }
-    let req_crates = req_crates;
 
-    for dep in dependencies.iter() {
-        if !present_crates.contains(&dep.third_party_crate_id()) {
+        if !present_crates.contains_key(&crate_id) {
             has_error = true;
             println!("Missing dependency: {} {}", dep.package_name, dep.version);
             for edge in dep.dependency_path.iter() {
@@ -179,9 +162,13 @@ fn generate_for_third_party(args: &clap::ArgMatches, paths: &paths::ChromiumPath
             println!("    Resolved version: {}", dep.version);
         }
     }
+    let req_crates = req_crates;
 
-    for present_crate in present_crates.iter() {
-        if !req_crates.contains(present_crate) {
+    for present_crate in present_crates.keys() {
+        if !req_crates.contains_key(&(
+            present_crate.name.clone(),
+            Epoch::from_version(&present_crate.version),
+        )) {
             has_error = true;
             println!("Unused crate: {present_crate}");
         }
@@ -189,26 +176,22 @@ fn generate_for_third_party(args: &clap::ArgMatches, paths: &paths::ChromiumPath
 
     ensure!(!has_error, "Dependency resolution failed");
 
-    let build_files: HashMap<ChromiumVendoredCrate, gn::BuildFile> =
-        gn::build_files_from_chromium_deps(
-            &dependencies,
-            &paths,
-            &crates.iter().cloned().collect(),
-            &build_script_outputs,
-            &deps_visibility,
-            &gn_variables_libs,
-        );
+    let build_files: HashMap<VendoredCrate, gn::BuildFile> =
+        gn::build_files_from_chromium_deps(&dependencies, paths, &crates_metadata, |crate_id| {
+            // A missing crate should have been detected above, so unwrap.
+            present_crates.get(crate_id).unwrap()
+        });
 
     // Before modifying anything make sure we have a one-to-one mapping of
     // discovered crates and build file data.
-    for (crate_id, _) in build_files.iter() {
+    for crate_id in build_files.keys() {
         // This shouldn't happen, but check anyway in case we have a strange
         // logic error above.
-        assert!(present_crates.contains(&crate_id));
+        assert!(present_crates.contains_key(crate_id));
     }
 
-    for crate_id in present_crates.iter() {
-        if !build_files.contains_key(*crate_id) {
+    for crate_id in present_crates.keys() {
+        if !build_files.contains_key(crate_id) {
             println!("Error: discovered crate {crate_id}, but no build file was generated.");
             has_error = true;
         }
@@ -218,7 +201,7 @@ fn generate_for_third_party(args: &clap::ArgMatches, paths: &paths::ChromiumPath
 
     // Wipe all previous BUILD.gn files. If we fail, we don't want to leave a
     // mix of old and new build files.
-    for build_file in crates.iter().map(|(crate_id, _)| build_file_path(crate_id, &paths)) {
+    for build_file in present_crates.iter().map(|(crate_id, _)| build_file_path(crate_id, paths)) {
         if build_file.exists() {
             fs::remove_file(&build_file).unwrap();
         }
@@ -226,9 +209,9 @@ fn generate_for_third_party(args: &clap::ArgMatches, paths: &paths::ChromiumPath
 
     // Generate build files, wiping the previous ones so we don't have any stale
     // build rules.
-    for (crate_id, _) in crates.iter() {
-        let build_file_path = build_file_path(crate_id, &paths);
-        let build_file_data = match build_files.get(&crate_id) {
+    for (crate_id, _) in present_crates.iter() {
+        let build_file_path = build_file_path(crate_id, paths);
+        let build_file_data = match build_files.get(crate_id) {
             Some(build_file) => build_file,
             None => panic!("missing build data for {crate_id}"),
         };
@@ -239,15 +222,57 @@ fn generate_for_third_party(args: &clap::ArgMatches, paths: &paths::ChromiumPath
     Ok(())
 }
 
-fn generate_for_std(_args: &clap::ArgMatches, paths: &paths::ChromiumPaths) -> Result<()> {
+fn generate_for_std(args: &clap::ArgMatches, paths: &paths::ChromiumPaths) -> Result<()> {
     // Load config file, which applies rustenv and cfg flags to some std crates.
     let config_file_contents = std::fs::read_to_string(paths.std_config_file).unwrap();
     let config: config::BuildConfig = toml::de::from_str(&config_file_contents).unwrap();
 
+    // The Rust source tree, containing the standard library and vendored
+    // dependencies.
+    let rust_src_root = {
+        let for_std_value = args.get_one::<String>("for-std").unwrap();
+        if !for_std_value.is_empty() {
+            for_std_value.clone()
+        } else {
+            paths.rust_src_installed.to_string_lossy().to_string()
+        }
+    };
+    println!("Generating stdlib GN rules from {rust_src_root}");
+
+    let cargo_config = std::fs::read_to_string(paths.std_fake_root_config_template)
+        .unwrap()
+        .replace("RUST_SRC_ROOT", &rust_src_root);
+    std::fs::write(
+        paths.strip_template(paths.std_fake_root_config_template).unwrap(),
+        cargo_config,
+    )
+    .unwrap();
+
+    let cargo_toml = std::fs::read_to_string(paths.std_fake_root_cargo_template)
+        .unwrap()
+        .replace("RUST_SRC_ROOT", &rust_src_root);
+    std::fs::write(paths.strip_template(paths.std_fake_root_cargo_template).unwrap(), cargo_toml)
+        .unwrap();
+    // Convert the `rust_src_root` to a Path hereafter.
+    let rust_src_root = paths.root.join(Path::new(&rust_src_root));
+
     // Run `cargo metadata` from the std package in the Rust source tree (which
     // is a workspace).
     let mut command = cargo_metadata::MetadataCommand::new();
+    if let Some(cargo_path) = args.get_one::<String>("cargo-path") {
+        command.cargo_path(cargo_path);
+    }
+    if let Some(rustc_path) = args.get_one::<String>("rustc-path") {
+        command.env("RUSTC", rustc_path);
+    }
+
     command.current_dir(paths.std_fake_root);
+
+    // The Cargo.toml files in the Rust toolchain may use nightly Cargo
+    // features, but the cargo binary is beta. This env var enables the
+    // beta cargo binary to allow nightly features anyway.
+    // https://github.com/rust-lang/rust/commit/2e52f4deb0544480b6aefe2c0cc1e6f3c893b081
+    command.env("RUSTC_BOOTSTRAP", "1");
 
     // Delete the Cargo.lock if it exists.
     let mut std_fake_root_cargo_lock = paths.std_fake_root.to_path_buf();
@@ -276,59 +301,90 @@ fn generate_for_std(_args: &clap::ArgMatches, paths: &paths::ChromiumPaths) -> R
     //   dependencies to the correct lib{core,alloc,std} when depended on by the
     //   Rust codebase (see
     //   https://github.com/rust-lang/rust/tree/master/library/rustc-std-workspace-core)
-    //
-    // libtest is the root of the std crate dependency tree, so start there.
-    let mut dependencies =
-        deps::collect_dependencies(&command.exec().unwrap(), Some(vec!["test".to_string()]), None);
+    let mut dependencies = deps::collect_dependencies(
+        &command.exec().unwrap(),
+        Some(vec![config.resolve.root.clone()]),
+        None,
+    );
+
+    // Filter out any crates' dependencies removed by config file.
+    for dep in dependencies.iter_mut() {
+        let Some(conf) = config.per_crate_config.get(&dep.package_name) else { continue };
+        if conf.remove_deps.is_empty() {
+            continue;
+        }
+
+        for kind in [&mut dep.dependencies, &mut dep.build_dependencies] {
+            kind.retain(|dep_of_dep| {
+                conf.remove_deps.iter().find(|r| **r == dep_of_dep.package_name).is_none()
+            });
+        }
+    }
+
+    // Remove any excluded dep entries.
+    dependencies.retain(|dep| {
+        config.resolve.remove_crates.iter().find(|r| **r == dep.package_name).is_none()
+    });
 
     // Remove dev dependencies since tests aren't run. Also remove build deps
-    // since we configure flags and env vars manually. Include libtest
-    // explicitly since, as the root of collect_dependencies(), it doesn't get a
-    // dependency_kinds entry.
-    dependencies.retain(|dep| {
-        dep.package_name == "test"
-            || dep.dependency_kinds.contains_key(&deps::DependencyKind::Normal)
-    });
+    // since we configure flags and env vars manually. Include the root
+    // explicitly since it doesn't get a dependency_kinds entry.
+    dependencies.retain(|dep| dep.dependency_kinds.contains_key(&deps::DependencyKind::Normal));
 
     dependencies.sort_unstable_by(|a, b| {
         a.package_name.cmp(&b.package_name).then(a.version.cmp(&b.version))
     });
+    for dep in dependencies.iter_mut() {
+        // Rehome stdlib deps from the `rust_src_root` to where they will be installed
+        // in the Chromium checkout.
+        let gn_prefix = paths.root.join(paths.rust_src_installed);
+        if let Some(lib) = dep.lib_target.as_mut() {
+            ensure!(
+                lib.root.canonicalize().unwrap().starts_with(&rust_src_root),
+                "Found dependency that was not locally available: {} {}\n{:?}",
+                dep.package_name,
+                dep.version,
+                dep
+            );
+
+            if let Ok(remain) = lib.root.canonicalize().unwrap().strip_prefix(&rust_src_root) {
+                lib.root = gn_prefix.join(remain);
+            }
+        }
+
+        if let Some(path) = dep.build_script.as_mut() {
+            if let Ok(remain) = path.canonicalize().unwrap().strip_prefix(&rust_src_root) {
+                *path = gn_prefix.join(remain);
+            }
+        }
+    }
 
     let third_party_deps = dependencies.iter().filter(|dep| !dep.is_local).collect::<Vec<_>>();
 
     // Check that all resolved third party deps are available. First, collect
     // the set of third-party dependencies vendored in the Rust source package.
-    let vendored_crates: HashMap<StdVendoredCrate, manifest::CargoPackage> =
-        crates::collect_std_vendored_crates(paths.rust_src_vendor).unwrap().into_iter().collect();
+    let vendored_crates: HashMap<VendoredCrate, manifest::CargoPackage> =
+        crates::collect_std_vendored_crates(&rust_src_root.join(paths.rust_src_vendor_subdir))
+            .unwrap()
+            .into_iter()
+            .collect();
 
     // Collect vendored dependencies, and also check that all resolved
     // dependencies point to our Rust source package. Build rules will be
     // generated for these crates separately from std, alloc, and core which
     // need special treatment.
-    let src_prefix = paths.root.join(paths.rust_src);
     for dep in third_party_deps.iter() {
         // Only process deps with a library target: we are producing build rules
         // for the standard library, so transitive binary dependencies don't
         // make sense.
-        let lib = match &dep.lib_target {
-            Some(lib) => lib,
-            None => continue,
-        };
-
-        ensure!(
-            lib.root.canonicalize().unwrap().starts_with(&src_prefix),
-            "Found dependency that was not locally available: {} {}\n{:?}",
-            dep.package_name,
-            dep.version,
-            dep
-        );
+        if dep.lib_target.is_none() {
+            continue;
+        }
 
         vendored_crates
-            .get_key_value(&StdVendoredCrate {
+            .get_key_value(&VendoredCrate {
                 name: dep.package_name.clone(),
                 version: dep.version.clone(),
-                // Placeholder value for lookup.
-                is_latest: false,
             })
             .ok_or_else(|| {
                 format_err!(
@@ -345,10 +401,10 @@ fn generate_for_std(_args: &clap::ArgMatches, paths: &paths::ChromiumPaths) -> R
     Ok(())
 }
 
-fn build_file_path(crate_id: &ChromiumVendoredCrate, paths: &paths::ChromiumPaths) -> PathBuf {
+fn build_file_path(crate_id: &VendoredCrate, paths: &paths::ChromiumPaths) -> PathBuf {
     let mut path = paths.root.clone();
-    path.push(&paths.third_party);
-    path.push(crate_id.build_path());
+    path.push(paths.third_party);
+    path.push(ThirdPartySource::build_path(crate_id));
     path.push("BUILD.gn");
     path
 }
@@ -361,7 +417,7 @@ fn write_build_file(path: &Path, build_file: &gn::BuildFile) -> Result<()> {
     // Spawn a child process to format GN rules. The formatted GN is written to
     // the file `output_handle`.
     let mut child = check_spawn(
-        &mut process::Command::new("gn")
+        process::Command::new("gn")
             .arg("format")
             .arg("--stdin")
             .stdin(process::Stdio::piped())
@@ -376,4 +432,4 @@ fn write_build_file(path: &Path, build_file: &gn::BuildFile) -> Result<()> {
 
 /// A message prepended to autogenerated files. Notes this tool generated it and
 /// not to edit directly.
-static AUTOGENERATED_FILE_HEADER: &'static str = "!!! DO NOT EDIT -- Autogenerated by gnrt from third_party.toml. Edit that file instead. See tools/crates/gnrt.";
+static AUTOGENERATED_FILE_HEADER: &str = "!!! DO NOT EDIT -- Autogenerated by gnrt from third_party.toml. Edit that file instead. See tools/crates/gnrt.";

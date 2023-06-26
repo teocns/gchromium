@@ -73,7 +73,9 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/browser/content_settings_type_set.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
@@ -107,9 +109,9 @@
 #include "chrome/browser/apps/app_service/browser_app_instance_tracker.h"
 #include "chrome/browser/apps/app_service/metrics/app_service_metrics.h"
 #include "chrome/browser/badging/badge_manager_factory.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
-#include "chrome/common/chrome_features.h"
 #include "chromeos/constants/chromeos_features.h"
 #endif
 
@@ -252,6 +254,7 @@ apps::InstallSource GetInstallSource(
     case webapps::WebappInstallSource::AMBIENT_BADGE_CUSTOM_TAB:
     case webapps::WebappInstallSource::RICH_INSTALL_UI_WEBLAYER:
     case webapps::WebappInstallSource::EXTERNAL_POLICY:
+    case webapps::WebappInstallSource::ML_PROMOTION:
     case webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON:
     case webapps::WebappInstallSource::MENU_CREATE_SHORTCUT:
     case webapps::WebappInstallSource::SUB_APP:
@@ -300,6 +303,7 @@ apps::Readiness ConvertWebappUninstallSourceToReadiness(
     case webapps::WebappUninstallSource::kExternalPolicy:
     case webapps::WebappUninstallSource::kSystemPreinstalled:
     case webapps::WebappUninstallSource::kExternalLockScreen:
+    case webapps::WebappUninstallSource::kInstallUrlDeduping:
       return apps::Readiness::kUninstalledByNonUser;
   }
 }
@@ -404,9 +408,9 @@ void UninstallImpl(WebAppProvider* provider,
     return;
   }
 
-  WebAppDialogManager& web_app_dialog_manager =
-      web_app_ui_manager->dialog_manager();
-  if (web_app_dialog_manager.CanUserUninstallWebApp(app_id)) {
+  if (provider->registrar_unsafe().CanUserUninstallWebApp(app_id)) {
+    WebAppDialogManager& web_app_dialog_manager =
+        web_app_ui_manager->dialog_manager();
     webapps::WebappUninstallSource webapp_uninstall_source =
         WebAppPublisherHelper::ConvertUninstallSourceToWebAppUninstallSource(
             uninstall_source);
@@ -462,15 +466,14 @@ void WebAppPublisherHelper::BadgeManagerDelegate::OnAppBadgeUpdated(
 
 WebAppPublisherHelper::WebAppPublisherHelper(Profile* profile,
                                              WebAppProvider* provider,
-                                             Delegate* delegate,
-                                             bool observe_media_requests)
+                                             Delegate* delegate)
     : profile_(profile),
       provider_(provider),
       app_type_(GetWebAppType()),
       delegate_(delegate) {
   DCHECK(profile_);
   DCHECK(delegate_);
-  Init(observe_media_requests);
+  Init();
 }
 
 WebAppPublisherHelper::~WebAppPublisherHelper() = default;
@@ -633,7 +636,7 @@ apps::IntentFilters WebAppPublisherHelper::CreateIntentFiltersForWebApp(
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (ash::features::IsProjectorEnabled() &&
-      app_id == ash::kChromeUITrustedProjectorSwaAppId) {
+      app_id == ash::kChromeUIUntrustedProjectorSwaAppId) {
     filters.push_back(apps_util::MakeIntentFilterForUrlScope(
         GURL(ash::kChromeUIUntrustedProjectorPwaUrl)));
   }
@@ -785,7 +788,7 @@ void WebAppPublisherHelper::UninstallWebApp(
 
   DCHECK(provider_);
   DCHECK(
-      provider_->install_finalizer().CanUserUninstallWebApp(web_app->app_id()));
+      provider_->registrar_unsafe().CanUserUninstallWebApp(web_app->app_id()));
   webapps::WebappUninstallSource webapp_uninstall_source =
       ConvertUninstallSourceToWebAppUninstallSource(uninstall_source);
   provider_->install_finalizer().UninstallWebApp(
@@ -1013,7 +1016,8 @@ void WebAppPublisherHelper::LaunchAppWithParams(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Terminal SWA has custom launch code and manages its own restore data.
   if (params.app_id == guest_os::kTerminalSystemAppId) {
-    guest_os::LaunchTerminalHome(profile_, params.display_id);
+    guest_os::LaunchTerminalHome(profile_, params.display_id,
+                                 params.restore_id);
     std::move(on_complete).Run(nullptr);
     return;
   }
@@ -1225,7 +1229,13 @@ apps::WindowMode WebAppPublisherHelper::ConvertDisplayModeToWindowMode(
     case blink::mojom::DisplayMode::kBrowser:
       return apps::WindowMode::kBrowser;
     case blink::mojom::DisplayMode::kTabbed:
-      return apps::WindowMode::kTabbedWindow;
+      if (base::FeatureList::IsEnabled(features::kDesktopPWAsTabStrip) &&
+          base::FeatureList::IsEnabled(
+              features::kDesktopPWAsTabStripSettings)) {
+        return apps::WindowMode::kTabbedWindow;
+      } else {
+        [[fallthrough]];
+      }
     case blink::mojom::DisplayMode::kMinimalUi:
     case blink::mojom::DisplayMode::kStandalone:
     case blink::mojom::DisplayMode::kFullscreen:
@@ -1478,61 +1488,31 @@ void WebAppPublisherHelper::OnNotificationDisplayServiceDestroyed(
   notification_display_service_.Reset();
 }
 
-void WebAppPublisherHelper::OnRequestUpdate(
-    int render_process_id,
-    int render_frame_id,
-    blink::mojom::MediaStreamType stream_type,
-    const content::MediaRequestState state) {
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(
-          content::RenderFrameHost::FromID(render_process_id, render_frame_id));
-
-  if (!web_contents) {
+void WebAppPublisherHelper::OnIsCapturingVideoChanged(
+    content::WebContents* web_contents,
+    bool is_capturing_video) {
+  const AppId* app_id = WebAppTabHelper::GetAppId(web_contents);
+  if (!app_id) {
     return;
   }
 
-  absl::optional<AppId> app_id =
-      FindInstalledAppWithUrlInScope(profile(), web_contents->GetVisibleURL(),
-                                     /*window_only=*/false);
-  if (!app_id.has_value()) {
-    return;
-  }
-
-  const WebApp* web_app = GetWebApp(app_id.value());
-  if (!web_app) {
-    return;
-  }
-
-  if (media_requests_.IsNewRequest(app_id.value(), web_contents, state)) {
-    content::WebContentsUserData<
-        apps::AppWebContentsData>::CreateForWebContents(web_contents, this);
-  }
-
-  auto result = media_requests_.UpdateRequests(app_id.value(), web_contents,
-                                               stream_type, state);
-  delegate_->ModifyWebAppCapabilityAccess(app_id.value(), result.camera,
+  auto result = media_requests_.UpdateCameraState(*app_id, web_contents,
+                                                  is_capturing_video);
+  delegate_->ModifyWebAppCapabilityAccess(*app_id, result.camera,
                                           result.microphone);
 }
 
-void WebAppPublisherHelper::OnWebContentsDestroyed(
-    content::WebContents* web_contents) {
-  DCHECK(web_contents);
-
-  absl::optional<AppId> app_id = FindInstalledAppWithUrlInScope(
-      profile(), web_contents->GetLastCommittedURL(),
-      /*window_only=*/false);
-  if (!app_id.has_value()) {
+void WebAppPublisherHelper::OnIsCapturingAudioChanged(
+    content::WebContents* web_contents,
+    bool is_capturing_audio) {
+  const AppId* app_id = WebAppTabHelper::GetAppId(web_contents);
+  if (!app_id) {
     return;
   }
 
-  const WebApp* web_app = GetWebApp(app_id.value());
-  if (!web_app) {
-    return;
-  }
-
-  auto result =
-      media_requests_.OnWebContentsDestroyed(app_id.value(), web_contents);
-  delegate_->ModifyWebAppCapabilityAccess(app_id.value(), result.camera,
+  auto result = media_requests_.UpdateMicrophoneState(*app_id, web_contents,
+                                                      is_capturing_audio);
+  delegate_->ModifyWebAppCapabilityAccess(*app_id, result.camera,
                                           result.microphone);
 }
 #endif
@@ -1570,7 +1550,7 @@ void WebAppPublisherHelper::OnWebAppSettingsPolicyChanged() {
   }
 }
 
-void WebAppPublisherHelper::Init(bool observe_media_requests) {
+void WebAppPublisherHelper::Init() {
   // Allow for web app migration tests.
   if (!AreWebAppsEnabled(profile_)) {
     return;
@@ -1598,9 +1578,10 @@ void WebAppPublisherHelper::Init(bool observe_media_requests) {
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
-  if (observe_media_requests) {
-    media_dispatcher_.Observe(MediaCaptureDevicesDispatcher::GetInstance());
-  }
+  media_indicator_observation_.Observe(
+      MediaCaptureDevicesDispatcher::GetInstance()
+          ->GetMediaStreamCaptureIndicator()
+          .get());
 #endif
 }
 
@@ -1796,13 +1777,9 @@ void WebAppPublisherHelper::MaybeAddWebPageNotifications(
                           : notification.origin_url();
 
     auto app_ids = registrar().FindAppsInScope(url);
-    int count = 0;
     for (const auto& app_id : app_ids) {
-      if (MaybeAddNotification(app_id, notification.id())) {
-        ++count;
-      }
+      MaybeAddNotification(app_id, notification.id());
     }
-    apps::RecordAppsPerNotification(count);
   }
 }
 

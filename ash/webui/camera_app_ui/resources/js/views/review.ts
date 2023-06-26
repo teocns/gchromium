@@ -17,12 +17,13 @@ import {View} from './view.js';
 interface UIArgs {
   text?: I18nString;
   label?: I18nString;
+  icon?: string;
   templateId?: string;
   primary?: boolean;
 }
 
 /**
- * Available option show in this view.
+ * Available option shown in this view.
  */
 export class Option<T> {
   readonly exitValue?: T;
@@ -89,9 +90,6 @@ export class Review extends View {
 
   private primaryBtn: HTMLButtonElement|null;
 
-  /**
-   * Constructs the review view.
-   */
   constructor(private readonly viewName: ViewName = ViewName.REVIEW) {
     super(viewName, {defaultFocusSelector: '.primary', dismissByEsc: true});
 
@@ -100,16 +98,15 @@ export class Review extends View {
     this.primaryBtn = null;
   }
 
-  /**
-   * Load the image element with given blob.
-   */
   protected async loadImage(image: HTMLImageElement, blob: Blob):
       Promise<void> {
     try {
       await new Promise<void>((resolve, reject) => {
         image.onload = () => resolve();
-        image.onerror = (e) =>
-            reject(new Error(`Failed to load review document image: ${e}`));
+        image.addEventListener('error', (e) => {
+          const msg = `Failed to load review document image: ${e.message}`;
+          reject(new Error(msg));
+        }, {once: true});
         image.src = URL.createObjectURL(blob);
       });
     } catch (e) {
@@ -118,9 +115,6 @@ export class Review extends View {
     }
   }
 
-  /**
-   * Sets the photo to be reviewed.
-   */
   async setReviewPhoto(blob: Blob): Promise<void> {
     this.image.hidden = false;
     this.video.hidden = true;
@@ -129,9 +123,6 @@ export class Review extends View {
     URL.revokeObjectURL(image.src);
   }
 
-  /**
-   * Sets the video to be reviewed.
-   */
   async setReviewVideo(video: FileAccessEntry): Promise<void> {
     this.image.hidden = true;
     this.video.hidden = false;
@@ -139,9 +130,6 @@ export class Review extends View {
     this.video.src = url;
   }
 
-  /**
-   * Starts review.
-   */
   async startReview<T>(...optionGroups: Array<OptionGroup<T>>):
       Promise<T|null> {
     // Remove all existing button groups and buttons.
@@ -162,7 +150,7 @@ export class Review extends View {
     }
     for (const btnGroup of btnGroups) {
       const addButton = ({
-        uiArgs: {text, label, templateId, primary},
+        uiArgs: {text, label, icon, templateId, primary},
         exitValue,
         callback,
         hasPopup,
@@ -176,6 +164,11 @@ export class Review extends View {
         }
         if (label !== undefined) {
           btn.setAttribute('i18n-label', label);
+        }
+        if (icon !== undefined) {
+          const iconEl = document.createElement('svg-wrapper');
+          iconEl.name = icon;
+          btn.prepend(iconEl);
         }
         if (this.primaryBtn === null && primary === true) {
           btn.classList.add('primary');

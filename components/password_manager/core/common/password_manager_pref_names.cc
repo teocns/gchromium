@@ -47,7 +47,11 @@ const char kTimesReenrolledToGoogleMobileServices[] =
 
 const char kTimesAttemptedToReenrollToGoogleMobileServices[] =
     "times_attempted_to_reenroll_to_google_mobile_services";
-const char kTimesUPMAuthErrorShown[] = "times_upm_auth_error_shown";
+
+const char kUserAcknowledgedLocalPasswordsMigrationWarning[] =
+    "user_acknowledged_local_passwords_migration_warning";
+const char kLocalPasswordsMigrationWarningShownTimestamp[] =
+    "local_passwords_migration_warning_shown_timestamp";
 #endif
 
 #if BUILDFLAG(IS_WIN)

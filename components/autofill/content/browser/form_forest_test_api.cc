@@ -6,6 +6,8 @@
 
 #include <iomanip>
 
+#include "components/autofill/content/browser/content_autofill_driver.h"
+
 namespace autofill::internal {
 
 void FormForestTestApi::ExpandForm(base::stack<FrameForm>& frontier,
@@ -13,11 +15,11 @@ void FormForestTestApi::ExpandForm(base::stack<FrameForm>& frontier,
   for (const FrameTokenWithPredecessor& child :
        frame_and_form.form->child_frames) {
     absl::optional<LocalFrameToken> local_child =
-        Resolve(*frame_and_form.frame, child.token);
+        frame_and_form.frame->driver->Resolve(child.token);
     FrameData* child_frame;
     if (local_child && (child_frame = GetFrameData(*local_child))) {
       for (FormData& child_form : child_frame->child_forms)
-        frontier.push({child_frame, &child_form});
+        frontier.push({raw_ref(*child_frame), raw_ref(child_form)});
     }
   }
 }
@@ -25,7 +27,7 @@ void FormForestTestApi::ExpandForm(base::stack<FrameForm>& frontier,
 std::ostream& FormForestTestApi::PrintFrames(std::ostream& os) {
   os << "#Frames = " << frame_datas().size() << std::endl;
   for (const std::unique_ptr<FrameData>& frame : frame_datas()) {
-    ContentAutofillDriver* driver = frame->driver;
+    auto* driver = static_cast<ContentAutofillDriver*>(frame->driver);
     os << "Token = " << frame->frame_token.ToString() << ":" << std::endl;
     os << "Driver = " << driver << std::endl;
     os << "URL = "
@@ -53,8 +55,9 @@ std::ostream& FormForestTestApi::PrintForest(std::ostream& os) {
   for (const std::unique_ptr<FrameData>& frame : frame_datas()) {
     DCHECK(frame);
     if (frame && !frame->parent_form) {
-      for (FormData& form : frame->child_forms)
-        frontier.push({frame.get(), &form});
+      for (FormData& form : frame->child_forms) {
+        frontier.push({raw_ref(*frame), raw_ref(form)});
+      }
     }
   }
   TraverseTrees(frontier, [this, &os](const FormData& form) mutable {
@@ -86,7 +89,7 @@ std::ostream& FormForestTestApi::PrintForm(std::ostream& os,
   const FrameData* frame = GetFrameData(form.host_frame);
   if (frame) {
     for (const FrameTokenWithPredecessor& child : form.child_frames) {
-      auto local_child = Resolve(*frame, child.token);
+      auto local_child = frame->driver->Resolve(child.token);
       os << prefix << std::setfill(' ') << std::setw(2) << ++i << ". Frame "
          << absl::visit([](auto x) { return x.ToString(); }, child.token)
          << " -> " << (local_child ? local_child->ToString() : "") << std::endl;

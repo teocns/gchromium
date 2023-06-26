@@ -28,6 +28,7 @@
 #include "printing/mojom/print.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
@@ -43,6 +44,7 @@ namespace printing {
 
 class PrintPreviewHandler;
 
+// PrintPreviewUI lives on the UI thread.
 class PrintPreviewUI : public ConstrainedWebDialogUI,
                        public mojom::PrintPreviewUI {
  public:
@@ -76,8 +78,9 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
   void PrinterSettingsInvalid(int32_t document_cookie,
                               int32_t request_id) override;
   void DidGetDefaultPageLayout(mojom::PageSizeMarginsPtr page_layout_in_points,
-                               const gfx::Rect& printable_area_in_points,
-                               bool has_custom_page_size_style,
+                               const gfx::RectF& printable_area_in_points,
+                               bool all_pages_have_custom_size,
+                               bool all_pages_have_custom_orientation,
                                int32_t request_id) override;
   void DidStartPreview(mojom::DidStartPreviewParamsPtr params,
                        int32_t request_id) override;
@@ -126,7 +129,6 @@ class PrintPreviewUI : public ConstrainedWebDialogUI,
 
   // Determines whether to cancel a print preview request based on the request
   // id.
-  // Can be called from any thread.
   static bool ShouldCancelRequest(const absl::optional<int32_t>& preview_ui_id,
                                   int request_id);
 

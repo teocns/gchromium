@@ -55,12 +55,13 @@ class LayoutNGSVGForeignObject final
 
  private:
   // LayoutObject override:
+  void UpdateLayout() override;
   const char* GetName() const override;
   bool IsOfType(LayoutObjectType type) const override;
   bool IsChildAllowed(LayoutObject* child,
                       const ComputedStyle& style) const override;
   gfx::RectF ObjectBoundingBox() const override;
-  gfx::RectF StrokeBoundingBox() const override;
+  gfx::RectF DecoratedBoundingBox() const override;
   gfx::RectF VisualRectInLocalSVGCoordinates() const override;
   AffineTransform LocalToSVGParentTransform() const override;
 
@@ -70,8 +71,6 @@ class LayoutNGSVGForeignObject final
   bool CreatesNewFormattingContext() const override;
 
   // LayoutBlock override:
-  void UpdateBlockLayout() override;
-
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
 
   // The resolved viewport in the regular SVG coordinate space (after any

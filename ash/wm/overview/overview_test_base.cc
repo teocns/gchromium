@@ -21,6 +21,7 @@
 #include "ash/wm/overview/overview_wallpaper_controller.h"
 #include "ash/wm/overview/scoped_overview_transform_window.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
+#include "ash/wm/window_mini_view_header_view.h"
 #include "ash/wm/window_preview_view.h"
 #include "components/app_constants/constants.h"
 #include "ui/aura/client/aura_constants.h"
@@ -46,6 +47,24 @@ void OverviewTestBase::EnterTabletMode() {
 
 bool OverviewTestBase::InOverviewSession() {
   return GetOverviewController()->InOverviewSession();
+}
+
+void OverviewTestBase::DispatchLongPress(OverviewItem* item) {
+  const gfx::Point point =
+      gfx::ToRoundedPoint(item->target_bounds().CenterPoint());
+  ui::GestureEvent long_press(
+      point.x(), point.y(), 0, base::TimeTicks::Now(),
+      ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
+  GetEventGenerator()->Dispatch(&long_press);
+}
+
+std::vector<std::unique_ptr<aura::Window>> OverviewTestBase::CreateAppWindows(
+    int n) {
+  std::vector<std::unique_ptr<aura::Window>> windows(n);
+  for (int i = n - 1; i >= 0; --i) {
+    windows[i] = CreateAppWindow();
+  }
+  return windows;
 }
 
 bool OverviewTestBase::WindowsOverlapping(aura::Window* window1,
@@ -118,7 +137,7 @@ CloseButton* OverviewTestBase::GetCloseButton(OverviewItem* item) {
 }
 
 views::Label* OverviewTestBase::GetLabelView(OverviewItem* item) {
-  return item->overview_item_view_->title_label();
+  return item->overview_item_view_->header_view()->title_label();
 }
 
 views::View* OverviewTestBase::GetBackdropView(OverviewItem* item) {
@@ -222,13 +241,14 @@ void OverviewTestBase::CheckOverviewEnterExitHistogram(
     const std::vector<int>& exit_counts) {
   CheckForDuplicateTraceName(trace);
 
-  // Overview histograms recorded via ui::ThroughputTracker is reported
-  // on the next frame presented after animation stops. Wait for the next
-  // frame with a 100ms timeout for the report, regardless of whether there
-  // is a next frame.
-  std::ignore = ui::WaitForNextFrameToBePresented(
-      Shell::GetPrimaryRootWindow()->layer()->GetCompositor(),
-      base::Milliseconds(500));
+  // Force a frame then wait, ensuring there is one more frame presented after
+  // animation finishes to allow animation throughput data to be passed from
+  // cc to ui.
+  ui::Compositor* compositor =
+      Shell::GetPrimaryRootWindow()->layer()->GetCompositor();
+  compositor->ScheduleFullRedraw();
+  std::ignore =
+      ui::WaitForNextFrameToBePresented(compositor, base::Milliseconds(500));
 
   {
     SCOPED_TRACE(trace + ".Enter");

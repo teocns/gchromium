@@ -4,6 +4,7 @@
 
 #include "chrome/browser/webauthn/chrome_authenticator_request_delegate.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -35,6 +36,7 @@
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "chrome/browser/webauthn/cablev2_devices.h"
+#include "chrome/browser/webauthn/passkey_model_factory.h"
 #include "chrome/browser/webauthn/webauthn_pref_names.h"
 #include "chrome/browser/webauthn/webauthn_switches.h"
 #include "chrome/common/chrome_switches.h"
@@ -46,7 +48,10 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/security_state/core/security_state.h"
+#include "components/sync/base/features.h"
+#include "components/sync/protocol/webauthn_credential_specifics.pb.h"
 #include "components/user_prefs/user_prefs.h"
+#include "components/webauthn/core/browser/passkey_model.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/device_service.h"
@@ -54,9 +59,11 @@
 #include "content/public/browser/web_contents.h"
 #include "crypto/random.h"
 #include "device/fido/cable/v2_handshake.h"
+#include "device/fido/discoverable_credential_metadata.h"
 #include "device/fido/features.h"
 #include "device/fido/fido_authenticator.h"
 #include "device/fido/fido_discovery_factory.h"
+#include "device/fido/fido_types.h"
 #include "device/fido/public_key_credential_descriptor.h"
 #include "device/fido/public_key_credential_user_entity.h"
 #include "extensions/common/constants.h"
@@ -73,6 +80,7 @@
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/webauthn/local_credential_management_win.h"
 #include "device/fido/win/authenticator.h"
+#include "device/fido/win/webauthn_api.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -435,6 +443,14 @@ bool ChromeAuthenticatorRequestDelegate::DoesBlockRequestOnFailure(
     return false;
   }
 
+  // If the UI was already in the state where we asked the user to complete the
+  // transaction on the other device then any errors are immediately resolved.
+  // Very likely the user canceled on the phone and doesn't want to see another
+  // error UI on the desktop.
+  if (cable_device_ready_) {
+    return false;
+  }
+
   switch (reason) {
     case InterestingFailureReason::kTimeout:
       dialog_model_->OnRequestTimeout();
@@ -474,6 +490,8 @@ bool ChromeAuthenticatorRequestDelegate::DoesBlockRequestOnFailure(
       break;
     case InterestingFailureReason::kWinUserCancelled:
       return dialog_model_->OnWinUserCancelled();
+    case InterestingFailureReason::kHybridTransportError:
+      return dialog_model_->OnHybridTransportError();
   }
   return true;
 }
@@ -596,6 +614,7 @@ void ChromeAuthenticatorRequestDelegate::ConfigureCable(
       known_devices->synced_devices =
           g_observer->GetCablePairingsFromSyncedDevices();
     }
+    can_use_synced_phone_passkeys_ = !known_devices->synced_devices.empty();
     paired_phones = cablev2::MergeDevices(std::move(known_devices),
                                           &icu::Locale::getDefault());
 
@@ -610,8 +629,13 @@ void ChromeAuthenticatorRequestDelegate::ConfigureCable(
     if (!paired_phones.empty()) {
       for (size_t i = 0; i < paired_phones.size(); i++) {
         const auto& phone = paired_phones[i];
-        paired_phone_entries.emplace_back(phone->name, i,
-                                          phone->peer_public_key_x962);
+        paired_phone_entries.emplace_back(
+            phone->from_sync_deviceinfo
+                ? AuthenticatorRequestDialogModel::PairedPhone::PairingSource::
+                      kSyncDeviceInfo
+                : AuthenticatorRequestDialogModel::PairedPhone::PairingSource::
+                      kQR,
+            phone->name, i, phone->peer_public_key_x962);
         phone_names_.push_back(phone->name);
         phone_public_keys_.push_back(phone->peer_public_key_x962);
       }
@@ -620,7 +644,17 @@ void ChromeAuthenticatorRequestDelegate::ConfigureCable(
     }
   }
 
+#if BUILDFLAG(IS_WIN)
+  device::WinWebAuthnApi* const webauthn_api =
+      device::WinWebAuthnApi::GetDefault();
+  const bool system_handles_cable =
+      webauthn_api && webauthn_api->SupportsHybrid();
+#else
+  constexpr bool system_handles_cable = false;
+#endif
+
   const bool non_extension_cablev2_enabled =
+      !system_handles_cable &&
       (!cable_extension_permitted ||
        (!cable_extension_provided &&
         request_type == device::FidoRequestType::kGetAssertion) ||
@@ -649,6 +683,9 @@ void ChromeAuthenticatorRequestDelegate::ConfigureCable(
         base::BindRepeating(
             &ChromeAuthenticatorRequestDelegate::OnInvalidatedCablePairing,
             weak_ptr_factory_.GetWeakPtr()));
+    discovery_factory->set_cable_event_callback(
+        base::BindRepeating(&ChromeAuthenticatorRequestDelegate::OnCableEvent,
+                            weak_ptr_factory_.GetWeakPtr()));
     if (SystemNetworkContextManager::GetInstance()) {
       discovery_factory->set_network_context(
           SystemNetworkContextManager::GetInstance()->GetContext());
@@ -676,6 +713,17 @@ void ChromeAuthenticatorRequestDelegate::ConfigureCable(
                                       qr_generator_key,
                                       std::move(paired_phones));
   }
+
+#if BUILDFLAG(IS_MAC)
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(GetRenderFrameHost());
+  BrowserWindow* browser_window =
+      BrowserWindow::FindBrowserWindowWithWebContents(web_contents);
+  if (browser_window) {
+    discovery_factory->set_nswindow(reinterpret_cast<uintptr_t>(
+        browser_window->GetNativeWindow().GetNativeNSWindow()));
+  }
+#endif
 }
 
 void ChromeAuthenticatorRequestDelegate::SelectAccount(
@@ -734,10 +782,15 @@ void ChromeAuthenticatorRequestDelegate::SetUserEntityForMakeCredentialRequest(
 
 void ChromeAuthenticatorRequestDelegate::OnTransportAvailabilityEnumerated(
     device::FidoRequestHandlerBase::TransportAvailabilityInfo data) {
+  if (base::FeatureList::IsEnabled(device::kWebAuthnListSyncedPasskeys) &&
+      base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials) &&
+      !IsVirtualEnvironmentEnabled() && can_use_synced_phone_passkeys_) {
+    GetPhoneContactableGpmPasskeysForRpId(dialog_model_->relying_party_id(),
+                                          &data.recognized_credentials);
+  }
   if (is_conditional_ && !credential_filter_.empty()) {
     std::vector<device::DiscoverableCredentialMetadata> filtered_list;
-    for (auto& platform_credential :
-         data.recognized_platform_authenticator_credentials) {
+    for (auto& platform_credential : data.recognized_credentials) {
       for (auto& filter_credential : credential_filter_) {
         if (platform_credential.cred_id == filter_credential.id) {
           filtered_list.push_back(platform_credential);
@@ -745,8 +798,7 @@ void ChromeAuthenticatorRequestDelegate::OnTransportAvailabilityEnumerated(
         }
       }
     }
-    data.recognized_platform_authenticator_credentials =
-        std::move(filtered_list);
+    data.recognized_credentials = std::move(filtered_list);
   }
 
   if (g_observer) {
@@ -928,4 +980,40 @@ void ChromeAuthenticatorRequestDelegate::OnInvalidatedCablePairing(
   // Contact the next phone with the same name, if any, given that no
   // notification has been sent.
   dialog_model_->OnPhoneContactFailed(phone_names_.at(failed_contact_index));
+}
+
+void ChromeAuthenticatorRequestDelegate::OnCableEvent(
+    device::cablev2::Event event) {
+  if (!base::FeatureList::IsEnabled(device::kWebAuthnNewHybridUI)) {
+    return;
+  }
+
+  if (event == device::cablev2::Event::kReady) {
+    cable_device_ready_ = true;
+  }
+
+  dialog_model_->OnCableEvent(event);
+}
+
+void ChromeAuthenticatorRequestDelegate::GetPhoneContactableGpmPasskeysForRpId(
+    const std::string& rp_id,
+    std::vector<device::DiscoverableCredentialMetadata>* passkeys) {
+  webauthn::PasskeyModel* passkey_model =
+      PasskeyModelFactory::GetInstance()->GetForProfile(
+          Profile::FromBrowserContext(GetBrowserContext()));
+  CHECK(passkey_model);
+  for (const sync_pb::WebauthnCredentialSpecifics& passkey :
+       passkey_model->GetAllPasskeys()) {
+    if (passkey.rp_id() != dialog_model_->relying_party_id()) {
+      continue;
+    }
+    passkeys->emplace_back(
+        device::AuthenticatorType::kPhone, passkey.rp_id(),
+        std::vector<uint8_t>(passkey.credential_id().begin(),
+                             passkey.credential_id().end()),
+        device::PublicKeyCredentialUserEntity(
+            std::vector<uint8_t>(passkey.user_id().begin(),
+                                 passkey.user_id().end()),
+            passkey.user_name(), passkey.user_display_name()));
+  }
 }

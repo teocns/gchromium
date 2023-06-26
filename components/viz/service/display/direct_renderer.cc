@@ -29,7 +29,7 @@
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/resources/platform_color.h"
-#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/common/viz_utils.h"
 #include "components/viz/service/display/bsp_tree.h"
 #include "components/viz/service/display/bsp_walk_action.h"
@@ -42,6 +42,10 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/geometry/transform_util.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "components/viz/common/quads/texture_draw_quad.h"
+#endif  // BUILDFLAG(IS_WIN)
 
 namespace {
 
@@ -339,6 +343,25 @@ void DirectRenderer::DrawFrame(
         &(current_frame()->output_surface_plane));
   }
 
+#if BUILDFLAG(IS_WIN)
+  // On Windows stream video texture quads are currently only supported in
+  // overlays. There are scenarios where promotion may fail today, (e.g.
+  // if the quad is in a non-root render pass or video capture is enabled)
+  // so we do an extra pass to ensure these quads aren't processed by setting
+  // their visible rect to empty.
+  for (const auto& pass : *render_passes_in_draw_order) {
+    QuadList* ql = &pass->quad_list;
+    for (auto it = ql->begin(); it != ql->end(); ++it) {
+      if (it->material == DrawQuad::Material::kTextureContent) {
+        const TextureDrawQuad* tex_quad = TextureDrawQuad::MaterialCast(*it);
+        if (tex_quad->is_stream_video) {
+          it->visible_rect = gfx::Rect();
+        }
+      }
+    }
+  }
+#endif  // BUILDFLAG(IS_WIN)
+
   // Only reshape when we know we are going to draw. Otherwise, the reshape
   // can leave the window at the wrong size if we never draw and the proper
   // viewport size is never set.
@@ -487,9 +510,7 @@ bool DirectRenderer::ShouldSkipQuad(const DrawQuad& quad,
     // visible bounds.
     auto filter_it = render_pass_filters_.find(rpdq->render_pass_id);
     if (filter_it != render_pass_filters_.end()) {
-      gfx::RectF rect(target_rect);
-      rect.Outset(filter_it->second->MaximumPixelMovement());
-      target_rect = gfx::ToEnclosingRect(rect);
+      target_rect = filter_it->second->ExpandRectForPixelMovement(target_rect);
     }
   }
 
@@ -566,6 +587,11 @@ const absl::optional<gfx::RRectF> DirectRenderer::BackdropFilterBoundsForPass(
   return it == render_pass_backdrop_filter_bounds_.end()
              ? absl::optional<gfx::RRectF>()
              : it->second;
+}
+
+bool DirectRenderer::SupportsBGRA() const {
+  // TODO(penghuang): check supported format correctly.
+  return true;
 }
 
 void DirectRenderer::FlushPolygons(
@@ -1137,9 +1163,8 @@ gfx::ColorSpace DirectRenderer::CurrentRenderPassColorSpace() const {
 
 SharedImageFormat DirectRenderer::GetColorSpaceSharedImageFormat(
     gfx::ColorSpace color_space) const {
-  // TODO(penghuang): check supported format correctly.
   gpu::Capabilities caps;
-  caps.texture_format_bgra8888 = true;
+  caps.texture_format_bgra8888 = SupportsBGRA();
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // TODO(crbug.com/1317015): add support RGBA_F16 in LaCrOS.

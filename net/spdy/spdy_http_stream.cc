@@ -24,7 +24,6 @@
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_with_source.h"
 #include "net/spdy/spdy_http_utils.h"
-#include "net/spdy/spdy_log_util.h"
 #include "net/spdy/spdy_session.h"
 #include "net/third_party/quiche/src/quiche/spdy/core/http2_header_block.h"
 #include "net/third_party/quiche/src/quiche/spdy/core/spdy_protocol.h"
@@ -50,22 +49,16 @@ bool ValidatePushedHeaders(
     if (!request_info.extra_headers.GetHeader(HttpRequestHeaders::kRange,
                                               &client_request_range)) {
       // Client initiated request is not a range request.
-      SpdySession::RecordSpdyPushedStreamFateHistogram(
-          SpdyPushedStreamFate::kClientRequestNotRange);
       return false;
     }
     spdy::Http2HeaderBlock::const_iterator pushed_request_range_it =
         pushed_request_headers.find("range");
     if (pushed_request_range_it == pushed_request_headers.end()) {
       // Pushed request is not a range request.
-      SpdySession::RecordSpdyPushedStreamFateHistogram(
-          SpdyPushedStreamFate::kPushedRequestNotRange);
       return false;
     }
     if (client_request_range != pushed_request_range_it->second) {
       // Client and pushed request ranges do not match.
-      SpdySession::RecordSpdyPushedStreamFateHistogram(
-          SpdyPushedStreamFate::kRangeMismatch);
       return false;
     }
   }
@@ -77,20 +70,14 @@ bool ValidatePushedHeaders(
   if (!vary_data.Init(pushed_request_info,
                       *pushed_response_info.headers.get())) {
     // Pushed response did not contain non-empty Vary header.
-    SpdySession::RecordSpdyPushedStreamFateHistogram(
-        SpdyPushedStreamFate::kAcceptedNoVary);
     return true;
   }
 
   if (vary_data.MatchesRequest(request_info,
                                *pushed_response_info.headers.get())) {
-    SpdySession::RecordSpdyPushedStreamFateHistogram(
-        SpdyPushedStreamFate::kAcceptedMatchingVary);
     return true;
   }
 
-  SpdySession::RecordSpdyPushedStreamFateHistogram(
-      SpdyPushedStreamFate::kVaryMismatch);
   return false;
 }
 
@@ -101,13 +88,11 @@ bool ValidatePushedHeaders(
 const size_t SpdyHttpStream::kRequestBodyBufferSize = kMaxSpdyFrameChunkSize;
 
 SpdyHttpStream::SpdyHttpStream(const base::WeakPtr<SpdySession>& spdy_session,
-                               spdy::SpdyStreamId pushed_stream_id,
                                NetLogSource source_dependency,
                                std::set<std::string> dns_aliases)
     : MultiplexedHttpStream(
           std::make_unique<MultiplexedSessionHandle>(spdy_session)),
       spdy_session_(spdy_session),
-      pushed_stream_id_(pushed_stream_id),
       is_reused_(spdy_session_->IsReused()),
       source_dependency_(source_dependency),
       dns_aliases_(std::move(dns_aliases)) {
@@ -134,20 +119,6 @@ int SpdyHttpStream::InitializeStream(bool can_send_early,
   DCHECK(request_info_);
   if (!spdy_session_)
     return ERR_CONNECTION_CLOSED;
-
-  if (pushed_stream_id_ != kNoPushedStreamFound) {
-    int error = spdy_session_->GetPushedStream(
-        request_info_->url, pushed_stream_id_, priority, &stream_);
-    if (error != OK)
-      return error;
-
-    // |stream_| may be NULL even if OK was returned.
-    if (stream_) {
-      DCHECK_EQ(stream_->type(), SPDY_PUSH_STREAM);
-      InitializeStreamHelper();
-      return OK;
-    }
-  }
 
   int rv = stream_request_.StartRequest(
       SPDY_REQUEST_RESPONSE_STREAM, spdy_session_, request_info_->url,
@@ -342,11 +313,6 @@ int SpdyHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
 
   spdy::Http2HeaderBlock headers;
   CreateSpdyHeadersFromHttpRequest(*request_info_, request_headers, &headers);
-  stream_->net_log().AddEvent(
-      NetLogEventType::HTTP_TRANSACTION_HTTP2_SEND_REQUEST_HEADERS,
-      [&](NetLogCaptureMode capture_mode) {
-        return Http2HeaderBlockNetLogParams(&headers, capture_mode);
-      });
   DispatchRequestHeadersCallback(headers);
 
   bool will_send_data =

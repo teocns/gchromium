@@ -1587,6 +1587,11 @@ void AXPlatformNodeBase::ComputeAttributes(PlatformAttributeList* attributes) {
   std::string details_roles = ComputeDetailsRoles();
   if (!details_roles.empty())
     AddAttributeToList("details-roles", details_roles, attributes);
+
+  if (ui::IsLink(GetRole())) {
+    AddAttributeToList(ax::mojom::StringAttribute::kLinkTarget, "link-target",
+                       attributes);
+  }
 }
 
 void AXPlatformNodeBase::AddAttributeToList(
@@ -1946,7 +1951,10 @@ int AXPlatformNodeBase::GetHypertextOffsetFromEndpoint(
   if (endpoint_index_in_common_parent > index_in_common_parent)
     return static_cast<int>(GetHypertext().size());
 
-  NOTREACHED();
+  // TODO(crbug.com/1423589): Make sure this doesn't fire then turn the last
+  // conditional into a CHECK_GT(endpoint_index_in_common_parent,
+  // index_in_common_parent); and remove this code path.
+  DUMP_WILL_BE_NOTREACHED_NORETURN();
   return -1;
 }
 
@@ -2327,12 +2335,16 @@ int AXPlatformNodeBase::NearestTextIndexToPoint(gfx::Point point) {
 ui::TextAttributeList AXPlatformNodeBase::ComputeTextAttributes() const {
   ui::TextAttributeList attributes;
 
-  // We include list markers for now, but there might be other objects that are
-  // auto generated.
-  // TODO(nektar): Compute what objects are auto-generated in Blink and
-  // TODO(1278249): add OCRed text from Screen AI Service too.
-  if (GetRole() == ax::mojom::Role::kListMarker)
+  // From the IA2 Spec:
+  //
+  // Occasionally, word processors will automatically generate characters which
+  // appear on a line along with editable text. The characters are not
+  // themselves editable, but are part of the document. The most common examples
+  // of automatically inserted characters are in bulleted and numbered lists.
+  if (IsTextField() &&
+      HasBoolAttribute(ax::mojom::BoolAttribute::kNotUserSelectableStyle)) {
     attributes.emplace_back("auto-generated", "true");
+  }
 
   int color;
   if ((color = delegate_->GetBackgroundColor())) {

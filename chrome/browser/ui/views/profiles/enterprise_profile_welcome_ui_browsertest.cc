@@ -7,12 +7,10 @@
 #include <memory>
 
 #include "base/functional/callback_forward.h"
-#include "base/scoped_environment_variable_override.h"
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
+#include "chrome/browser/signin/signin_browser_test_base.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/signin/profile_colors_util.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/profiles/profile_management_step_controller.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_view_test_utils.h"
@@ -50,36 +48,28 @@ std::string ParamToTestSuffix(
 
 // Permutations of supported parameters.
 const EnterpriseWelcomeTestParam kWindowTestParams[] = {
-    // Naming note: "Fre" refers to the TangibleSync style variants of the UI,
-    // which is now the default.
-    {.pixel_test_param = {.test_suffix = "EnterpriseWelcomeFre"}},
-    {.pixel_test_param = {.test_suffix = "EnterpriseWelcomeFreDarkTheme",
-                          .use_dark_theme = true}},
-    {.pixel_test_param = {.test_suffix = "EnterpriseWelcomeFreRtl",
+    {.pixel_test_param = {.test_suffix = "Regular"}},
+    {.pixel_test_param = {.test_suffix = "DarkTheme", .use_dark_theme = true}},
+    {.pixel_test_param = {.test_suffix = "Rtl",
                           .use_right_to_left_language = true}},
-    {.pixel_test_param = {.test_suffix = "EnterpriseWelcomeFreSmallWindow",
+    {.pixel_test_param = {.test_suffix = "SmallWindow",
                           .use_small_window = true}},
-    {.pixel_test_param = {.test_suffix = "EnterpriseWelcomeFreCR2023",
+    {.pixel_test_param = {.test_suffix = "CR2023",
                           .use_chrome_refresh_2023_style = true}},
 };
 
 const EnterpriseWelcomeTestParam kDialogTestParams[] = {
-    // Naming note: "Fre" refers to the TangibleSync style variants of the UI,
-    // which is now the default.
-    {.pixel_test_param = {.test_suffix = "EnterpriseWelcomeFre"}},
-    {.pixel_test_param = {.test_suffix =
-                              "EnterpriseWelcomeFreWithLinkDataCheckbox"},
+    {.pixel_test_param = {.test_suffix = "Regular"}},
+    {.pixel_test_param = {.test_suffix = "WithLinkDataCheckbox"},
      .show_link_data_checkbox = true},
-    {.pixel_test_param =
-         {.test_suffix = "EnterpriseWelcomeFreWithProfileCreationRequired"},
+    {.pixel_test_param = {.test_suffix = "WithProfileCreationRequired"},
      .profile_creation_required_by_policy = true},
-    {.pixel_test_param = {.test_suffix = "EnterpriseWelcomeFreDarkTheme",
-                          .use_dark_theme = true},
+    {.pixel_test_param = {.test_suffix = "DarkTheme", .use_dark_theme = true},
      .show_link_data_checkbox = true},
-    {.pixel_test_param = {.test_suffix = "EnterpriseWelcomeFreRtl",
+    {.pixel_test_param = {.test_suffix = "Rtl",
                           .use_right_to_left_language = true},
      .show_link_data_checkbox = true},
-    {.pixel_test_param = {.test_suffix = "EnterpriseWelcomeFreCR2023",
+    {.pixel_test_param = {.test_suffix = "CR2023",
                           .use_chrome_refresh_2023_style = true}},
 };
 
@@ -122,7 +112,7 @@ class EnterpriseWelcomeStepControllerForTest
         /*browser=*/nullptr,
         EnterpriseProfileWelcomeUI::ScreenType::kEntepriseAccountSyncEnabled,
         *account_info_, /*profile_creation_required_by_policy=*/false,
-        /*show_link_data_option=*/false, /*profile_color=*/absl::nullopt,
+        /*show_link_data_option=*/false,
         /*proceed_callback*/ base::DoNothing());
 
     if (step_shown_callback) {
@@ -140,28 +130,19 @@ class EnterpriseWelcomeStepControllerForTest
 }  // namespace
 
 class EnterpriseWelcomeUIWindowPixelTest
-    : public UiBrowserTest,
+    : public ProfilesPixelTestBaseT<UiBrowserTest>,
       public testing::WithParamInterface<EnterpriseWelcomeTestParam> {
  public:
-  EnterpriseWelcomeUIWindowPixelTest() {
-    std::vector<base::test::FeatureRef> enabled_features = {};
-    std::vector<base::test::FeatureRef> disabled_features = {};
-    InitPixelTestFeatures(GetParam().pixel_test_param, scoped_feature_list_,
-                          enabled_features, disabled_features);
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    SetUpPixelTestCommandLine(GetParam().pixel_test_param, scoped_env_override_,
-                              command_line);
-  }
+  EnterpriseWelcomeUIWindowPixelTest()
+      : ProfilesPixelTestBaseT<UiBrowserTest>(GetParam().pixel_test_param) {}
 
   void ShowUi(const std::string& name) override {
     ui::ScopedAnimationDurationScaleMode disable_animation(
         ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
     DCHECK(browser());
 
-    auto account_info = SignInWithPrimaryAccount(
-        browser()->profile(), AccountManagementStatus::kManaged);
+    auto account_info =
+        SignInWithPrimaryAccount(AccountManagementStatus::kManaged);
     profile_picker_view_ = new ProfileManagementStepTestView(
         ProfilePicker::Params::ForFirstRun(browser()->profile()->GetPath(),
                                            base::DoNothing()),
@@ -187,7 +168,7 @@ class EnterpriseWelcomeUIWindowPixelTest
         base::StrCat({test_info->test_case_name(), "_", test_info->name()});
 
     return VerifyPixelUi(widget, "EnterpriseWelcomeUIWindowPixelTest",
-                         screenshot_name);
+                         screenshot_name) != ui::test::ActionResult::kFailed;
   }
 
   void WaitForUserDismissal() override {
@@ -200,10 +181,8 @@ class EnterpriseWelcomeUIWindowPixelTest
     return profile_picker_view_->GetWidget();
   }
 
-  base::test::ScopedFeatureList scoped_feature_list_;
   raw_ptr<ProfileManagementStepTestView, DanglingUntriaged>
       profile_picker_view_;
-  std::unique_ptr<base::ScopedEnvironmentVariableOverride> scoped_env_override_;
 };
 
 IN_PROC_BROWSER_TEST_P(EnterpriseWelcomeUIWindowPixelTest, InvokeUi_default) {
@@ -216,14 +195,11 @@ INSTANTIATE_TEST_SUITE_P(,
                          &ParamToTestSuffix);
 
 class EnterpriseWelcomeUIDialogPixelTest
-    : public DialogBrowserTest,
+    : public ProfilesPixelTestBaseT<DialogBrowserTest>,
       public testing::WithParamInterface<EnterpriseWelcomeTestParam> {
  public:
-  EnterpriseWelcomeUIDialogPixelTest() {
-    std::vector<base::test::FeatureRef> enabled_features = {};
-    std::vector<base::test::FeatureRef> disabled_features = {};
-    InitPixelTestFeatures(GetParam().pixel_test_param, scoped_feature_list_,
-                          enabled_features, disabled_features);
+  EnterpriseWelcomeUIDialogPixelTest()
+      : ProfilesPixelTestBaseT<DialogBrowserTest>(GetParam().pixel_test_param) {
   }
 
   ~EnterpriseWelcomeUIDialogPixelTest() override = default;
@@ -231,8 +207,8 @@ class EnterpriseWelcomeUIDialogPixelTest
   void ShowUi(const std::string& name) override {
     DCHECK(browser());
 
-    auto account_info = SignInWithPrimaryAccount(
-        browser()->profile(), AccountManagementStatus::kManaged);
+    auto account_info =
+        SignInWithPrimaryAccount(AccountManagementStatus::kManaged);
     auto url = GURL(chrome::kChromeUIEnterpriseProfileWelcomeURL);
 
     // Wait for the web content to load to be able to properly render the
@@ -250,21 +226,11 @@ class EnterpriseWelcomeUIDialogPixelTest
     auto* controller = browser()->signin_view_controller();
     controller->ShowModalEnterpriseConfirmationDialog(
         account_info, GetParam().profile_creation_required_by_policy,
-        GetParam().show_link_data_checkbox,
-        GetDefaultProfileThemeColors().profile_highlight_color,
-        base::DoNothing());
+        GetParam().show_link_data_checkbox, base::DoNothing());
 
     widget_waiter.WaitIfNeededAndGet();
     observer.Wait();
   }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    SetUpPixelTestCommandLine(GetParam().pixel_test_param, scoped_env_override_,
-                              command_line);
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-  std::unique_ptr<base::ScopedEnvironmentVariableOverride> scoped_env_override_;
 };
 
 IN_PROC_BROWSER_TEST_P(EnterpriseWelcomeUIDialogPixelTest, InvokeUi_default) {

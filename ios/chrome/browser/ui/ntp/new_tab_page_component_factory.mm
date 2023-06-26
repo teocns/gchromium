@@ -7,8 +7,8 @@
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
@@ -61,6 +61,8 @@
       ios::TemplateURLServiceFactory::GetForBrowserState(browserState);
   AuthenticationService* authService =
       AuthenticationServiceFactory::GetForBrowserState(browserState);
+  DiscoverFeedService* discoverFeedService =
+      DiscoverFeedServiceFactory::GetForBrowserState(browserState);
   return [[NewTabPageMediator alloc]
               initWithWebState:webState
             templateURLService:templateURLService
@@ -72,7 +74,9 @@
                                    GetForBrowserState(browserState)
                     logoVendor:ios::provider::CreateLogoVendor(browser,
                                                                webState)
-      identityDiscImageUpdater:imageUpdater];
+      identityDiscImageUpdater:imageUpdater
+                   isIncognito:browserState->IsOffTheRecord()
+           discoverFeedService:discoverFeedService];
 }
 
 - (NewTabPageViewController*)NTPViewController {

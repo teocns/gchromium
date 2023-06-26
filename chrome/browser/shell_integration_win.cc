@@ -61,12 +61,12 @@ namespace shell_integration {
 
 namespace {
 
-BASE_FEATURE(kWin10UnattendedDefault,
-             "Win10UnattendedDefault",
+BASE_FEATURE(kWin10UnattendedDefaultExportDerived,
+             "Win10UnattendedDefaultExportDerived",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool CanSetAsDefaultDirectly() {
-  return base::FeatureList::IsEnabled(kWin10UnattendedDefault);
+  return base::FeatureList::IsEnabled(kWin10UnattendedDefaultExportDerived);
 }
 
 // Helper function for GetAppId to generates profile id
@@ -863,9 +863,11 @@ void MigrateTaskbarPins(base::OnceClosure completion_callback) {
   // BEST_EFFORT means it will be scheduled after higher-priority tasks, but
   // MUST_USE_FOREGROUND means that when it is scheduled it will run in the
   // foregound.
+  // SKIP_ON_SHUTDOWN means the task won't start after shutdown has started.
   base::ThreadPool::CreateCOMSTATaskRunner(
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-       base::ThreadPolicy::MUST_USE_FOREGROUND})
+       base::ThreadPolicy::MUST_USE_FOREGROUND,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
       ->PostTaskAndReply(
           FROM_HERE, base::BindOnce([]() {
             base::FilePath taskbar_path;

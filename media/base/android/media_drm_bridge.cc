@@ -19,6 +19,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -92,10 +93,10 @@ std::string ConvertInitDataType(media::EmeInitDataType init_data_type) {
       return "video/mp4";
     case media::EmeInitDataType::KEYIDS:
       return "keyids";
-    default:
-      NOTREACHED();
-      return "unknown";
+    case media::EmeInitDataType::UNKNOWN:
+      NOTREACHED_NORETURN();
   }
+  NOTREACHED_NORETURN();
 }
 
 // Convert CdmSessionType to MediaDrmKeyType supported by MediaDrm.
@@ -123,8 +124,7 @@ CdmMessageType GetMessageType(RequestType request_type) {
       return CdmMessageType::LICENSE_RELEASE;
   }
 
-  NOTREACHED();
-  return CdmMessageType::LICENSE_REQUEST;
+  NOTREACHED_NORETURN();
 }
 
 CdmKeyInformation::KeyStatus ConvertKeyStatus(KeyStatus key_status,
@@ -158,8 +158,7 @@ CdmKeyInformation::KeyStatus ConvertKeyStatus(KeyStatus key_status,
       return CdmKeyInformation::EXPIRED;
   }
 
-  NOTREACHED();
-  return CdmKeyInformation::INTERNAL_ERROR;
+  NOTREACHED_NORETURN();
 }
 
 class KeySystemManager {
@@ -220,10 +219,7 @@ KeySystemManager* GetKeySystemManager() {
 // resolved.
 bool IsKeySystemSupportedWithTypeImpl(const std::string& key_system,
                                       const std::string& container_mime_type) {
-  if (key_system.empty()) {
-    NOTREACHED();
-    return false;
-  }
+  CHECK(!key_system.empty());
 
   UUID scheme_uuid = GetKeySystemManager()->GetUUID(key_system);
   if (scheme_uuid.empty()) {
@@ -397,6 +393,7 @@ void MediaDrmBridge::SetServerCertificate(
     ResolvePromise(promise_id);
   } else {
     RejectPromise(promise_id, CdmPromise::Exception::TYPE_ERROR,
+                  MediaDrmSystemCode::SET_SERVER_CERTIFICATE_FAILED,
                   "Set server certificate failed.");
   }
 }
@@ -427,6 +424,7 @@ void MediaDrmBridge::CreateSessionAndGenerateRequest(
                                      &init_data_from_delegate,
                                      &optional_parameters_from_delegate)) {
         RejectPromise(promise_id, CdmPromise::Exception::TYPE_ERROR,
+                      MediaDrmSystemCode::CREATE_SESSION_FAILED,
                       "Invalid init data.");
         return;
       }
@@ -472,6 +470,7 @@ void MediaDrmBridge::LoadSession(
 
   if (session_type != CdmSessionType::kPersistentLicense) {
     RejectPromise(promise_id, CdmPromise::Exception::NOT_SUPPORTED_ERROR,
+                  MediaDrmSystemCode::NOT_PERSISTENT_LICENSE,
                   "LoadSession() is only supported for 'persistent-license'.");
     return;
   }
@@ -598,9 +597,11 @@ void MediaDrmBridge::ResolvePromiseWithSession(uint32_t promise_id,
 
 void MediaDrmBridge::RejectPromise(uint32_t promise_id,
                                    CdmPromise::Exception exception_code,
+                                   MediaDrmSystemCode system_code,
                                    const std::string& error_message) {
   DVLOG(2) << __func__;
-  cdm_promise_adapter_.RejectPromise(promise_id, exception_code, 0,
+  cdm_promise_adapter_.RejectPromise(promise_id, exception_code,
+                                     base::checked_cast<uint32_t>(system_code),
                                      error_message);
 }
 
@@ -703,11 +704,15 @@ void MediaDrmBridge::OnPromiseRejected(
     JNIEnv* env,
     const JavaParamRef<jobject>& j_media_drm,
     jint j_promise_id,
+    jint j_system_code,
     const JavaParamRef<jstring>& j_error_message) {
+  CHECK(j_system_code >= static_cast<jint>(MediaDrmSystemCode::MIN_VALUE) &&
+        j_system_code <= static_cast<jint>(MediaDrmSystemCode::MAX_VALUE));
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&MediaDrmBridge::RejectPromise, weak_factory_.GetWeakPtr(),
                      j_promise_id, CdmPromise::Exception::NOT_SUPPORTED_ERROR,
+                     static_cast<MediaDrmSystemCode>(j_system_code),
                      ConvertJavaStringToUTF8(env, j_error_message)));
 }
 

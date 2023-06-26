@@ -111,8 +111,6 @@ HRESULT GetSidIntegrityLevel(PSID sid, MANDATORY_LEVEL* level) {
 }
 
 // Gets the mandatory integrity level of a process.
-// TODO(crbug.com/1233748): consider reusing
-// base::GetCurrentProcessIntegrityLevel().
 HRESULT GetProcessIntegrityLevel(DWORD process_id, MANDATORY_LEVEL* level) {
   HANDLE process = ::OpenProcess(PROCESS_QUERY_INFORMATION, false, process_id);
   if (!process)
@@ -357,10 +355,32 @@ std::wstring GetAppClientStateKey(const std::wstring& app_id) {
   return base::StrCat({CLIENT_STATE_KEY, app_id});
 }
 
+std::wstring GetAppCohortKey(const std::string& app_id) {
+  return GetAppCohortKey(base::ASCIIToWide(app_id));
+}
+
+std::wstring GetAppCohortKey(const std::wstring& app_id) {
+  return base::StrCat({COHORT_KEY, app_id});
+}
+
 std::wstring GetAppCommandKey(const std::wstring& app_id,
                               const std::wstring& command_id) {
   return base::StrCat(
       {GetAppClientsKey(app_id), L"\\", kRegKeyCommands, L"\\", command_id});
+}
+
+std::string GetAppAPValue(UpdaterScope scope, const std::string& app_id) {
+  base::win::RegKey client_state_key;
+  if (client_state_key.Open(
+          UpdaterScopeToHKeyRoot(scope),
+          GetAppClientStateKey(base::ASCIIToWide(app_id)).c_str(),
+          Wow6432(KEY_READ)) == ERROR_SUCCESS) {
+    std::wstring ap;
+    if (client_state_key.ReadValue(kRegValueAP, &ap) == ERROR_SUCCESS) {
+      return base::WideToASCII(ap);
+    }
+  }
+  return {};
 }
 
 std::wstring GetRegistryKeyClientsUpdater() {
@@ -440,7 +460,6 @@ HResultOr<bool> IsTokenAdmin(HANDLE token) {
   return base::ok(is_member);
 }
 
-// TODO(crbug.com/1212187): maybe handle filtered tokens.
 HResultOr<bool> IsUserAdmin() {
   return IsTokenAdmin(NULL);
 }
@@ -464,8 +483,6 @@ HResultOr<bool> IsUserNonElevatedAdmin() {
 }
 
 HResultOr<bool> IsCOMCallerAdmin() {
-  ScopedKernelHANDLE token;
-
   HRESULT hr = ::CoImpersonateClient();
   if (hr == RPC_E_CALL_COMPLETE) {
     // RPC_E_CALL_COMPLETE indicates that the caller is in-proc.
@@ -476,17 +493,23 @@ HResultOr<bool> IsCOMCallerAdmin() {
     return base::unexpected(hr);
   }
 
-  {
+  HResultOr<ScopedKernelHANDLE> token = []() -> decltype(token) {
+    ScopedKernelHANDLE token;
     absl::Cleanup co_revert_to_self = [] { ::CoRevertToSelf(); };
     if (!::OpenThreadToken(::GetCurrentThread(), TOKEN_QUERY, TRUE,
                            ScopedKernelHANDLE::Receiver(token).get())) {
-      hr = HRESULTFromLastError();
+      HRESULT hr = HRESULTFromLastError();
       LOG(ERROR) << "::OpenThreadToken failed: " << std::hex << hr;
       return base::unexpected(hr);
     }
+    return token;
+  }();
+
+  if (!token.has_value()) {
+    return base::unexpected(token.error());
   }
 
-  return IsTokenAdmin(token.get()).transform_error([](HRESULT error) {
+  return IsTokenAdmin(token.value().get()).transform_error([](HRESULT error) {
     CHECK(FAILED(error));
     LOG(ERROR) << "IsTokenAdmin failed: " << std::hex << error;
     return error;
@@ -671,15 +694,9 @@ absl::optional<base::FilePath> GetGoogleUpdateExePath(UpdaterScope scope) {
     return absl::nullopt;
   }
 
-  base::FilePath goopdate_dir =
-      goopdate_base_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
-          .AppendASCII("Update");
-  if (!base::CreateDirectory(goopdate_dir)) {
-    LOG(ERROR) << "Can't create GoogleUpdate directory: " << goopdate_dir;
-    return absl::nullopt;
-  }
-
-  return goopdate_dir.AppendASCII(base::WideToASCII(kLegacyExeName));
+  return goopdate_base_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
+      .AppendASCII("Update")
+      .Append(kLegacyExeName);
 }
 
 HRESULT DisableCOMExceptionHandling() {
@@ -1097,7 +1114,6 @@ void LogClsidEntries(REFCLSID clsid) {
       base::StrCat({base::StrCat({L"Software\\Classes\\CLSID\\",
                                   base::win::WStringFromGUID(clsid)}),
                     L"\\LocalServer32"}));
-
   for (const HKEY root : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}) {
     for (const REGSAM key_flag : {KEY_WOW64_32KEY, KEY_WOW64_64KEY}) {
       base::win::RegKey key;
@@ -1113,6 +1129,19 @@ void LogClsidEntries(REFCLSID clsid) {
       }
     }
   }
+}
+
+absl::optional<base::FilePath> GetInstallDirectoryX86(UpdaterScope scope) {
+  if (!IsSystemInstall(scope)) {
+    return GetInstallDirectory(scope);
+  }
+  base::FilePath install_dir;
+  if (!base::PathService::Get(base::DIR_PROGRAM_FILESX86, &install_dir)) {
+    LOG(ERROR) << "Can't retrieve directory for DIR_PROGRAM_FILESX86.";
+    return absl::nullopt;
+  }
+  return install_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
+      .AppendASCII(PRODUCT_FULLNAME_STRING);
 }
 
 }  // namespace updater

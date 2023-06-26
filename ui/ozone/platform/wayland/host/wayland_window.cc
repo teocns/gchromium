@@ -38,6 +38,7 @@
 #include "ui/gfx/overlay_priority_hint.h"
 #include "ui/ozone/common/bitmap_cursor.h"
 #include "ui/ozone/platform/wayland/common/wayland_overlay_config.h"
+#include "ui/ozone/platform/wayland/host/dump_util.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_data_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_event_source.h"
@@ -160,13 +161,12 @@ gfx::AcceleratedWidget WaylandWindow::GetWidget() const {
 
 void WaylandWindow::SetWindowScale(float new_scale) {
   DCHECK_GE(new_scale, 0.f);
-  if (applied_state_.window_scale == new_scale) {
-    return;
-  }
-
-  auto state = applied_state_;
+  auto state = GetLatestRequestedState();
   state.window_scale = new_scale;
-
+  // Note that we still need to call this even if the state does not change,
+  // because we want requests directly from the client (us) to be applied
+  // immediately, since that's what PlatformWindow expects. Also, RequestState
+  // may modify the state before applying it.
   RequestStateFromClient(state);
 }
 
@@ -333,6 +333,39 @@ void WaylandWindow::OnChannelDestroyed() {
                                      std::move(subsurfaces_to_overlays)));
 }
 
+void WaylandWindow::DumpState(std::ostream& out) const {
+  constexpr auto kWindowTypeToString =
+      base::MakeFixedFlatMap<PlatformWindowType, const char*>(
+          {{PlatformWindowType::kWindow, "window"},
+           {PlatformWindowType::kPopup, "popup"},
+           {PlatformWindowType::kMenu, "menu"},
+           {PlatformWindowType::kTooltip, "tooltip"},
+           {PlatformWindowType::kDrag, "drag"},
+           {PlatformWindowType::kBubble, "bubble"}});
+  out << "type=" << GetMapValueOrDefault(kWindowTypeToString, type_)
+      << ", bounds_in_dip=" << GetBoundsInDIP().ToString()
+      << ", bounds_in_pixels=" << GetBoundsInPixels().ToString()
+      << ", restore_bounds_dip=" << restored_bounds_dip_.ToString()
+      << ", overlay_delegation="
+      << (wayland_overlay_delegation_enabled_ ? "enabled" : "disabled");
+  if (frame_insets_px_) {
+    out << ", frame_insets=" << frame_insets_px_->ToString();
+  }
+  if (has_touch_focus_) {
+    out << ", has_touch_focus";
+  }
+  out << ", ui_scale=" << ui_scale_;
+  constexpr auto kOpacityToString =
+      base::MakeFixedFlatMap<PlatformWindowOpacity, const char*>(
+          {{PlatformWindowOpacity::kInferOpacity, "infer"},
+           {PlatformWindowOpacity::kOpaqueWindow, "opaque"},
+           {PlatformWindowOpacity::kTranslucentWindow, "translucent"}});
+  out << ", opacity=" << GetMapValueOrDefault(kOpacityToString, opacity_);
+  if (shutting_down_) {
+    out << ", shutting_down";
+  }
+}
+
 bool WaylandWindow::SupportsConfigureMinimizedState() const {
   return false;
 }
@@ -370,8 +403,11 @@ gfx::Rect WaylandWindow::GetBoundsInPixels() const {
 }
 
 void WaylandWindow::SetBoundsInDIP(const gfx::Rect& bounds_dip) {
-  auto state = applied_state_;
+  auto state = GetLatestRequestedState();
   state.bounds_dip = bounds_dip;
+  // Call this even if the bounds haven't changed, as requesting from the client
+  // forces applying the state, which may (currently) not be applied if it was
+  // throttled. Also, RequestState may modify the state before applying it.
   RequestStateFromClient(state);
 }
 
@@ -655,7 +691,11 @@ void WaylandWindow::OnDragLeave() {
 }
 
 void WaylandWindow::OnDragSessionClose(DragOperation operation) {
-  DCHECK(drag_finished_callback_);
+  if (!drag_finished_callback_) {
+    // WaylandWindow::PrepareForShutdown() is already called. This window
+    // is about to shut down. Do nothing and return.
+    return;
+  }
   std::move(drag_finished_callback_).Run(operation);
   connection()->event_source()->ResetPointerFlags();
   std::move(drag_loop_quit_closure_).Run();
@@ -670,6 +710,18 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
 
   PlatformWindowDelegate::State state;
   state.bounds_dip = properties.bounds;
+
+  // Make sure we don't store empty bounds, or else later on we might send an
+  // xdg_toplevel.set_window_geometry() request with zero width and height,
+  // which will result in a protocol error:
+  // "The width and height of the effective window geometry must be greater than
+  // zero. Setting an invalid size will raise an invalid_size error."
+  // This can happen when a test doesn't set `properties.bounds`, but there have
+  // also been crashes in production because of this (crbug.com/1435478).
+  if (state.bounds_dip.IsEmpty()) {
+    state.bounds_dip = gfx::Rect(0, 0, 1, 1);
+  }
+
   // Properties contain DIP bounds but the buffer scale is initially 1 so it's
   // OK to assign.  The bounds will be recalculated when the buffer scale
   // changes.
@@ -715,6 +767,7 @@ bool WaylandWindow::Initialize(PlatformWindowInitProperties properties) {
 
   std::vector<gfx::Rect> region{gfx::Rect{latched_state().size_px}};
   root_surface_->set_opaque_region(&region);
+  root_surface_->EnableTrustedDamageIfPossible();
   root_surface_->ApplyPendingState();
 
   connection_->Flush();
@@ -781,6 +834,10 @@ bool WaylandWindow::IsActive() const {
 }
 
 WaylandPopup* WaylandWindow::AsWaylandPopup() {
+  return nullptr;
+}
+
+WaylandToplevelWindow* WaylandWindow::AsWaylandToplevelWindow() {
   return nullptr;
 }
 
@@ -1000,8 +1057,7 @@ void WaylandWindow::UpdateCursorShape(scoped_refptr<BitmapCursor> cursor) {
 void WaylandWindow::ProcessPendingConfigureState(uint32_t serial) {
   // For values not specified in pending_configure_state_, use the latest
   // requested values.
-  auto state = in_flight_requests_.empty() ? applied_state_
-                                           : in_flight_requests_.back().state;
+  auto state = GetLatestRequestedState();
   if (pending_configure_state_.bounds_dip.has_value()) {
     state.bounds_dip = pending_configure_state_.bounds_dip.value();
   }
@@ -1063,26 +1119,22 @@ void WaylandWindow::RequestState(PlatformWindowDelegate::State state,
   state.size_px =
       gfx::ScaleToEnclosingRect(state.bounds_dip, state.window_scale).size();
 
-  if (!in_flight_requests_.empty() &&
-      in_flight_requests_.back().state == state) {
-    // If we already asked for this configure state, we can send back a higher
-    // wayland serial for ack while needing a lower viz_seq.
-    in_flight_requests_.back().serial =
-        std::max(in_flight_requests_.back().serial, serial);
+  StateRequest req{.state = state, .serial = serial};
+  if (in_flight_requests_.empty()) {
+    in_flight_requests_.push_back(req);
   } else {
-    StateRequest req;
-    req.state = state;
-    req.serial = serial;
     // Propagate largest serial number so far, if we have one, since we
     // can have configure requests with no serial number (value -1).
-    if (!in_flight_requests_.empty()) {
-      req.serial = std::max(req.serial, in_flight_requests_.back().serial);
-    }
+    req.serial = std::max(req.serial, in_flight_requests_.back().serial);
 
-    if (!in_flight_requests_.empty() && !in_flight_requests_.back().applied) {
+    if (!in_flight_requests_.back().applied) {
       // If the last request has not been applied yet, overwrite it since
       // there's no point in requesting an old state.
       in_flight_requests_.back() = req;
+    } else if (in_flight_requests_.back().state == req.state) {
+      // If we already asked for this configure state, we can send back a higher
+      // wayland serial for ack while needing a lower viz_seq.
+      in_flight_requests_.back().serial = req.serial;
     } else {
       in_flight_requests_.push_back(req);
     }

@@ -12,7 +12,6 @@
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/whats_new/constants.h"
-#import "ios/chrome/browser/ui/whats_new/feature_flags.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -66,7 +65,19 @@ bool IsWhatsNewPromoRegistered() {
 
 }  // namespace
 
+BASE_FEATURE(kWhatsNewIOSM116,
+             "WhatsNewIOSM116",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 bool WasWhatsNewUsed() {
+  if (IsWhatsNewM116Enabled()) {
+    // Remove the previous user defaults
+    [[NSUserDefaults standardUserDefaults]
+        removeObjectForKey:kWhatsNewUsageEntryKey];
+    return [[NSUserDefaults standardUserDefaults]
+        boolForKey:kWhatsNewM116UsageEntryKey];
+  }
+
   return
       [[NSUserDefaults standardUserDefaults] boolForKey:kWhatsNewUsageEntryKey];
 }
@@ -80,12 +91,13 @@ void SetWhatsNewUsed(PromosManager* promosManager) {
   DCHECK(promosManager);
   promosManager->DeregisterPromo(promos_manager::Promo::WhatsNew);
 
-  [[NSUserDefaults standardUserDefaults] setBool:YES
-                                          forKey:kWhatsNewUsageEntryKey];
-}
-
-bool IsWhatsNewEnabled() {
-  return base::FeatureList::IsEnabled(kWhatsNewIOS);
+  if (IsWhatsNewM116Enabled()) {
+    [[NSUserDefaults standardUserDefaults] setBool:YES
+                                            forKey:kWhatsNewM116UsageEntryKey];
+  } else {
+    [[NSUserDefaults standardUserDefaults] setBool:YES
+                                            forKey:kWhatsNewUsageEntryKey];
+  }
 }
 
 void setWhatsNewPromoRegistration() {
@@ -96,4 +108,56 @@ void setWhatsNewPromoRegistration() {
 bool ShouldRegisterWhatsNewPromo() {
   return !IsWhatsNewPromoRegistered() &&
          (IsSixLaunchAfterFre() || IsSixDaysAfterFre());
+}
+
+bool IsWhatsNewM116Enabled() {
+  return base::FeatureList::IsEnabled(kWhatsNewIOSM116);
+}
+
+const char* WhatsNewTypeToString(WhatsNewType type) {
+  switch (type) {
+    case WhatsNewType::kSearchTabs:
+      return "SearchTabs";
+    case WhatsNewType::kNewOverflowMenu:
+      return "NewOverflowMenu";
+    case WhatsNewType::kSharedHighlighting:
+      return "SharedHighlighting";
+    case WhatsNewType::kAddPasswordManually:
+      return "AddPasswordManually";
+    case WhatsNewType::kUseChromeByDefault:
+      return "UseChromeByDefault";
+    case WhatsNewType::kPasswordsInOtherApps:
+      return "PasswordsInOtherApps";
+    case WhatsNewType::kAutofill:
+      return "Autofill";
+    case WhatsNewType::kIncognitoTabsFromOtherApps:
+      return "IncognitoTabsFromOtherApps";
+    case WhatsNewType::kIncognitoLock:
+      return "IncognitoLock";
+    case WhatsNewType::kCalendarEvent:
+      return "CalendarEvent";
+    case WhatsNewType::kChromeActions:
+      return "ChromeActions";
+    case WhatsNewType::kMiniMaps:
+      return "MiniMaps";
+    default:
+      return nil;
+  };
+}
+
+const char* WhatsNewTypeToStringM116(WhatsNewType type) {
+  switch (type) {
+    case WhatsNewType::kIncognitoTabsFromOtherApps:
+      return "IncognitoTabsFromOtherApps";
+    case WhatsNewType::kIncognitoLock:
+      return "IncognitoLock";
+    case WhatsNewType::kCalendarEvent:
+      return "CalendarEvent";
+    case WhatsNewType::kChromeActions:
+      return "ChromeActions";
+    case WhatsNewType::kMiniMaps:
+      return "MiniMaps";
+    default:
+      return nil;
+  };
 }

@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_constants.h"
+#include "components/autofill/core/browser/data_model/autofill_structured_address_format_provider.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_regex_provider.h"
 #include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -52,39 +53,26 @@ NameMiddle::NameMiddle(AddressComponent* parent)
 
 NameMiddle::~NameMiddle() = default;
 
-void NameMiddle::GetAdditionalSupportedFieldTypes(
-    ServerFieldTypeSet* supported_types) const {
-  supported_types->insert(NAME_MIDDLE_INITIAL);
+const ServerFieldTypeSet NameMiddle::GetAdditionalSupportedFieldTypes() const {
+  constexpr ServerFieldTypeSet additional_supported_field_types{
+      NAME_MIDDLE_INITIAL};
+  return additional_supported_field_types;
 }
 
-bool NameMiddle::GetValueForOtherSupportedType(ServerFieldType field_type,
-                                               std::u16string* value) const {
-  if (field_type == NAME_MIDDLE_INITIAL) {
-    if (value) {
-      // If the stored value has the characteristics of containing only
-      // initials, use the value as it is. Otherwise, convert it to a
-      // sequence of upper case letters, one for each space- or hyphen-separated
-      // token.
-      if (HasMiddleNameInitialsCharacteristics(base::UTF16ToUTF8(GetValue()))) {
-        *value = GetValue();
-      } else {
-        *value = ReduceToInitials(GetValue());
-      }
-    }
-    return true;
-  }
-  return false;
+std::u16string NameMiddle::GetValueForOtherSupportedType(
+    ServerFieldType field_type) const {
+  CHECK(IsSupportedType(field_type));
+  return HasMiddleNameInitialsCharacteristics(base::UTF16ToUTF8(GetValue()))
+             ? GetValue()
+             : ReduceToInitials(GetValue());
 }
 
-bool NameMiddle::SetValueForOtherSupportedType(
+void NameMiddle::SetValueForOtherSupportedType(
     ServerFieldType field_type,
     const std::u16string& value,
     const VerificationStatus& status) {
-  if (field_type == NAME_MIDDLE_INITIAL) {
-    SetValue(value, status);
-    return true;
-  }
-  return false;
+  CHECK(IsSupportedType(field_type));
+  SetValue(value, status);
 }
 
 NameLastFirst::NameLastFirst(AddressComponent* parent)
@@ -226,13 +214,19 @@ std::vector<const re2::RE2*> NameFull::GetParseRegularExpressionsByRelevance()
           pattern_provider->GetRegEx(RegEx::kParseLastCommaFirstMiddleName),
           pattern_provider->GetRegEx(RegEx::kParseFirstMiddleLastName)};
 }
+
 std::u16string NameFull::GetBestFormatString() const {
-  if (HasCjkNameCharacteristics(base::UTF16ToUTF8(name_first_.GetValue())) &&
-      HasCjkNameCharacteristics(base::UTF16ToUTF8(name_last_.GetValue()))) {
-    return u"${NAME_LAST}${NAME_FIRST}";
-  }
-  return u"${NAME_FIRST} ${NAME_MIDDLE} ${NAME_LAST}";
+  StructuredAddressesFormatProvider::ContextInfo info;
+  info.name_has_cjk_characteristics =
+      HasCjkNameCharacteristics(base::UTF16ToUTF8(name_first_.GetValue())) &&
+      HasCjkNameCharacteristics(base::UTF16ToUTF8(name_last_.GetValue()));
+
+  auto* pattern_provider = StructuredAddressesFormatProvider::GetInstance();
+  CHECK(pattern_provider);
+  return pattern_provider->GetPattern(GetStorageType(), /*country_code=*/"",
+                                      info);
 }
+
 NameFull::~NameFull() = default;
 
 NameFullWithPrefix::NameFullWithPrefix() : NameFullWithPrefix(nullptr) {}

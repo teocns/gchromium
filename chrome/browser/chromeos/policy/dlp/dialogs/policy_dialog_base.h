@@ -10,11 +10,12 @@
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/views/window/dialog_delegate.h"
 
 namespace policy {
 
-// The callback to be exectued when the user addresses the dialog. When
+// The callback to be executed when the user addresses the dialog. When
 // `should_proceed` is set to true, the action continues and is aborted
 // otherwise.
 using OnDlpRestrictionCheckedCallback =
@@ -35,21 +36,34 @@ class PolicyDialogBase : public views::DialogDelegateView {
     kFiles
   };
 
-  explicit PolicyDialogBase(OnDlpRestrictionCheckedCallback callback);
+  PolicyDialogBase();
   PolicyDialogBase(const PolicyDialogBase& other) = delete;
   PolicyDialogBase& operator=(const PolicyDialogBase& other) = delete;
   ~PolicyDialogBase() override = default;
 
  protected:
-  // Sets up the dialog's upper panel with |title| and |message|.
-  void SetupUpperPanel(const std::u16string& title,
-                       const std::u16string& message);
+  // Splits `callback` and assigns to accept and cancel callbacks.
+  void SetOnDlpRestrictionCheckedCallback(
+      OnDlpRestrictionCheckedCallback callback);
+
+  // Sets up the dialog's upper panel and adds the managed icon and container
+  // for the title and message. To add the text, use `AddTitle()` and
+  // `AddMessage()` after this method.
+  void SetupUpperPanel();
+
+  // Adds and returns label with `title`. Should only be called after
+  // `SetupUpperPanel()`.
+  virtual views::Label* AddTitle(const std::u16string& title);
+
+  // Adds and returns label with `message`. Should only be called after
+  // `SetupUpperPanel()`.
+  virtual views::Label* AddMessage(const std::u16string& message);
 
   // Sets up the scroll view container.
-  void SetupScrollView();
+  virtual void SetupScrollView();
 
   // Sets up and populates the upper section of the dialog.
-  virtual void AddGeneralInformation() = 0;
+  void AddGeneralInformation();
 
   // Sets up and populates the scroll view.
   virtual void MaybeAddConfidentialRows() = 0;
@@ -66,10 +80,17 @@ class PolicyDialogBase : public views::DialogDelegateView {
   // Returns the message text.
   virtual std::u16string GetMessage() = 0;
 
+  // Adds the `icon` to `row`.
+  void AddRowIcon(const gfx::ImageSkia& icon, views::View* row);
+
+  // Adds the `title` to `row` and returns the created label for further
+  // styling.
+  views::Label* AddRowTitle(const std::u16string& title, views::View* row);
+
   // Adds one row with |icon| and |title|. Should only be called after
   // SetupScrollView().
-  void AddConfidentialRow(const gfx::ImageSkia& icon,
-                          const std::u16string& title);
+  virtual void AddConfidentialRow(const gfx::ImageSkia& icon,
+                                  const std::u16string& title) = 0;
 
   // The upper section of the dialog.
   raw_ptr<views::View, ExperimentalAsh> upper_panel_;

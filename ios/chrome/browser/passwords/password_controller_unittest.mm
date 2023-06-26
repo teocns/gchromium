@@ -47,7 +47,6 @@
 #import "ios/chrome/browser/shared/model/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_mediator.h"
 #import "ios/chrome/browser/web/chrome_web_client.h"
-#import "ios/web/public/deprecated/url_verification_constants.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -124,10 +123,12 @@ class MockPasswordManagerClient
 
   ~MockPasswordManagerClient() override = default;
 
-  MOCK_CONST_METHOD0(IsIncognito, bool());
-  MOCK_METHOD1(PromptUserToSaveOrUpdatePasswordPtr,
-               void(PasswordFormManagerForUI*));
-  MOCK_CONST_METHOD1(IsSavingAndFillingEnabled, bool(const GURL&));
+  MOCK_METHOD(bool, IsOffTheRecord, (), (const override));
+  MOCK_METHOD(void,
+              PromptUserToSaveOrUpdatePasswordPtr,
+              (PasswordFormManagerForUI*),
+              ());
+  MOCK_METHOD(bool, IsSavingAndFillingEnabled, (const GURL&), (const override));
 
   PrefService* GetPrefs() const override { return prefs_; }
 
@@ -470,8 +471,7 @@ class PasswordControllerTest : public PlatformTest {
   }
 
   std::string BaseUrl() const {
-    web::URLVerificationTrustLevel unused_level;
-    return web_state()->GetCurrentURL(&unused_level).spec();
+    return web_state()->GetLastCommittedURL().spec();
   }
 
   web::WebState* web_state() const { return web_state_.get(); }
@@ -625,12 +625,13 @@ void PasswordControllerTest::FillFormAndValidate(TestPasswordFormData test_data,
 
   block_was_called = NO;
 
-  FormSuggestion* suggestion =
-      [FormSuggestion suggestionWithValue:suggestion_text
-                       displayDescription:nil
-                                     icon:nil
-                               identifier:0
-                           requiresReauth:NO];
+  FormSuggestion* suggestion = [FormSuggestion
+      suggestionWithValue:suggestion_text
+       displayDescription:nil
+                     icon:nil
+              popupItemId:autofill::PopupItemId::kAutocompleteEntry
+        backendIdentifier:nil
+           requiresReauth:NO];
 
   SuggestionHandledCompletion completion = ^{
     block_was_called = YES;
@@ -2053,6 +2054,32 @@ TEST_F(PasswordControllerTest,
       .WillByDefault(WithArg<1>(InvokeEmptyConsumerWithForms(store_.get())));
   LoadHtml(kHtmlWithPasswordForm);
   WaitForFormManagersCreation();
+
+  EXPECT_CALL(*weak_client_, PromptUserToSaveOrUpdatePasswordPtr).Times(0);
+
+  SimulateFormActivityObserverSignal("password_form_removed", FormRendererId(1),
+                                     FieldRendererId(), std::string());
+}
+
+// Tests that prompt is not shown automatically if the form is eligible only for
+// manual fallback for saving.
+TEST_F(PasswordControllerTest,
+       DetectNoSubmissionOnRemovedFormForManualFallback) {
+  ON_CALL(*store_, GetLogins)
+      .WillByDefault(WithArg<1>(InvokeEmptyConsumerWithForms(store_.get())));
+  LoadHtml(@""
+            "<form id='form1'>"
+            "  <input id='username' type='text'>"
+            "  <input id='one-time-code' type='password'>"
+            "</form>");
+  WaitForFormManagersCreation();
+
+  std::string mainFrameID = GetMainWebFrameId();
+
+  SimulateUserTyping("form1", FormRendererId(1), "username", FieldRendererId(2),
+                     "john", mainFrameID);
+  SimulateUserTyping("form1", FormRendererId(1), "one-time-code",
+                     FieldRendererId(3), "123456", mainFrameID);
 
   EXPECT_CALL(*weak_client_, PromptUserToSaveOrUpdatePasswordPtr).Times(0);
 

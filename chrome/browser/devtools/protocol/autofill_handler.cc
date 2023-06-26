@@ -10,13 +10,16 @@
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
+#include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/manual_testing_import.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/render_frame_host.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 using autofill::AutofillTriggerSource;
@@ -55,6 +58,7 @@ AutofillHandler::~AutofillHandler() = default;
 
 void AutofillHandler::Trigger(
     int field_id,
+    Maybe<String> frame_id,
     std::unique_ptr<protocol::Autofill::CreditCard> card,
     std::unique_ptr<TriggerCallback> callback) {
   auto host = content::DevToolsAgentHost::GetForId(target_id_);
@@ -63,12 +67,14 @@ void AutofillHandler::Trigger(
     return;
   }
   host->GetUniqueFormControlId(
-      field_id, base::BindOnce(&AutofillHandler::FinishTrigger,
-                               weak_ptr_factory_.GetWeakPtr(), std::move(card),
-                               std::move(callback)));
+      field_id,
+      base::BindOnce(&AutofillHandler::FinishTrigger,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(frame_id),
+                     std::move(card), std::move(callback)));
 }
 
 void AutofillHandler::FinishTrigger(
+    Maybe<String> frame_id,
     std::unique_ptr<protocol::Autofill::CreditCard> card,
     std::unique_ptr<TriggerCallback> callback,
     uint64_t field_id) {
@@ -81,17 +87,33 @@ void AutofillHandler::FinishTrigger(
   content::RenderFrameHost* outermost_primary_rfh =
       host->GetWebContents()->GetOutermostWebContents()->GetPrimaryMainFrame();
 
-  autofill::ContentAutofillDriver* autofill_driver =
-      autofill::ContentAutofillDriver::GetForRenderFrameHost(
-          outermost_primary_rfh);
+  autofill::LocalFrameToken frame_token(
+      outermost_primary_rfh->GetFrameToken().value());
+  if (frame_id.isJust()) {
+    bool found = false;
+    outermost_primary_rfh->ForEachRenderFrameHost(
+        [&frame_token, &frame_id, &found](content::RenderFrameHost* rfh) {
+          if (rfh->GetDevToolsFrameToken().ToString() == frame_id.fromJust()) {
+            frame_token =
+                autofill::LocalFrameToken(rfh->GetFrameToken().value());
+            found = true;
+          }
+        });
+
+    if (!found) {
+      std::move(callback)->sendFailure(
+          Response::ServerError("Frame not found"));
+      return;
+    }
+  }
+
+  autofill::ContentAutofillDriver* autofill_driver = GetAutofillDriver();
   if (!autofill_driver) {
     std::move(callback)->sendFailure(
         Response::ServerError("RenderFrameHost is being destroyed"));
     return;
   }
 
-  autofill::LocalFrameToken frame_token(
-      outermost_primary_rfh->GetFrameToken().value());
   autofill::FieldGlobalId global_field_id = {
       frame_token, autofill::FieldRendererId(field_id)};
 
@@ -121,4 +143,55 @@ void AutofillHandler::FinishTrigger(
       base::UTF8ToUTF16(card->GetCvc()), AutofillTriggerSource::kPopup);
 
   std::move(callback)->sendSuccess();
+}
+
+void AutofillHandler::SetAddresses(
+    std::unique_ptr<protocol::Array<protocol::Autofill::Address>> addresses,
+    std::unique_ptr<SetAddressesCallback> callback) {
+  if (!content::DevToolsAgentHost::GetForId(target_id_)) {
+    std::move(callback)->sendFailure(Response::ServerError("Target not found"));
+    return;
+  }
+
+  std::vector<autofill::AutofillProfile> test_address_for_countries;
+  base::Value::List profiles;
+
+  for (const auto& address : *addresses) {
+    base::Value::Dict address_fields;
+    for (const auto& field : *address->GetFields()) {
+      address_fields.Set(field->GetName(), field->GetValue());
+    }
+    profiles.Append(std::move(address_fields));
+  }
+
+  absl::optional<std::vector<autofill::AutofillProfile>> autofill_profiles =
+      autofill::AutofillProfilesFromJSON(&profiles);
+  if (autofill_profiles) {
+    for (const autofill::AutofillProfile& profile : *autofill_profiles) {
+      test_address_for_countries.push_back(profile);
+    }
+  }
+
+  autofill::ContentAutofillDriver* autofill_driver = GetAutofillDriver();
+  if (!autofill_driver) {
+    std::move(callback)->sendFailure(
+        Response::ServerError("RenderFrameHost is being destroyed"));
+    return;
+  }
+
+  static_cast<autofill::BrowserAutofillManager*>(
+      autofill_driver->autofill_manager())
+      ->set_test_addresses(test_address_for_countries);
+  std::move(callback)->sendSuccess();
+}
+
+autofill::ContentAutofillDriver* AutofillHandler::GetAutofillDriver() {
+  auto host = content::DevToolsAgentHost::GetForId(target_id_);
+  DCHECK(host);
+
+  content::RenderFrameHost* outermost_primary_rfh =
+      host->GetWebContents()->GetOutermostWebContents()->GetPrimaryMainFrame();
+
+  return autofill::ContentAutofillDriver::GetForRenderFrameHost(
+      outermost_primary_rfh);
 }

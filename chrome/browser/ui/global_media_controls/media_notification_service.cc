@@ -106,11 +106,41 @@ crosapi::mojom::MediaUI* GetMediaUI() {
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
+bool ShouldInitializeWithRemotePlaybackSource(
+    content::WebContents* web_contents,
+    media_session::mojom::RemotePlaybackMetadataPtr remote_playback_metadata) {
+  if (!base::FeatureList::IsEnabled(media::kMediaRemotingWithoutFullscreen)) {
+    return false;
+  }
+
+  // Do not initialize MediaRouterUI with RemotePlayback media source when there
+  // exists default presentation request.
+  base::WeakPtr<media_router::WebContentsPresentationManager>
+      presentation_manager =
+          media_router::WebContentsPresentationManager::Get(web_contents);
+  if (presentation_manager &&
+      presentation_manager->HasDefaultPresentationRequest()) {
+    return false;
+  }
+
+  if (!remote_playback_metadata) {
+    return false;
+  }
+
+  if (media::remoting::ParseVideoCodec(remote_playback_metadata->video_codec) ==
+          media::VideoCodec::kUnknown ||
+      media::remoting::ParseAudioCodec(remote_playback_metadata->audio_codec) ==
+          media::AudioCodec::kUnknown) {
+    return false;
+  }
+
+  return true;
+}
 }  // namespace
 
 MediaNotificationService::MediaNotificationService(Profile* profile,
                                                    bool show_from_all_profiles)
-    : receiver_(this) {
+    : profile_(profile), receiver_(this) {
   item_manager_ = global_media_controls::MediaItemManager::Create();
 
   absl::optional<base::UnguessableToken> source_id;
@@ -142,11 +172,15 @@ MediaNotificationService::MediaNotificationService(Profile* profile,
   if (!media_router::MediaRouterEnabled(profile)) {
     return;
   }
-  // base::Unretained() is safe here because cast_notification_producer_ is
-  // deleted before item_manager_.
+  // CastMediaNotificationProducer is owned by
+  // CastMediaNotificationProducerKeyedService in Ash.
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+  // base::Unretained() is safe here because `cast_notification_producer_` is
+  // deleted before `item_manager_`.
   cast_notification_producer_ = std::make_unique<CastMediaNotificationProducer>(
       profile, item_manager_.get());
   item_manager_->AddItemProducer(cast_notification_producer_.get());
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (media_router::GlobalMediaControlsCastStartStopEnabled(profile)) {
     presentation_request_notification_producer_ =
@@ -295,9 +329,10 @@ void MediaNotificationService::SetDialogDelegateForWebContents(
   } else if (HasActiveControllableSessionForWebContents(contents)) {
     item_id = GetActiveControllableSessionForWebContents(contents);
   } else {
-    auto presentation_item =
-        supplemental_device_picker_producer_->GetNotificationItem();
-    item_id = presentation_item->id();
+    const SupplementalDevicePickerItem& supplemental_item =
+        supplemental_device_picker_producer_->GetOrCreateNotificationItem(
+            content::MediaSession::GetSourceId(profile_));
+    item_id = supplemental_item.id();
     DCHECK(presentation_request_notification_producer_->GetWebContents() ==
            contents);
   }
@@ -328,15 +363,20 @@ void MediaNotificationService::OnStartPresentationContextCreated(
     return;
   }
 
-  // If there exists a cast notification / tab mirroring session associated with
-  // `web_contents`, delete `context` because users should not start a new
-  // presentation at this time.
+  // If there exists a cast notification associated with `web_contents`, delete
+  // `context` because users should not start a new presentation at this time.
   if (HasCastNotificationsForWebContents(web_contents)) {
     CancelRequest(std::move(context), "A presentation has already started.");
-  } else if (HasTabMirroringSessionForWebContents(web_contents)) {
-    CancelRequest(std::move(context),
-                  "A tab mirroring session has already started.");
   } else if (HasActiveControllableSessionForWebContents(web_contents)) {
+    // If there exists a media session notification and a tab mirroring session,
+    // both, associated with `web_contents`, delete `context` because users
+    // should not start a new presentation at this time.
+    if (HasTabMirroringSessionForWebContents(web_contents)) {
+      CancelRequest(std::move(context),
+                    "A tab mirroring session has already started.");
+      return;
+    }
+
     // If there exists a media session notification associated with
     // |web_contents|, hold onto the context for later use.
     context_ = std::move(context);
@@ -390,30 +430,21 @@ MediaNotificationService::CreateCastDialogControllerForSession(
   if (!web_contents) {
     return nullptr;
   }
+
   if (context_) {
     return media_router::MediaRouterUI::CreateWithStartPresentationContext(
         web_contents, std::move(context_));
   }
-  // Initialize MediaRouterUI with Remote Playback Media Source if there is no
-  // default PresentationRequest associated with `web_contents`.
-  if (base::FeatureList::IsEnabled(media::kMediaRemotingWithoutFullscreen)) {
-    base::WeakPtr<media_router::WebContentsPresentationManager>
-        presentation_manager =
-            media_router::WebContentsPresentationManager::Get(web_contents);
-    if (!presentation_manager ||
-        !presentation_manager->HasDefaultPresentationRequest()) {
-      auto remote_playback_metadata =
-          media_session_item_producer_->GetRemotePlaybackMetadataFromItem(id);
-      if (remote_playback_metadata) {
-        return media_router::MediaRouterUI::
-            CreateWithMediaSessionRemotePlayback(
-                web_contents,
-                media::remoting::ParseVideoCodec(
-                    remote_playback_metadata->video_codec),
-                media::remoting::ParseAudioCodec(
-                    remote_playback_metadata->audio_codec));
-      }
-    }
+
+  auto remote_playback_metadata =
+      media_session_item_producer_->GetRemotePlaybackMetadataFromItem(id);
+  if (ShouldInitializeWithRemotePlaybackSource(
+          web_contents, remote_playback_metadata.Clone())) {
+    return media_router::MediaRouterUI::CreateWithMediaSessionRemotePlayback(
+        web_contents,
+        media::remoting::ParseVideoCodec(remote_playback_metadata->video_codec),
+        media::remoting::ParseAudioCodec(
+            remote_playback_metadata->audio_codec));
   }
 
   return media_router::MediaRouterUI::CreateWithDefaultMediaSource(

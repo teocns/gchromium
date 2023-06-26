@@ -7,13 +7,18 @@
 
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
+#include "base/timer/elapsed_timer.h"
 #include "chrome/browser/ash/file_manager/file_tasks.h"
 #include "chrome/browser/ash/file_system_provider/mount_path_util.h"
 #include "chrome/browser/ash/file_system_provider/provided_file_system_interface.h"
+#include "chrome/browser/ash/file_system_provider/provider_interface.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload.mojom.h"
+#include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_util.h"
 #include "chrome/browser/ui/webui/ash/system_web_dialog_delegate.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "ui/gfx/geometry/size.h"
@@ -37,10 +42,24 @@ FORWARD_DECLARE_TEST(
     FailToOpenFileFromAndroidOneDriveDirectoryNotAccessibleToODFS);
 }  // namespace file_manager::file_tasks
 
+namespace {
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class OfficeFilesTransferRequired {
+  kNotRequired = 0,
+  kMove = 1,
+  kCopy = 2,
+  kMaxValue = kCopy,
+};
+}  // namespace
+
 namespace ash::cloud_upload {
 
 struct ODFSFileSystemAndPath {
-  file_system_provider::ProvidedFileSystemInterface* file_system;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter
+  // for: #union
+  RAW_PTR_EXCLUSION file_system_provider::ProvidedFileSystemInterface*
+      file_system;
   base::FilePath file_path_within_odfs;
 };
 
@@ -53,10 +72,6 @@ const char kUserActionConfirmOrUploadToGoogleDrive[] =
     "confirm-or-upload-google-drive";
 const char kUserActionConfirmOrUploadToOneDrive[] =
     "confirm-or-upload-onedrive";
-
-// Custom action ids passed from ODFS.
-const char kOneDriveUrlActionId[] = "HIDDEN_ONEDRIVE_URL";
-const char kUserEmailActionId[] = "HIDDEN_ONEDRIVE_USER_EMAIL";
 
 // Either OneDrive for the Office PWA or Drive for Drive Web editing.
 enum class CloudProvider {
@@ -127,6 +142,7 @@ class CloudOpenTask : public BrowserListObserver,
 
  private:
   friend class RefCounted<CloudOpenTask>;  // Allow destruction by RefCounted<>.
+  friend class CloudOpenTaskBrowserTest;
 
   CloudOpenTask(Profile* profile,
                 std::vector<storage::FileSystemURL> file_urls,
@@ -141,16 +157,19 @@ class CloudOpenTask : public BrowserListObserver,
   void OpenAlreadyHostedDriveUrls();
   void OpenODFSUrls();
   void OpenAndroidOneDriveUrlsIfAccountMatchedODFS();
-  void CheckEmailAndOpenURLs(const std::string& android_onedrive_email,
-                             const file_system_provider::Actions& actions,
-                             base::File::Error result);
+  void CheckEmailAndOpenURLs(
+      const std::string& android_onedrive_email,
+      base::expected<cloud_upload::ODFSMetadata, base::File::Error>
+          metadata_or_error);
 
+  bool ShouldShowConfirmationDialog();
   void ConfirmMoveOrStartUpload();
   void StartUpload();
 
-  void FinishedDriveUpload(const GURL& url);
+  void FinishedDriveUpload(const GURL& url, int64_t size);
   void FinishedOneDriveUpload(base::WeakPtr<Profile> profile_weak_ptr,
-                              const storage::FileSystemURL& url);
+                              const storage::FileSystemURL& url,
+                              int64_t size);
 
   bool InitAndShowDialog(mojom::DialogPage dialog_page);
   mojom::DialogArgsPtr CreateDialogArgs(mojom::DialogPage dialog_page);
@@ -180,6 +199,7 @@ class CloudOpenTask : public BrowserListObserver,
       ::file_manager::file_tasks::FindTasksCallback
           find_all_types_of_tasks_callback,
       std::unique_ptr<std::vector<std::string>> mime_types);
+  void RecordUploadLatencyUMA();
 
   raw_ptr<Profile, ExperimentalAsh> profile_;
   std::vector<storage::FileSystemURL> file_urls_;
@@ -187,7 +207,11 @@ class CloudOpenTask : public BrowserListObserver,
   gfx::NativeWindow modal_parent_;
   std::vector<::file_manager::file_tasks::TaskDescriptor> local_tasks_;
   size_t pending_uploads_ = 0;
-  CloudUploadDialog* pending_dialog_ = nullptr;
+  raw_ptr<CloudUploadDialog, ExperimentalAsh> pending_dialog_ = nullptr;
+  base::ElapsedTimer upload_timer_;
+  int64_t upload_total_size_ = 0;
+  OfficeFilesTransferRequired transfer_required_ =
+      OfficeFilesTransferRequired::kNotRequired;
 };
 
 // Return True if feature `kUploadOfficeToCloud` is enabled and is eligible for
@@ -198,8 +222,11 @@ bool IsEligibleAndEnabledUploadOfficeToCloud(Profile* profile);
 // is not mounted or the Office PWA is not installed. Returns False otherwise.
 bool ShouldFixUpOffice(Profile* profile, const CloudProvider cloud_provider);
 
-// Returns True if the file is on the Android OneDrive DocumentsProvider.
-bool FileIsOnAndroidOneDrive(Profile* profile, const FileSystemURL& url);
+// Returns True if the url is on ODFS.
+bool UrlIsOnODFS(Profile* profile, const FileSystemURL& url);
+
+// Returns True if the url is on the Android OneDrive DocumentsProvider.
+bool UrlIsOnAndroidOneDrive(Profile* profile, const FileSystemURL& url);
 
 // Return the email from the Root Document Id of the Android OneDrive
 // DocumentsProvider.
@@ -225,6 +252,12 @@ absl::optional<ODFSFileSystemAndPath> AndroidOneDriveUrlToODFS(
     Profile* profile,
     const FileSystemURL& android_onedrive_file_url);
 
+// Launches the 'Connect OneDrive' dialog which is triggered from the Services
+// menu in Files app. This is a simplified version of setup where we just
+// connect to OneDrive. There is no 'done' callback because files app doesn't
+// need it.
+bool ShowConnectOneDriveDialog(gfx::NativeWindow modal_parent);
+
 // Defines the web dialog used to help users upload Office files to the cloud.
 class CloudUploadDialog : public SystemWebDialogDelegate {
  public:
@@ -239,6 +272,11 @@ class CloudUploadDialog : public SystemWebDialogDelegate {
                     const mojom::DialogPage dialog_page,
                     bool office_move_confirmation_shown);
 
+  // Request ODFS be mounted. If there is an existing mount, ODFS will unmount
+  // that one after authentication of the new mount.
+  static void RequestODFSMount(
+      Profile* profile,
+      file_system_provider::RequestMountCallback callback);
   static bool IsODFSMounted(Profile* profile);
   static bool IsOfficeWebAppInstalled(Profile* profile);
 

@@ -17,11 +17,11 @@ sys.path.append(
     os.path.join(os.path.dirname(THIS_DIR), '..', 'clang', 'scripts'))
 
 from build_rust import (RUST_TOOLCHAIN_OUT_DIR, THIRD_PARTY_DIR)
-from update_rust import (GetLatestRevision)
-from package import (MaybeUpload, TeeCmd)
+from update_rust import (GetRustClangRevision)
+from package import (MaybeUpload, TeeCmd, DEFAULT_GCS_BUCKET)
 from update import (CHROMIUM_DIR)
 
-PACKAGE_VERSION = GetLatestRevision()
+PACKAGE_VERSION = GetRustClangRevision()
 BUILDLOG_NAME = f'rust-buildlog-{PACKAGE_VERSION}.txt'
 RUST_TOOLCHAIN_PACKAGE_NAME = f'rust-toolchain-{PACKAGE_VERSION}.tar.xz'
 
@@ -45,6 +45,11 @@ def main():
     parser.add_argument('--upload',
                         action='store_true',
                         help='upload package to GCS')
+    parser.add_argument(
+        '--bucket',
+        default=DEFAULT_GCS_BUCKET,
+        help='Google Cloud Storage bucket where the target archive is uploaded'
+    )
     parser.add_argument('--build-mac-arm',
                         action='store_true',
                         help='Build arm binaries. Only valid on macOS.')
@@ -107,8 +112,9 @@ def main():
         tar.add(RUST_TOOLCHAIN_OUT_DIR, arcname='rust-toolchain')
 
     os.chdir(THIRD_PARTY_DIR)
-    MaybeUpload(args.upload, RUST_TOOLCHAIN_PACKAGE_NAME, gcs_platform)
-    MaybeUpload(args.upload, BUILDLOG_NAME, gcs_platform)
+    MaybeUpload(args.upload, args.bucket, RUST_TOOLCHAIN_PACKAGE_NAME,
+                gcs_platform)
+    MaybeUpload(args.upload, args.bucket, BUILDLOG_NAME, gcs_platform)
 
     return 0
 

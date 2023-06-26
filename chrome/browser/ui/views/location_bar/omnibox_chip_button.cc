@@ -9,10 +9,12 @@
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_util.h"
 #include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/theme_provider.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/gfx/color_utils.h"
@@ -20,6 +22,7 @@
 #include "ui/views/background.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/painter.h"
+#include "ui/views/view_class_properties.h"
 
 namespace {
 
@@ -28,22 +31,34 @@ constexpr int kChipImagePadding = 4;
 // An extra space between chip's label and right edge.
 constexpr int kExtraRightPadding = 4;
 
+// These chrome refresh layout constants are not shared with other views.
+constexpr int kChipVerticalPadding = 4;
+constexpr int kChipHorizontalPadding = 6;
+
 }  // namespace
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(OmniboxChipButton, kChipElementId);
 
 OmniboxChipButton::OmniboxChipButton(PressedCallback callback)
     : MdTextButton(std::move(callback),
                    std::u16string(),
                    views::style::CONTEXT_BUTTON_MD) {
+  SetProperty(views::kElementIdentifierKey, kChipElementId);
   views::InstallPillHighlightPathGenerator(this);
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
   SetElideBehavior(gfx::ElideBehavior::FADE_TAIL);
   SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   // Equalizing padding on the left, right and between icon and label.
   SetImageLabelSpacing(kChipImagePadding);
-  SetCustomPadding(gfx::Insets::VH(
-      GetLayoutConstant(LOCATION_BAR_CHILD_INTERIOR_PADDING),
-      GetLayoutInsets(LOCATION_BAR_ICON_INTERIOR_PADDING).left()));
-  SetCornerRadius(GetIconSize());
+  if (features::IsChromeRefresh2023()) {
+    SetCustomPadding(
+        gfx::Insets::VH(kChipVerticalPadding, kChipHorizontalPadding));
+  } else {
+    SetCustomPadding(gfx::Insets::VH(
+        GetLayoutConstant(LOCATION_BAR_CHILD_INTERIOR_PADDING),
+        GetLayoutInsets(LOCATION_BAR_ICON_INTERIOR_PADDING).left()));
+  }
+  SetCornerRadius(GetCornerRadius());
   constexpr auto kAnimationDuration = base::Milliseconds(350);
   animation_ = std::make_unique<gfx::SlideAnimation>(this);
   animation_->SetSlideDuration(kAnimationDuration);
@@ -55,8 +70,8 @@ OmniboxChipButton::~OmniboxChipButton() = default;
 
 void OmniboxChipButton::VisibilityChanged(views::View* starting_from,
                                           bool is_visible) {
-  if (visibility_changed_callback_) {
-    visibility_changed_callback_.Run();
+  for (Observer& observer : observers_) {
+    observer.OnChipVisibilityChanged(is_visible);
   }
 }
 
@@ -91,16 +106,6 @@ void OmniboxChipButton::ResetAnimation(double value) {
   animation_->Reset(value);
 }
 
-void OmniboxChipButton::SetExpandAnimationEndedCallback(
-    base::RepeatingCallback<void()> callback) {
-  expand_animation_ended_callback_ = callback;
-}
-
-void OmniboxChipButton::SetCollapseEndedCallback(
-    base::RepeatingCallback<void()> callback) {
-  collapse_animation_ended_callback_ = callback;
-}
-
 gfx::Size OmniboxChipButton::CalculatePreferredSize() const {
   const int fixed_width = GetIconSize() + GetInsets().width();
   const int collapsable_width = label()->GetPreferredSize().width() +
@@ -121,11 +126,13 @@ void OmniboxChipButton::OnThemeChanged() {
 
 void OmniboxChipButton::UpdateBackgroundColor() {
   if (theme_ == OmniboxChipTheme::kIconStyle) {
+    // In pre-ChromeRefresh2023 and post-ChromeRefresh2023, content settings
+    // icons (which kIconStyle mimics) don't have a background.
     SetBackground(nullptr);
   } else {
     SetBackground(
         CreateBackgroundFromPainter(views::Painter::CreateSolidRoundRectPainter(
-            GetBackgroundColor(), GetIconSize())));
+            GetBackgroundColor(), GetCornerRadius())));
   }
 }
 
@@ -135,13 +142,16 @@ void OmniboxChipButton::AnimationEnded(const gfx::Animation* animation) {
 
   fully_collapsed_ = animation->GetCurrentValue() != 1.0;
 
-  if (animation->GetCurrentValue() == 1.0 && expand_animation_ended_callback_) {
-    expand_animation_ended_callback_.Run();
+  if (animation->GetCurrentValue() == 1.0) {
+    for (Observer& observer : observers_) {
+      observer.OnExpandAnimationEnded();
+    }
   }
 
-  if (animation->GetCurrentValue() == 0.0 &&
-      collapse_animation_ended_callback_) {
-    collapse_animation_ended_callback_.Run();
+  if (animation->GetCurrentValue() == 0.0) {
+    for (Observer& observer : observers_) {
+      observer.OnCollapseAnimationEnded();
+    }
   }
 }
 
@@ -184,6 +194,14 @@ void OmniboxChipButton::ForceAnimateCollapse() {
 }
 
 int OmniboxChipButton::GetIconSize() const {
+  if (features::IsChromeRefresh2023()) {
+    // Mimic the sizing for other trailing icons.
+    if (theme_ == OmniboxChipTheme::kIconStyle) {
+      return GetLayoutConstant(LOCATION_BAR_TRAILING_ICON_SIZE);
+    }
+    return GetLayoutConstant(LOCATION_BAR_CHIP_ICON_SIZE);
+  }
+
   return GetLayoutConstant(LOCATION_BAR_ICON_SIZE);
 }
 
@@ -192,9 +210,23 @@ void OmniboxChipButton::UpdateIconAndColors() {
     return;
   SetEnabledTextColors(GetTextAndIconColor());
   SetImageModel(views::Button::STATE_NORMAL, GetIconImageModel());
+  if (features::IsChromeRefresh2023()) {
+    ConfigureInkDropForRefresh2023(this, kColorOmniboxChipInkDropHover,
+                                   kColorOmniboxChipInkDropRipple);
+  }
 }
 
 SkColor OmniboxChipButton::GetTextAndIconColor() const {
+  if (features::IsChromeRefresh2023()) {
+    // Use the same color as the content setting icons.
+    if (theme_ == OmniboxChipTheme::kIconStyle) {
+      return GetColorProvider()->GetColor(kColorOmniboxResultsIcon);
+    }
+
+    // The icon and label have the same color.
+    return GetColorProvider()->GetColor(kColorOmniboxIntentChipIcon);
+  }
+
   if (theme_ == OmniboxChipTheme::kIconStyle)
     return GetColorProvider()->GetColor(kColorOmniboxResultsIcon);
 
@@ -206,7 +238,18 @@ SkColor OmniboxChipButton::GetTextAndIconColor() const {
 
 SkColor OmniboxChipButton::GetBackgroundColor() const {
   DCHECK(theme_ != OmniboxChipTheme::kIconStyle);
+  if (features::IsChromeRefresh2023()) {
+    return GetColorProvider()->GetColor(kColorOmniboxIntentChipBackground);
+  }
   return GetColorProvider()->GetColor(kColorOmniboxChipBackground);
+}
+
+int OmniboxChipButton::GetCornerRadius() const {
+  DCHECK(theme_ != OmniboxChipTheme::kIconStyle);
+  if (features::IsChromeRefresh2023()) {
+    return GetLayoutConstant(LOCATION_BAR_CHILD_CORNER_RADIUS);
+  }
+  return GetIconSize();
 }
 
 void OmniboxChipButton::SetForceExpandedForTesting(
@@ -218,6 +261,14 @@ void OmniboxChipButton::SetChipIcon(const gfx::VectorIcon& icon) {
   icon_ = &icon;
 
   UpdateIconAndColors();
+}
+
+void OmniboxChipButton::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void OmniboxChipButton::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 BEGIN_METADATA(OmniboxChipButton, views::MdTextButton)

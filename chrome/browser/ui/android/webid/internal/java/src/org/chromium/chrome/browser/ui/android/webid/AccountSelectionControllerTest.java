@@ -53,6 +53,7 @@ import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.A
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.ContinueButtonProperties;
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.DataSharingConsentProperties;
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.HeaderProperties.HeaderType;
+import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.IdpSignInProperties;
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.ItemProperties;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
 import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
@@ -96,13 +97,14 @@ public class AccountSelectionControllerTest {
     private static final GURL TEST_CONFIG_URL = JUnitTestGURLs.getGURL(JUnitTestGURLs.URL_2);
 
     private static final Account ANA = new Account("Ana", "ana@one.test", "Ana Doe", "Ana",
-            TEST_PROFILE_PIC, /*hints=*/new String[0], /*isSignIn=*/true);
-    private static final Account BOB = new Account(
-            "Bob", "", "Bob", "", TEST_PROFILE_PIC, /*hints=*/new String[0], /*isSignIn=*/true);
+            TEST_PROFILE_PIC, /*loginHints=*/new String[0], /*isSignIn=*/true);
+    private static final Account BOB = new Account("Bob", "", "Bob", "", TEST_PROFILE_PIC,
+            /*loginHints=*/new String[0], /*isSignIn=*/true);
     private static final Account CARL = new Account("Carl", "carl@three.test", "Carl Test", ":)",
-            TEST_PROFILE_PIC, /*hints=*/new String[0], /*isSignIn=*/true);
-    private static final Account NEW_USER = new Account("602214076", "goto@email.example",
-            "Sam E. Goto", "Sam", TEST_PROFILE_PIC, /*hints=*/new String[0], /*isSignIn=*/false);
+            TEST_PROFILE_PIC, /*loginHints=*/new String[0], /*isSignIn=*/true);
+    private static final Account NEW_USER =
+            new Account("602214076", "goto@email.example", "Sam E. Goto", "Sam", TEST_PROFILE_PIC,
+                    /*loginHints=*/new String[0], /*isSignIn=*/false);
     private static final String[] RP_CONTEXTS =
             new String[] {"signin", "signup", "use", "continue"};
     private static final ClientIdMetadata CLIENT_ID_METADATA =
@@ -475,7 +477,7 @@ public class AccountSelectionControllerTest {
                     .thenReturn(true);
             mMediator.showAccounts(TEST_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1, TEST_ETLD_PLUS_ONE_2,
                     Arrays.asList(NEW_USER), IDP_METADATA, CLIENT_ID_METADATA,
-                    false /* isAutoReauthn */, "signin" /* rpContext */);
+                    false /* isAutoReauthn */, rpContext);
             mMediator.showVerifySheet(ANA);
 
             assertEquals(1, mSheetAccountItems.size());
@@ -491,11 +493,31 @@ public class AccountSelectionControllerTest {
             // showVerifySheet is called in showAccounts when isAutoReauthn is true
             mMediator.showAccounts(TEST_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1, TEST_ETLD_PLUS_ONE_2,
                     Arrays.asList(ANA), IDP_METADATA, CLIENT_ID_METADATA, true /* isAutoReauthn */,
-                    "signin" /* rpContext */);
+                    rpContext);
 
             assertEquals(1, mSheetAccountItems.size());
             assertEquals(
                     HeaderType.VERIFY_AUTO_REAUTHN, mModel.get(ItemProperties.HEADER).get(TYPE));
+        }
+    }
+
+    @Test
+    public void testShowFailureDialog() {
+        for (String rpContext : RP_CONTEXTS) {
+            when(mMockBottomSheetController.requestShowContent(any(), anyBoolean()))
+                    .thenReturn(true);
+            mMediator.showFailureDialog(TEST_ETLD_PLUS_ONE, TEST_ETLD_PLUS_ONE_1,
+                    TEST_ETLD_PLUS_ONE_2, IDP_METADATA, rpContext);
+            assertEquals(0, mSheetAccountItems.size());
+            assertEquals(
+                    HeaderType.SIGN_IN_TO_IDP_STATIC, mModel.get(ItemProperties.HEADER).get(TYPE));
+            // For failure dialog, we expect header + IDP sign in text + continue btn
+            assertEquals(3, countAllItems());
+            assertTrue(containsItemOfType(mModel, ItemProperties.IDP_SIGNIN));
+
+            String idpEtldPlusOne =
+                    mModel.get(ItemProperties.IDP_SIGNIN).get(IdpSignInProperties.IDP_FOR_DISPLAY);
+            assertEquals("Incorrect provider ETLD+1", TEST_ETLD_PLUS_ONE_2, idpEtldPlusOne);
         }
     }
 

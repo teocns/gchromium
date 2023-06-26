@@ -10,6 +10,7 @@
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/feature_engagement/public/tracker.h"
+#import "components/omnibox/browser/omnibox_controller.h"
 #import "components/omnibox/browser/omnibox_edit_model.h"
 #import "components/omnibox/common/omnibox_features.h"
 #import "components/omnibox/common/omnibox_focus_state.h"
@@ -18,11 +19,11 @@
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/coordinator/default_browser_promo/non_modal_default_browser_promo_scheduler_scene_agent.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -92,7 +93,7 @@
   // OmniboxPopupViewSuggestionsDelegate instead of OmniboxViewIOS.
   std::unique_ptr<OmniboxViewIOS> _editView;
 }
-@synthesize editModelDelegate = _editModelDelegate;
+@synthesize locationBar = _locationBar;
 @synthesize keyboardDelegate = _keyboardDelegate;
 @synthesize viewController = _viewController;
 @synthesize mediator = _mediator;
@@ -137,13 +138,13 @@
       UrlLoadingBrowserAgent::FromBrowser(self.browser);
   self.viewController.pasteDelegate = self.mediator;
 
-  DCHECK(self.editModelDelegate);
+  DCHECK(self.locationBar);
 
   id<OmniboxCommands> focuser =
       static_cast<id<OmniboxCommands>>(self.browser->GetCommandDispatcher());
-  _editView = std::make_unique<OmniboxViewIOS>(
-      self.textField, self.editModelDelegate, self.browser->GetBrowserState(),
-      focuser);
+  _editView = std::make_unique<OmniboxViewIOS>(self.textField, self.locationBar,
+                                               self.browser->GetBrowserState(),
+                                               focuser);
   self.pasteDelegate = [[OmniboxTextFieldPasteDelegate alloc] init];
   [self.textField setPasteDelegate:self.pasteDelegate];
 
@@ -184,7 +185,7 @@
   self.viewController.textChangeDelegate = nil;
   self.returnDelegate.acceptDelegate = nil;
   _editView.reset();
-  self.editModelDelegate = nil;
+  self.locationBar = nil;
   self.viewController = nil;
   self.mediator.templateURLService = nullptr;  // Unregister the observer.
   if (self.keyboardAccessoryView) {
@@ -254,15 +255,16 @@
     (id<OmniboxPopupPresenterDelegate>)presenterDelegate {
   DCHECK(!_popupCoordinator);
   std::unique_ptr<OmniboxPopupViewIOS> popupView =
-      std::make_unique<OmniboxPopupViewIOS>(_editView->model(),
-                                            _editView.get());
+      std::make_unique<OmniboxPopupViewIOS>(_editView->controller(),
+                                            self.locationBar, _editView.get());
 
   _editView->SetPopupProvider(popupView.get());
 
   OmniboxPopupCoordinator* coordinator = [[OmniboxPopupCoordinator alloc]
       initWithBaseViewController:nil
                          browser:self.browser
-          autocompleteController:_editView->model()->autocomplete_controller()
+          autocompleteController:_editView->controller()
+                                     ->autocomplete_controller()
                        popupView:std::move(popupView)];
   coordinator.presenterDelegate = presenterDelegate;
 

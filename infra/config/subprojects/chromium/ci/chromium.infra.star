@@ -37,7 +37,7 @@ packager_builder(
         category = "packager|3pp|linux",
         short_name = "amd64",
     ),
-    notifies = ["chromium-3pp-packager"],
+    notifies = ["chromium-infra"],
     properties = {
         "$build/chromium_3pp": {
             "platform": "linux-amd64",
@@ -68,7 +68,7 @@ packager_builder(
         category = "packager|3pp|mac",
         short_name = "amd64",
     ),
-    notifies = ["chromium-3pp-packager"],
+    notifies = ["chromium-infra"],
     properties = {
         "$build/chromium_3pp": {
             "platform": "mac-amd64",
@@ -124,6 +124,8 @@ packager_builder(
                 "tools/android/avd/proto/creation/generic_playstore_android32_foldable.textpb",
                 "tools/android/avd/proto/creation/generic_android33.textpb",
                 "tools/android/avd/proto/creation/generic_playstore_android33.textpb",
+                "tools/android/avd/proto/creation/generic_android34.textpb",
+                "tools/android/avd/proto/creation/generic_playstore_android34.textpb",
             ],
             "gclient_config": "chromium",
             "gclient_apply_config": ["android"],
@@ -153,6 +155,10 @@ packager_builder(
                 "cipd_yaml": "third_party/android_sdk/cipd/build-tools/33.0.0.yaml",
             },
             {
+                "sdk_package_name": "build-tools;34.0.0",
+                "cipd_yaml": "third_party/android_sdk/cipd/build-tools/34.0.0.yaml",
+            },
+            {
                 "sdk_package_name": "cmdline-tools;latest",
                 "cipd_yaml": "third_party/android_sdk/cipd/cmdline-tools.yaml",
             },
@@ -167,6 +173,10 @@ packager_builder(
             {
                 "sdk_package_name": "platforms;android-33",
                 "cipd_yaml": "third_party/android_sdk/cipd/platforms/android-33.yaml",
+            },
+            {
+                "sdk_package_name": "platforms;android-34",
+                "cipd_yaml": "third_party/android_sdk/cipd/platforms/android-34.yaml",
             },
             {
                 "sdk_package_name": "platforms;android-TiramisuPrivacySandbox",
@@ -273,6 +283,14 @@ packager_builder(
                 "sdk_package_name": "system-images;android-TiramisuPrivacySandbox;google_apis_playstore;x86_64",
                 "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-TiramisuPrivacySandbox/google_apis_playstore/x86_64.yaml",
             },
+            {
+                "sdk_package_name": "system-images;android-34;google_apis;x86_64",
+                "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-34/google_apis/x86_64.yaml",
+            },
+            {
+                "sdk_package_name": "system-images;android-34;google_apis_playstore;x86_64",
+                "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-34/google_apis_playstore/x86_64.yaml",
+            },
         ],
     },
 )
@@ -301,15 +319,13 @@ packager_builder(
 ci.builder(
     name = "android-device-flasher",
     executable = "recipe:android/device_flasher",
-    # Triggered manually through the scheduler UI
-    # https://luci-scheduler.appspot.com/jobs/chromium/android-device-flasher
-    # TODO(crbug.com/1260195): Run the build regularly once recipe fully works
-    schedule = "triggered",
+    # TODO(crbug.com/1260195): Find the sweet spot for the frequency.
+    schedule = "0 9 * * 1",  # at 9am UTC every Monday.
     triggered_by = [],
     console_view_entry = consoles.console_view_entry(
         short_name = "flash",
     ),
-    notifies = ["clank-engprod"],
+    notifies = ["chromium-infra"],
     properties = {
         "flash_criteria": [
             # Used by ci/Android Release (Nexus 5X)
@@ -326,7 +342,7 @@ ci.builder(
                 "pool": "chromium.tests",
                 "device_type": "walleye",
                 "device_os": "PQ3A.190801.002",
-                "max_uid_threshold": 19500,
+                "max_uid_threshold": 18000,
             },
             # Used by ci/android-pie-arm64-rel
             # This is mirrored by the CQ builder android-arm64-rel

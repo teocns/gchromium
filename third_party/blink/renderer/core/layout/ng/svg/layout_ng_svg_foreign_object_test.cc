@@ -391,10 +391,10 @@ TEST_F(LayoutNGSVGForeignObjectTest, BBoxPropagationZoomed) {
   ASSERT_EQ(target.StyleRef().EffectiveZoom(), 2);
 
   EXPECT_EQ(target.ObjectBoundingBox(), gfx::RectF(6, 5, 100, 50));
-  EXPECT_EQ(target.StrokeBoundingBox(), gfx::RectF(12, 10, 200, 100));
+  EXPECT_EQ(target.DecoratedBoundingBox(), gfx::RectF(12, 10, 200, 100));
   const auto& parent_g = *target.Parent();
   EXPECT_EQ(parent_g.ObjectBoundingBox(), gfx::RectF(6, 5, 100, 50));
-  EXPECT_EQ(parent_g.StrokeBoundingBox(), gfx::RectF(6, 5, 100, 50));
+  EXPECT_EQ(parent_g.DecoratedBoundingBox(), gfx::RectF(6, 5, 100, 50));
 }
 
 // crbug.com/1335655
@@ -486,6 +486,24 @@ foreignObject {
   GetLayoutBoxByElementId("foreign")->SetChildNeedsLayout();
   UpdateAllLifecyclePhasesForTest();
   // Pass if no DCHECK failures.
+}
+
+TEST_F(LayoutNGSVGForeignObjectTest, LocalToAncestorPoint) {
+  SetBodyInnerHTML(R"HTML(
+<style>body { margin:0; }</style>
+<div style="height:3px"></div>
+<svg width="200" height="100">
+<foreignObject id="foreign" width="200" height="100">
+<body xmlns="http://www.w3.org/1999/xhtml">
+<div style="height:17px"></div>
+<div id="target">b</div>
+</body>
+</foreignObject>
+</svg>)HTML");
+  LayoutObject* target = GetLayoutObjectByElementId("target");
+  LayoutBox* foreign = GetLayoutBoxByElementId("foreign");
+  EXPECT_NE(target->LocalToAbsolutePoint(PhysicalOffset()),
+            target->LocalToAncestorPoint(PhysicalOffset(), foreign));
 }
 
 }  // namespace blink

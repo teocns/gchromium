@@ -433,7 +433,6 @@ class SpdyNetworkTransactionTest : public TestWithTaskEnvironment {
             /* is_websocket = */ false, log_);
     ASSERT_TRUE(spdy_session);
     EXPECT_EQ(0u, num_active_streams(spdy_session));
-    EXPECT_EQ(0u, num_unclaimed_pushed_streams(spdy_session));
   }
 
   static void DeleteSessionCallback(NormalSpdyTransactionHelper* helper,
@@ -463,19 +462,6 @@ class SpdyNetworkTransactionTest : public TestWithTaskEnvironment {
 
   size_t num_active_streams(base::WeakPtr<SpdySession> session) {
     return session->active_streams_.size();
-  }
-
-  static size_t num_unclaimed_pushed_streams(
-      base::WeakPtr<SpdySession> session) {
-    return session->pool_->push_promise_index()->CountStreamsForSession(
-        session.get());
-  }
-
-  static bool has_unclaimed_pushed_stream_for_url(
-      base::WeakPtr<SpdySession> session,
-      const GURL& url) {
-    return session->pool_->push_promise_index()->FindStream(
-               url, session.get()) != kNoPushedStreamFound;
   }
 
   static spdy::SpdyStreamId spdy_stream_hi_water_mark(
@@ -2432,8 +2418,6 @@ TEST_F(SpdyNetworkTransactionTest, RedirectMultipleLocations) {
 // Server push is not supported. Verify that SETTINGS_ENABLE_PUSH = 0 is sent in
 // the initial SETTINGS frame, and that an incoming pushed stream is reset.
 TEST_F(SpdyNetworkTransactionTest, ServerPushReset) {
-  base::HistogramTester histogram_tester;
-
   spdy::SpdySerializedFrame preface(
       const_cast<char*>(spdy::kHttp2ConnectionHeaderPrefix),
       spdy::kHttp2ConnectionHeaderPrefixSize,
@@ -2478,17 +2462,10 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushReset) {
   pool_peer.SetEnableSendingInitialData(true);
 
   helper.RunToCompletion(&data);
-
-  histogram_tester.ExpectBucketCount(
-      "Net.SpdyPushedStreamFate",
-      static_cast<int>(SpdyPushedStreamFate::kPushDisabled), 1);
-  histogram_tester.ExpectTotalCount("Net.SpdyPushedStreamFate", 1);
 }
 
 // PUSH_PROMISE on a closed client-initiated stream should trigger RST_STREAM.
 TEST_F(SpdyNetworkTransactionTest, ServerPushOnClosedStream) {
-  base::HistogramTester histogram_tester;
-
   spdy::SpdySerializedFrame stream1_syn(
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST));
   spdy::SpdySerializedFrame rst(
@@ -2536,11 +2513,6 @@ TEST_F(SpdyNetworkTransactionTest, ServerPushOnClosedStream) {
   EXPECT_TRUE(data.AllReadDataConsumed());
   EXPECT_TRUE(data.AllWriteDataConsumed());
   VerifyStreamsClosed(helper);
-
-  histogram_tester.ExpectBucketCount(
-      "Net.SpdyPushedStreamFate",
-      static_cast<int>(SpdyPushedStreamFate::kPushDisabled), 1);
-  histogram_tester.ExpectTotalCount("Net.SpdyPushedStreamFate", 1);
 }
 
 TEST_F(SpdyNetworkTransactionTest, NoConnectionPoolingOverTunnel) {
@@ -6112,8 +6084,6 @@ TEST_F(SpdyNetworkTransactionTest, FlowControlNegativeSendWindowSize) {
 }
 
 TEST_F(SpdyNetworkTransactionTest, ResetPush) {
-  base::HistogramTester histogram_tester;
-
   spdy::Http2HeaderBlock push_headers;
   spdy_util_.AddUrlToHeaderBlock("http://www.example.org/a.dat", &push_headers);
   spdy::SpdySerializedFrame push(
@@ -6138,18 +6108,11 @@ TEST_F(SpdyNetworkTransactionTest, ResetPush) {
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
-
-  histogram_tester.ExpectBucketCount(
-      "Net.SpdyPushedStreamFate",
-      static_cast<int>(SpdyPushedStreamFate::kPushDisabled), 1);
-  histogram_tester.ExpectTotalCount("Net.SpdyPushedStreamFate", 1);
 }
 
 // Push streams must have even stream IDs. Test that an incoming push stream
 // with odd ID is reset the same way as one with even ID.
 TEST_F(SpdyNetworkTransactionTest, ResetPushWithOddStreamId) {
-  base::HistogramTester histogram_tester;
-
   spdy::Http2HeaderBlock push_headers;
   spdy_util_.AddUrlToHeaderBlock("http://www.example.org/a.dat", &push_headers);
   spdy::SpdySerializedFrame push(
@@ -6174,11 +6137,6 @@ TEST_F(SpdyNetworkTransactionTest, ResetPushWithOddStreamId) {
   helper.RunToCompletion(&data);
   TransactionHelperResult out = helper.output();
   EXPECT_THAT(out.rv, IsOk());
-
-  histogram_tester.ExpectBucketCount(
-      "Net.SpdyPushedStreamFate",
-      static_cast<int>(SpdyPushedStreamFate::kPushDisabled), 1);
-  histogram_tester.ExpectTotalCount("Net.SpdyPushedStreamFate", 1);
 }
 
 // Regression test for https://crbug.com/493348: request header exceeds 16 kB

@@ -12,7 +12,7 @@
 #include "base/check_op.h"
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
-#include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -29,11 +29,14 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/navigation_handle_user_data.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/message.h"
+#include "net/url_request/url_request.h"
+#include "services/network/public/cpp/attribution_reporting_runtime_features.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -54,29 +57,44 @@ namespace {
 
 using ::attribution_reporting::SuitableOrigin;
 
-// Abstraction that wraps an iterator to a map. When this goes out of the scope,
-// the underlying iterator is erased from the map. This is useful for control
-// flows where map cleanup needs to occur regardless of additional early exit
-// logic.
-template <typename Map>
-class ScopedMapDeleter {
+// Auxiliary data that lives alongside a NavigationHandle, tracking
+// whether the navigation is "insecurely tainted" i.e. has seen an
+// insecure hop in its path. This should only be present for navigations which
+// have had at least one secure response with Attribution headers.
+//
+// For now, it is only used for metrics collection, but it may be extended in
+// the future to block secure registration attempts after an insecure redirect
+// was seen. See https://github.com/WICG/attribution-reporting-api/issues/767.
+class InsecureTaintTracker
+    : public NavigationHandleUserData<InsecureTaintTracker> {
  public:
-  ScopedMapDeleter(Map* map, const typename Map::key_type& key)
-      : map_(map), it_(map_->find(key)) {}
-  ~ScopedMapDeleter() {
-    if (*this) {
-      map_->erase(it_);
+  explicit InsecureTaintTracker(NavigationHandle&) {}
+  ~InsecureTaintTracker() override {
+    if (had_any_secure_attempts_) {
+      base::UmaHistogramExactLinear("Conversions.IncrementalTaintingFailures",
+                                    num_secure_registrations_after_tainting_,
+                                    net::URLRequest::kMaxRedirects + 1);
     }
   }
 
-  typename Map::iterator* get() { return &it_; }
+  InsecureTaintTracker(const InsecureTaintTracker&) = delete;
+  InsecureTaintTracker& operator=(const InsecureTaintTracker&) = delete;
 
-  explicit operator bool() const { return it_ != map_->end(); }
+  void TaintInsecure() { navigation_is_tainted_ = true; }
+
+  void NotifySecureRegistrationAttempt() {
+    had_any_secure_attempts_ = true;
+    num_secure_registrations_after_tainting_ += navigation_is_tainted_;
+  }
+
+  NAVIGATION_HANDLE_USER_DATA_KEY_DECL();
 
  private:
-  raw_ptr<Map> map_;
-  typename Map::iterator it_;
+  int num_secure_registrations_after_tainting_ = 0;
+  bool navigation_is_tainted_ = false;
+  bool had_any_secure_attempts_ = false;
 };
+NAVIGATION_HANDLE_USER_DATA_KEY_IMPL(InsecureTaintTracker);
 
 }  // namespace
 
@@ -192,7 +210,7 @@ void AttributionHost::DidStartNavigation(NavigationHandle* navigation_handle) {
   attribution_manager->GetDataHostManager()
       ->NotifyNavigationRegistrationStarted(
           impression->attribution_src_token, navigation_info.source_origin,
-          impression->nav_type, navigation_info.is_within_fenced_frame,
+          navigation_info.is_within_fenced_frame,
           navigation_info.initiator_root_frame_id,
           navigation_handle->GetNavigationId());
 }
@@ -204,11 +222,9 @@ void AttributionHost::DidRedirectNavigation(
 }
 
 void AttributionHost::DidFinishNavigation(NavigationHandle* navigation_handle) {
-  ScopedMapDeleter<NavigationInfoMap> navigation_source_origin_it(
-      &navigation_info_map_, navigation_handle->GetNavigationId());
-
   NotifyNavigationRegistrationData(navigation_handle,
                                    /*is_final_response=*/true);
+  navigation_info_map_.erase(navigation_handle->GetNavigationId());
 }
 
 void AttributionHost::NotifyNavigationRegistrationData(
@@ -249,7 +265,13 @@ void AttributionHost::NotifyNavigationRegistrationData(
   }
   absl::optional<SuitableOrigin> reporting_origin =
       SuitableOrigin::Create(redirect_chain[redirect_chain.size() - offset]);
+
+  // Pass the suitability as a proxy for the potentially trustworthy check, as
+  // redirects should only happen for HTTP-based navigations.
+  auto* tracker =
+      InsecureTaintTracker::GetOrCreateForNavigationHandle(*navigation_handle);
   if (!reporting_origin) {
+    tracker->TaintInsecure();
     return;
   }
 
@@ -257,12 +279,20 @@ void AttributionHost::NotifyNavigationRegistrationData(
       AttributionManager::FromWebContents(web_contents());
   DCHECK(attribution_manager);
 
-  attribution_manager->GetDataHostManager()->NotifyNavigationRegistrationData(
-      impression->attribution_src_token,
-      navigation_handle->GetResponseHeaders(), std::move(*reporting_origin),
-      it->second.source_origin, it->second.input_event, impression->nav_type,
-      it->second.is_within_fenced_frame, it->second.initiator_root_frame_id,
-      navigation_handle->GetNavigationId(), is_final_response);
+  bool had_header =
+      attribution_manager->GetDataHostManager()
+          ->NotifyNavigationRegistrationData(
+              impression->attribution_src_token,
+              navigation_handle->GetResponseHeaders(),
+              std::move(*reporting_origin), it->second.source_origin,
+              it->second.input_event, it->second.is_within_fenced_frame,
+              it->second.initiator_root_frame_id,
+              navigation_handle->GetNavigationId(),
+              impression->runtime_features, is_final_response);
+
+  if (had_header) {
+    tracker->NotifySecureRegistrationAttempt();
+  }
 }
 
 absl::optional<SuitableOrigin>
@@ -362,22 +392,22 @@ void AttributionHost::BindReceiver(
   attribution_host->receivers_.Bind(rfh, std::move(receiver));
 }
 
-void AttributionHost::NotifyFencedFrameReportingBeaconStarted(
+bool AttributionHost::NotifyFencedFrameReportingBeaconStarted(
     BeaconId beacon_id,
     absl::optional<int64_t> navigation_id,
     RenderFrameHostImpl* initiator_frame_host) {
   if (!base::FeatureList::IsEnabled(
           features::kAttributionFencedFrameReportingBeacon)) {
-    return;
+    return false;
   }
 
   if (!initiator_frame_host) {
-    return;
+    return false;
   }
 
   if (!initiator_frame_host->IsFeatureEnabled(
           blink::mojom::PermissionsPolicyFeature::kAttributionReporting)) {
-    return;
+    return false;
   }
 
   RenderFrameHostImpl* initiator_root_frame =
@@ -388,7 +418,7 @@ void AttributionHost::NotifyFencedFrameReportingBeaconStarted(
       SuitableOrigin::Create(initiator_root_frame->GetLastCommittedOrigin());
 
   if (!initiator_root_frame_origin) {
-    return;
+    return false;
   }
 
   AttributionInputEvent input_event;
@@ -407,6 +437,7 @@ void AttributionHost::NotifyFencedFrameReportingBeaconStarted(
           beacon_id, navigation_id, std::move(*initiator_root_frame_origin),
           initiator_frame_host->IsNestedWithinFencedFrame(), input_event,
           initiator_root_frame->GetGlobalId());
+  return true;
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(AttributionHost);

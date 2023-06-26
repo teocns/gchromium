@@ -61,6 +61,7 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
     };
 
     AuthenticatorRequestDialogModel::PairedPhone phone(
+        AuthenticatorRequestDialogModel::PairedPhone::PairingSource::kQR,
         "Elisa's Pixel 6 Pro", 0,
         std::array<uint8_t, device::kP256X962Length>{0});
 
@@ -130,6 +131,15 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
           /*contact_phone_callback=*/base::DoNothing(), "fido://qrcode");
       model_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kCableV2QRCode);
+    } else if (name == "cable_v2_connecting") {
+      model_->SetCurrentStepForTesting(
+          AuthenticatorRequestDialogModel::Step::kCableV2Connecting);
+    } else if (name == "cable_v2_connected") {
+      model_->SetCurrentStepForTesting(
+          AuthenticatorRequestDialogModel::Step::kCableV2Connected);
+    } else if (name == "cable_v2_error") {
+      model_->SetCurrentStepForTesting(
+          AuthenticatorRequestDialogModel::Step::kCableV2Error);
     } else if (name == "phone_aoa") {
       model_->SetCurrentStepForTesting(
           AuthenticatorRequestDialogModel::Step::kAndroidAccessory);
@@ -215,7 +225,8 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
         device::AuthenticatorData auth_data(kAppParam, 0 /* flags */,
                                             kSignatureCounter, absl::nullopt);
         device::AuthenticatorGetAssertionResponse response(
-            std::move(auth_data), {10, 11, 12, 13} /* signature */);
+            std::move(auth_data), {10, 11, 12, 13} /* signature */,
+            /*transport_used=*/absl::nullopt);
         device::PublicKeyCredentialUserEntity user({1, 2, 3, 4});
         user.name = info.first;
         user.display_name = info.second;
@@ -279,7 +290,8 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
         device::AuthenticatorData auth_data(kAppParam, 0 /* flags */,
                                             kSignatureCounter, absl::nullopt);
         device::AuthenticatorGetAssertionResponse response(
-            std::move(auth_data), {10, 11, 12, 13} /* signature */);
+            std::move(auth_data), {10, 11, 12, 13} /* signature */,
+            /*transport_used=*/absl::nullopt);
         device::PublicKeyCredentialUserEntity user({1, 2, 3, 4});
         user.name = info.first;
         user.display_name = info.second;
@@ -406,6 +418,18 @@ IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_cable_v2_activate) {
 }
 
 IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_cable_v2_pair) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_cable_v2_connecting) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_cable_v2_connected) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(AuthenticatorDialogTest, InvokeUi_cable_v2_error) {
   ShowAndVerifyUi();
 }
 

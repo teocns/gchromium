@@ -3,15 +3,21 @@
 // found in the LICENSE file.
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {microTask, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {recordLoadDuration, recordOccurence, recordPerdecage} from '../metrics_utils.js';
 import {WindowProxy} from '../window_proxy.js';
 
-import {Module} from './module_descriptor.js';
+import {ModuleDescriptor} from './module_descriptor.js';
 import {getTemplate} from './module_wrapper.html.js';
 
 /** @fileoverview Element that implements the common module UI. */
+
+export interface ModuleInstance {
+  element: HTMLElement;
+  descriptor: ModuleDescriptor;
+}
 
 export interface ModuleWrapperElement {
   $: {
@@ -35,12 +41,19 @@ export class ModuleWrapperElement extends PolymerElement {
         observer: 'onModuleChange_',
         type: Object,
       },
+      modulesRedesignedEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('modulesRedesignedEnabled'),
+        reflectToAttribute: true,
+      },
     };
   }
 
-  module: Module;
+  module: ModuleInstance;
+  private modulesRedesignedEnabled_: boolean;
 
-  private onModuleChange_(_newValue: Module, oldValue?: Module) {
+  private onModuleChange_(
+      _newValue: ModuleInstance, oldValue?: ModuleInstance) {
     assert(!oldValue);
     this.$.moduleElement.appendChild(this.module.element);
 
@@ -62,9 +75,14 @@ export class ModuleWrapperElement extends PolymerElement {
       if (intersectionRatio >= 1.0) {
         headerObserver.disconnect();
         const time = WindowProxy.getInstance().now();
-        recordLoadDuration('NewTabPage.Modules.Impression', time);
-        recordLoadDuration(
-            `NewTabPage.Modules.Impression.${this.module.descriptor.id}`, time);
+        // TODO(crbug.com/1444758): Add module instances impression duration
+        // metrics.
+        if (!this.modulesRedesignedEnabled_) {
+          recordLoadDuration('NewTabPage.Modules.Impression', time);
+          recordLoadDuration(
+              `NewTabPage.Modules.Impression.${this.module.descriptor.id}`,
+              time);
+        }
         this.dispatchEvent(new Event('detect-impression'));
         this.module.element.dispatchEvent(new Event('detect-impression'));
       }

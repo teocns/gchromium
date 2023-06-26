@@ -42,11 +42,20 @@ absl::optional<ui::KeyboardDevice> GetPriorityExternalKeyboard() {
   absl::optional<ui::KeyboardDevice> priority_keyboard;
   for (const ui::KeyboardDevice& keyboard :
        ui::DeviceDataManager::GetInstance()->GetKeyboardDevices()) {
+    // If the input device settings controlled does not recognize the device as
+    // a keyboard, skip it.
+    if (features::IsInputDeviceSettingsSplitEnabled() &&
+        Shell::Get()->input_device_settings_controller()->GetKeyboardSettings(
+            keyboard.id) == nullptr) {
+      continue;
+    }
+
     const auto device_type =
         Shell::Get()->keyboard_capability()->GetDeviceType(keyboard);
     switch (device_type) {
       case DeviceType::kDeviceUnknown:
       case DeviceType::kDeviceInternalKeyboard:
+      case DeviceType::kDeviceInternalRevenKeyboard:
         break;
       case DeviceType::kDeviceExternalChromeOsKeyboard:
       case DeviceType::kDeviceExternalAppleKeyboard:
@@ -66,11 +75,20 @@ absl::optional<ui::KeyboardDevice> GetPriorityExternalKeyboard() {
 absl::optional<ui::KeyboardDevice> GetInternalKeyboard() {
   for (const ui::KeyboardDevice& keyboard :
        ui::DeviceDataManager::GetInstance()->GetKeyboardDevices()) {
+    // If the input device settings controlled does not recognize the device as
+    // a keyboard, skip it.
+    if (features::IsInputDeviceSettingsSplitEnabled() &&
+        Shell::Get()->input_device_settings_controller()->GetKeyboardSettings(
+            keyboard.id) == nullptr) {
+      continue;
+    }
+
     const auto device_type =
         Shell::Get()->keyboard_capability()->GetDeviceType(keyboard);
     switch (device_type) {
       case DeviceType::kDeviceUnknown:
       case DeviceType::kDeviceInternalKeyboard:
+      case DeviceType::kDeviceInternalRevenKeyboard:
         return keyboard;
       case DeviceType::kDeviceExternalChromeOsKeyboard:
       case DeviceType::kDeviceExternalAppleKeyboard:
@@ -109,6 +127,7 @@ bool ShouldAlwaysShowWithExternalKeyboard(ui::TopRowActionKey action_key) {
     case ui::TopRowActionKey::kKeyboardBacklightToggle:
     case ui::TopRowActionKey::kKeyboardBacklightDown:
     case ui::TopRowActionKey::kKeyboardBacklightUp:
+    case ui::TopRowActionKey::kPrivacyScreenToggle:
     case ui::TopRowActionKey::kAllApplications:
     case ui::TopRowActionKey::kDictation:
       return false;
@@ -129,6 +148,37 @@ bool ShouldAlwaysShowWithExternalKeyboard(ui::TopRowActionKey action_key) {
   }
 }
 
+bool MetaFKeyRewritesAreSuppressed(const ui::InputDevice& keyboard) {
+  if (!features::IsInputDeviceSettingsSplitEnabled()) {
+    return false;
+  }
+
+  const auto* settings =
+      Shell::Get()->input_device_settings_controller()->GetKeyboardSettings(
+          keyboard.id);
+  if (!settings) {
+    return false;
+  }
+  return settings->suppress_meta_fkey_rewrites;
+}
+
+bool ShouldShowExternalTopRowActionKeyAlias(
+    const ui::KeyboardDevice& keyboard,
+    ui::TopRowActionKey action_key,
+    const ui::Accelerator& accelerator) {
+  const bool should_show_action_key =
+      Shell::Get()->keyboard_capability()->HasTopRowActionKey(keyboard,
+                                                              action_key) ||
+      ShouldAlwaysShowWithExternalKeyboard(action_key);
+
+  // If Meta + F-Key rewrites are suppressed for the priority keyboard and
+  // the accelerator contains the search key, we should not show the
+  // accelerator.
+  const bool alias_is_suppressed =
+      accelerator.IsCmdDown() && MetaFKeyRewritesAreSuppressed(keyboard);
+  return should_show_action_key && !alias_is_suppressed;
+}
+
 }  // namespace
 
 std::vector<ui::Accelerator> AcceleratorAliasConverter::CreateAcceleratorAlias(
@@ -136,6 +186,16 @@ std::vector<ui::Accelerator> AcceleratorAliasConverter::CreateAcceleratorAlias(
   absl::optional<ui::KeyboardDevice> priority_external_keyboard =
       GetPriorityExternalKeyboard();
   absl::optional<ui::KeyboardDevice> internal_keyboard = GetInternalKeyboard();
+
+  // If the external and internal keyboards are either both non-chromeos
+  // keyboards (ex ChromeOS flex devices) or if they are both ChromeOS keyboards
+  // (ex ChromeOS external keyboard), do not show aliases for the internal
+  // keyboard.
+  if (priority_external_keyboard && internal_keyboard &&
+      (IsChromeOSKeyboard(*priority_external_keyboard) ==
+       IsChromeOSKeyboard(*internal_keyboard))) {
+    internal_keyboard = absl::nullopt;
+  }
 
   // Set is used to get rid of possible duplicate accelerators.
   base::flat_set<ui::Accelerator> aliases_set;
@@ -200,8 +260,6 @@ absl::optional<ui::Accelerator>
 AcceleratorAliasConverter::CreateFunctionKeyAliases(
     const ui::KeyboardDevice& keyboard,
     const ui::Accelerator& accelerator) const {
-  // TODO(dpad): Handle the case when meta + top row key rewrite is
-  // suppressed.
   // Avoid remapping if [Search] is part of the original accelerator.
   if (accelerator.IsCmdDown()) {
     return {};
@@ -264,8 +322,6 @@ AcceleratorAliasConverter::CreateFunctionKeyAliases(
 absl::optional<ui::Accelerator> AcceleratorAliasConverter::CreateTopRowAliases(
     const ui::KeyboardDevice& keyboard,
     const ui::Accelerator& accelerator) const {
-  // TODO(zhangwenyu): Handle the case when meta + top row key rewrite is
-  // suppressed, following https://crrev.com/c/4160339.
   // Avoid remapping if [Search] is part of the original accelerator.
   if (accelerator.IsCmdDown()) {
     return {};
@@ -397,19 +453,43 @@ AcceleratorAliasConverter::FilterAliasBySupportedKeys(
   auto priority_keyboard = GetPriorityExternalKeyboard();
   auto internal_keyboard = GetInternalKeyboard();
 
+  // If the external and internal keyboards are either both non-chromeos
+  // keyboards (ex ChromeOS flex devices) or if they are both ChromeOS keyboards
+  // (ex ChromeOS external keyboard), do not show aliases for the internal
+  // keyboard.
+  if (priority_keyboard && internal_keyboard &&
+      (IsChromeOSKeyboard(*priority_keyboard) ==
+       IsChromeOSKeyboard(*internal_keyboard))) {
+    internal_keyboard = absl::nullopt;
+  }
+
   for (const auto& accelerator : accelerators) {
+    // TODO(dpad): Handle privacy screen correctly. This can be simplified once
+    // drallion devices are properly handled in `KeyboardCapability`.
     if (auto action_key = ui::KeyboardCapability::ConvertToTopRowActionKey(
             accelerator.key_code());
-        action_key.has_value()) {
+        action_key.has_value() &&
+        action_key != ui::TopRowActionKey::kPrivacyScreenToggle) {
       // Accelerator should only be seen if the priority or internal keyboard
       // have the key OR if there is an external keyboard and the `action_key`
       // should always been shown when there is an external keyboard.
-      if ((priority_keyboard &&
-           (keyboard_capability->HasTopRowActionKey(*priority_keyboard,
-                                                    *action_key) ||
-            ShouldAlwaysShowWithExternalKeyboard(*action_key))) ||
-          (internal_keyboard && keyboard_capability->HasTopRowActionKey(
-                                    *internal_keyboard, *action_key))) {
+      if (priority_keyboard &&
+          (ShouldShowExternalTopRowActionKeyAlias(*priority_keyboard,
+                                                  *action_key, accelerator))) {
+        filtered_accelerators.push_back(accelerator);
+      } else if (internal_keyboard && keyboard_capability->HasTopRowActionKey(
+                                          *internal_keyboard, *action_key)) {
+        filtered_accelerators.push_back(accelerator);
+      }
+      continue;
+    }
+
+    // If the accelerator is for an FKey + Search, make sure it is only shown if
+    // Meta + F-Key rewrites are allowed.
+    if (accelerator.key_code() > ui::VKEY_F1 &&
+        accelerator.key_code() < ui::VKEY_F24 && accelerator.IsCmdDown()) {
+      if (priority_keyboard &&
+          !MetaFKeyRewritesAreSuppressed(*priority_keyboard)) {
         filtered_accelerators.push_back(accelerator);
       }
       continue;
@@ -423,7 +503,8 @@ AcceleratorAliasConverter::FilterAliasBySupportedKeys(
     }
 
     if (accelerator.key_code() == ui::VKEY_ASSISTANT) {
-      if (ui::DeviceKeyboardHasAssistantKey()) {
+      if (priority_keyboard &&
+          keyboard_capability->HasAssistantKey(*priority_keyboard)) {
         filtered_accelerators.push_back(accelerator);
       }
       continue;
@@ -484,6 +565,13 @@ AcceleratorAliasConverter::FilterAliasBySupportedKeys(
     // Search should be shown in the shortcuts app.
     if (accelerator.key_code() == ui::VKEY_MENU &&
         accelerator.modifiers() == ui::EF_COMMAND_DOWN) {
+      continue;
+    }
+
+    // VKEY_PLAY/PAUSE should not be shown as they are conceptual duplicates of
+    // VKEY_MEDIA_PLAY/VKEY_MEDIA_PAUSE.
+    if (accelerator.key_code() == ui::VKEY_PLAY ||
+        accelerator.key_code() == ui::VKEY_PAUSE) {
       continue;
     }
 

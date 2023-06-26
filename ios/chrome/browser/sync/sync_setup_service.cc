@@ -9,8 +9,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "components/sync/base/stop_source.h"
 #include "components/sync/base/user_selectable_type.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_user_settings.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_user_settings.h"
 
 SyncSetupService::SyncSetupService(syncer::SyncService* sync_service)
     : sync_service_(sync_service) {
@@ -42,42 +42,6 @@ void SyncSetupService::SetDataTypeEnabled(syncer::UserSelectableType datatype,
   user_settings->SetSelectedTypes(IsSyncEverythingEnabled(), selected_types);
 }
 
-bool SyncSetupService::UserActionIsRequiredToHaveTabSyncWork() {
-  if (!CanSyncFeatureStart() ||
-      !IsDataTypePreferred(syncer::UserSelectableType::kTabs)) {
-    return true;
-  }
-
-  switch (sync_service_->GetUserActionableError()) {
-    // No error.
-    case syncer::SyncService::UserActionableError::kNone:
-      return false;
-
-    // These errors effectively amount to disabled sync or effectively paused.
-    case syncer::SyncService::UserActionableError::kSignInNeedsUpdate:
-    case syncer::SyncService::UserActionableError::kNeedsPassphrase:
-    case syncer::SyncService::UserActionableError::kGenericUnrecoverableError:
-    case syncer::SyncService::UserActionableError::
-        kNeedsTrustedVaultKeyForEverything:
-      return true;
-
-    // This error doesn't stop tab sync.
-    case syncer::SyncService::UserActionableError::
-        kNeedsTrustedVaultKeyForPasswords:
-      return false;
-
-    // These errors don't actually stop sync.
-    case syncer::SyncService::UserActionableError::
-        kTrustedVaultRecoverabilityDegradedForPasswords:
-    case syncer::SyncService::UserActionableError::
-        kTrustedVaultRecoverabilityDegradedForEverything:
-      return false;
-  }
-
-  NOTREACHED() << "Unknown sync service state.";
-  return true;
-}
-
 bool SyncSetupService::IsSyncEverythingEnabled() const {
   return sync_service_->GetUserSettings()->IsSyncEverythingEnabled();
 }
@@ -88,13 +52,8 @@ void SyncSetupService::SetSyncEverythingEnabled(bool sync_all) {
       sync_all, sync_service_->GetUserSettings()->GetSelectedTypes());
 }
 
-bool SyncSetupService::IsSyncRequested() const {
-  return !sync_service_->GetDisableReasons().Has(
-      syncer::SyncService::DISABLE_REASON_USER_CHOICE);
-}
-
-bool SyncSetupService::CanSyncFeatureStart() const {
-  return sync_service_->CanSyncFeatureStart();
+bool SyncSetupService::IsSyncFeatureEnabled() const {
+  return sync_service_->IsSyncFeatureEnabled();
 }
 
 bool SyncSetupService::IsEncryptEverythingEnabled() const {
@@ -106,18 +65,19 @@ void SyncSetupService::PrepareForFirstSyncSetup() {
     sync_blocker_ = sync_service_->GetSetupInProgressHandle();
 }
 
-void SyncSetupService::SetFirstSetupComplete(
+void SyncSetupService::SetInitialSyncFeatureSetupComplete(
     syncer::SyncFirstSetupCompleteSource source) {
   CHECK(sync_blocker_);
   // Turn on the sync setup completed flag only if the user did not turn sync
   // off.
   if (sync_service_->CanSyncFeatureStart()) {
-    sync_service_->GetUserSettings()->SetFirstSetupComplete(source);
+    sync_service_->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
+        source);
   }
 }
 
-bool SyncSetupService::IsFirstSetupComplete() const {
-  return sync_service_->GetUserSettings()->IsFirstSetupComplete();
+bool SyncSetupService::IsInitialSyncFeatureSetupComplete() const {
+  return sync_service_->GetUserSettings()->IsInitialSyncFeatureSetupComplete();
 }
 
 void SyncSetupService::CommitSyncChanges() {

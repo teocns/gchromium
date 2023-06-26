@@ -32,12 +32,6 @@ BASE_DECLARE_FEATURE(kEnableFeedInvisibleForegroundRefresh);
 // Use IsWebChannelsEnabled() instead of this constant directly.
 BASE_DECLARE_FEATURE(kEnableWebChannels);
 
-// Feature flag to enable Feed bottom sign-in promo feature, which displays a
-// sign-in promotion card at the bottom of the Discover Feed for signed out
-// users. Use IsFeedBottomSignInPromoEnabled() instead of this constant
-// directly.
-BASE_DECLARE_FEATURE(kEnableFeedBottomSignInPromo);
-
 // Feature flag to enable Feed card menu promo feature, which displays a sign-in
 // promotion UI when signed out users click on personalization options within
 // the feed card menu.
@@ -55,6 +49,9 @@ BASE_DECLARE_FEATURE(kIOSSetUpList);
 
 // Feature flag to disable Discover-controlled foregrounding refreshes.
 BASE_DECLARE_FEATURE(kFeedDisableHotStartRefresh);
+
+// Feature flag to enable the Follow UI update.
+BASE_DECLARE_FEATURE(kEnableFollowUIUpdate);
 
 // Feature param under `kEnableFeedBackgroundRefresh` to also enable background
 // refresh for the Following feed.
@@ -223,9 +220,6 @@ double GetFeedUnseenRefreshThresholdInSeconds();
 // views, and no sooner than 5 minutes from the last refresh.
 bool IsFeedUseInteractivityInvalidationForForegroundRefreshesEnabled();
 
-// YES if enabled Feed bottom sign-in promo.
-bool IsFeedBottomSignInPromoEnabled();
-
 // YES if enabled Feed card menu promo.
 bool IsFeedCardMenuSignInPromoEnabled();
 
@@ -240,5 +234,8 @@ bool IsIOSSetUpListEnabled();
 
 // Whether Discover-controlled foregrounding refreshes are disabled.
 bool IsFeedHotStartRefreshDisabled();
+
+// YES when Follow UI Update is enabled.
+bool IsFollowUIUpdateEnabled();
 
 #endif  // IOS_CHROME_BROWSER_NTP_FEATURES_H_

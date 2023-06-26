@@ -27,9 +27,10 @@ std::unique_ptr<google_apis::calendar::CalendarEvent> CreateEvent(
     const base::Time start_time,
     const base::Time end_time,
     bool all_day_event = false,
-    const GURL video_conference_url = GURL()) {
+    const GURL video_conference_url = GURL(),
+    const char* summary = "summary") {
   return calendar_test_utils::CreateEvent(
-      "id_0", "summary_0", start_time, end_time,
+      "id_0", summary, start_time, end_time,
       google_apis::calendar::CalendarEvent::EventStatus::kConfirmed,
       google_apis::calendar::CalendarEvent::ResponseStatus::kAccepted,
       all_day_event, video_conference_url);
@@ -38,7 +39,8 @@ std::unique_ptr<google_apis::calendar::CalendarEvent> CreateEvent(
 std::list<std::unique_ptr<google_apis::calendar::CalendarEvent>>
 CreateUpcomingEvents(int event_count = 1,
                      bool all_day_event = false,
-                     const GURL video_conference_url = GURL()) {
+                     const GURL video_conference_url = GURL(),
+                     const char* summary = "summary") {
   std::list<std::unique_ptr<google_apis::calendar::CalendarEvent>> events;
   auto event_in_ten_mins_start_time =
       base::subtle::TimeNowIgnoringOverride().LocalMidnight() +
@@ -48,7 +50,7 @@ CreateUpcomingEvents(int event_count = 1,
   for (int i = 0; i < event_count; ++i) {
     events.push_back(CreateEvent(event_in_ten_mins_start_time,
                                  event_in_ten_mins_end_time, all_day_event,
-                                 video_conference_url));
+                                 video_conference_url, summary));
   }
 
   return events;
@@ -201,7 +203,7 @@ TEST_F(CalendarUpNextViewTest, ShouldShowMultipleUpcomingEvents) {
 }
 
 TEST_F(CalendarUpNextViewTest,
-       ShouldShowSingleEventTakingUpFullWidthOfParentView) {
+       ShouldShowSingleEventWithShortTitleTakingUpFullWidthOfParentView) {
   // Set time override.
   base::subtle::ScopedTimeClockOverrides time_override(
       []() { return base::subtle::TimeNowIgnoringOverride().LocalMidnight(); },
@@ -209,6 +211,24 @@ TEST_F(CalendarUpNextViewTest,
 
   // Create UpNextView with a single upcoming event.
   CreateUpNextView(CreateUpcomingEvents());
+
+  EXPECT_EQ(GetContentsView()->children().size(), size_t(1));
+  EXPECT_EQ(GetContentsView()->children()[0]->width(),
+            GetScrollView()->width());
+}
+
+TEST_F(CalendarUpNextViewTest,
+       ShouldShowSingleEventWithLongTitleTakingUpFullWidthOfParentView) {
+  // Set time override.
+  base::subtle::ScopedTimeClockOverrides time_override(
+      []() { return base::subtle::TimeNowIgnoringOverride().LocalMidnight(); },
+      nullptr, nullptr);
+
+  // Create UpNextView with a single upcoming event.
+  CreateUpNextView(
+      CreateUpcomingEvents(1, false, GURL(),
+                           "Meeting title with really long long long long long "
+                           "long long name that should ellipsis"));
 
   EXPECT_EQ(GetContentsView()->children().size(), size_t(1));
   EXPECT_EQ(GetContentsView()->children()[0]->width(),
@@ -526,6 +546,36 @@ TEST_F(CalendarUpNextViewTest, ShouldFocusViewsInCorrectOrder_WhenPressingTab) {
   // Going back again, the second event list item view should be focused.
   PressShiftTab();
   EXPECT_EQ(second_item, focus_manager->GetFocusedView());
+  EXPECT_STREQ("CalendarEventListItemViewJelly",
+               focus_manager->GetFocusedView()->GetClassName());
+}
+
+// Add unittest for the fix of this bug: b/286596205.
+TEST_F(CalendarUpNextViewTest, ShouldPreserveFocusAfterRefreshEvent) {
+  // Set time override.
+  base::subtle::ScopedTimeClockOverrides time_override(
+      []() { return base::subtle::TimeNowIgnoringOverride().LocalMidnight(); },
+      nullptr, nullptr);
+
+  // Create up next view with 2 upcoming google meet events.
+  CreateUpNextView(
+      CreateUpcomingEvents(2, false, GURL("https://meet.google.com/abc-123")));
+  EXPECT_EQ(GetContentsView()->children().size(), size_t(2));
+  auto* focus_manager = up_next_view()->GetFocusManager();
+
+  // First the event list item view should be focused.
+  PressTab();
+  auto* first_item = GetContentsView()->children()[0];
+  ASSERT_TRUE(first_item);
+  EXPECT_EQ(first_item, focus_manager->GetFocusedView());
+  EXPECT_STREQ("CalendarEventListItemViewJelly",
+               focus_manager->GetFocusedView()->GetClassName());
+
+  up_next_view()->RefreshEvents();
+
+  // After refresh the events, the first event list item view should still be
+  // focused.
+  EXPECT_EQ(first_item, focus_manager->GetFocusedView());
   EXPECT_STREQ("CalendarEventListItemViewJelly",
                focus_manager->GetFocusedView()->GetClassName());
 }

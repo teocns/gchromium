@@ -18,6 +18,7 @@
 #include "components/autofill/content/renderer/password_generation_agent.h"
 #include "components/autofill/content/renderer/test_password_autofill_agent.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/form_data.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/render_view_test.h"
@@ -28,6 +29,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/web/web_form_control_element.h"
 
 using ::testing::_;
 using ::testing::AllOf;
@@ -40,6 +43,9 @@ using ::testing::SizeIs;
 namespace autofill {
 
 namespace {
+
+// The throttling amount of ProcessForms().
+constexpr base::TimeDelta kFormsSeenThrottle = base::Milliseconds(100);
 
 class MockAutofillDriver : public mojom::AutofillDriver {
  public:
@@ -97,8 +103,7 @@ class MockAutofillDriver : public mojom::AutofillDriver {
               (const FormData& form,
                const FormFieldData& field,
                const gfx::RectF& bounding_box,
-               AutoselectFirstSuggestion autoselect_first_suggestion,
-               FormElementWasClicked form_element_was_clicked),
+               AutofillSuggestionTriggerSource trigger_source),
               (override));
   MOCK_METHOD(void, HidePopup, (), (override));
   MOCK_METHOD(void,
@@ -184,6 +189,13 @@ class AutofillAgentTest : public content::RenderViewTest {
     RenderViewTest::TearDown();
   }
 
+  // AutofillDriver::FormsSeen() is throttled indirectly because some callsites
+  // of AutofillAgent::ProcessForms() are throttled. This function blocks until
+  // FormsSeen() has happened.
+  void WaitForFormsSeen() {
+    task_environment_.FastForwardBy(kFormsSeenThrottle * 3 / 2);
+  }
+
   AutofillAgentTestApi test_api() {
     return AutofillAgentTestApi(autofill_agent_.get());
   }
@@ -198,11 +210,11 @@ class AutofillAgentTest : public content::RenderViewTest {
   std::unique_ptr<PasswordGenerationAgent> password_generation_;
 };
 
-// Enables AutofillAcrossIframes.
 class AutofillAgentTestWithFeatures : public AutofillAgentTest {
  public:
   AutofillAgentTestWithFeatures() {
-    scoped_features_.InitAndEnableFeature(features::kAutofillAcrossIframes);
+    scoped_features_.InitWithFeatures(
+        {blink::features::kAutofillDetectRemovedFormControls}, {});
   }
 
  private:
@@ -212,11 +224,13 @@ class AutofillAgentTestWithFeatures : public AutofillAgentTest {
 TEST_F(AutofillAgentTestWithFeatures, FormsSeen_Empty) {
   EXPECT_CALL(autofill_driver_, FormsSeen).Times(0);
   LoadHTML(R"(<body> </body>)");
+  WaitForFormsSeen();
 }
 
 TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NoEmpty) {
   EXPECT_CALL(autofill_driver_, FormsSeen).Times(0);
   LoadHTML(R"(<body> <form></form> </body>)");
+  WaitForFormsSeen();
 }
 
 TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NewFormUnowned) {
@@ -225,6 +239,7 @@ TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NewFormUnowned) {
                                               HasNumChildFrames(0)),
                         SizeIs(0)));
   LoadHTML(R"(<body> <input> </body>)");
+  WaitForFormsSeen();
 }
 
 TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NewForm) {
@@ -233,6 +248,7 @@ TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NewForm) {
                                               HasNumChildFrames(0)),
                         SizeIs(0)));
   LoadHTML(R"(<body> <form><input></form> </body>)");
+  WaitForFormsSeen();
 }
 
 TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NewIframe) {
@@ -241,6 +257,7 @@ TEST_F(AutofillAgentTestWithFeatures, FormsSeen_NewIframe) {
                                               HasNumChildFrames(1)),
                         SizeIs(0)));
   LoadHTML(R"(<body> <form><iframe></iframe></form> </body>)");
+  WaitForFormsSeen();
 }
 
 TEST_F(AutofillAgentTestWithFeatures, FormsSeen_UpdatedForm) {
@@ -250,6 +267,7 @@ TEST_F(AutofillAgentTestWithFeatures, FormsSeen_UpdatedForm) {
                                                 HasNumChildFrames(0)),
                           SizeIs(0)));
     LoadHTML(R"(<body> <form><input></form> </body>)");
+    WaitForFormsSeen();
   }
   {
     EXPECT_CALL(autofill_driver_,
@@ -258,41 +276,86 @@ TEST_F(AutofillAgentTestWithFeatures, FormsSeen_UpdatedForm) {
                           SizeIs(0)));
     ExecuteJavaScriptForTests(
         R"(document.forms[0].appendChild(document.createElement('input'));)");
-    content::RunAllTasksUntilIdle();
-    // Called explicitly because the event is throttled.
-    test_api().DidAddOrRemoveFormRelatedElementsDynamically();
+    WaitForFormsSeen();
   }
 }
 
-TEST_F(AutofillAgentTestWithFeatures, FormsSeen_RemovedForm) {
+TEST_F(AutofillAgentTestWithFeatures, FormsSeen_RemovedInput) {
   {
     EXPECT_CALL(autofill_driver_, FormsSeen(SizeIs(1), SizeIs(0)));
     LoadHTML(R"(<body> <form><input></form> </body>)");
+    WaitForFormsSeen();
   }
   {
     EXPECT_CALL(autofill_driver_,
                 FormsSeen(SizeIs(0), HasSingleElementWhich(IsFormId(1))));
-    ExecuteJavaScriptForTests(R"(document.forms[0].remove();)");
-    content::RunAllTasksUntilIdle();
-    // Called explicitly because the event is throttled.
-    test_api().DidAddOrRemoveFormRelatedElementsDynamically();
+    ExecuteJavaScriptForTests(R"(document.forms[0].elements[0].remove();)");
+    WaitForFormsSeen();
   }
 }
 
-TEST_F(AutofillAgentTestWithFeatures, TriggerReparseWithResponse) {
+TEST_F(AutofillAgentTestWithFeatures, TriggerFormExtractionWithResponse) {
+  EXPECT_CALL(autofill_driver_, FormsSeen);
+  LoadHTML(R"(<body> <input> </body>)");
+  WaitForFormsSeen();
   base::MockOnceCallback<void(bool)> mock_callback;
   EXPECT_CALL(mock_callback, Run).Times(0);
-  autofill_agent_->TriggerReparseWithResponse(mock_callback.Get());
-  task_environment_.FastForwardBy(base::Milliseconds(50));
+  autofill_agent_->TriggerFormExtractionWithResponse(mock_callback.Get());
+  task_environment_.FastForwardBy(kFormsSeenThrottle / 2);
   EXPECT_CALL(mock_callback, Run(true));
-  task_environment_.FastForwardBy(base::Milliseconds(50));
+  task_environment_.FastForwardBy(kFormsSeenThrottle / 2);
 }
 
-TEST_F(AutofillAgentTestWithFeatures, TriggerReparseWithResponse_CalledTwice) {
+TEST_F(AutofillAgentTestWithFeatures,
+       TriggerFormExtractionWithResponse_CalledTwice) {
+  EXPECT_CALL(autofill_driver_, FormsSeen);
+  LoadHTML(R"(<body> <input> </body>)");
+  WaitForFormsSeen();
   base::MockOnceCallback<void(bool)> mock_callback;
-  autofill_agent_->TriggerReparseWithResponse(mock_callback.Get());
+  autofill_agent_->TriggerFormExtractionWithResponse(mock_callback.Get());
   EXPECT_CALL(mock_callback, Run(false));
-  autofill_agent_->TriggerReparseWithResponse(mock_callback.Get());
+  autofill_agent_->TriggerFormExtractionWithResponse(mock_callback.Get());
+}
+
+// Tests that `AutofillDriver::TriggerSuggestions()` triggers
+// `AutofillAgent::AskForValuesToFill()` (which will ultimately trigger
+// suggestions).
+TEST_F(AutofillAgentTestWithFeatures, TriggerSuggestions) {
+  EXPECT_CALL(autofill_driver_, FormsSeen);
+  LoadHTML("<body><input></body>");
+  WaitForFormsSeen();
+  EXPECT_CALL(autofill_driver_, AskForValuesToFill);
+  autofill_agent_->TriggerSuggestions(
+      FieldRendererId(1),
+      AutofillSuggestionTriggerSource::kFormControlElementClicked);
+}
+
+TEST_F(AutofillAgentTest, UndoAutofillSetsLastQueriedElement) {
+  LoadHTML(R"(
+    <form id="form_id">
+        <input id="text_id_1">
+        <select id="select_id_1">
+          <option value="undo_select_option_1">Foo</option>
+          <option value="autofill_select_option_1">Bar</option>
+        </select>
+        <selectmenu id="selectmenu_id_1">
+          <option value="undo_selectmenu_option_1">Foo</option>
+          <option value="autofill_selectmenu_option_1">Bar</option>
+        </selectmenu>
+      </form>
+  )");
+
+  blink::WebVector<blink::WebFormElement> forms =
+      GetMainFrame()->GetDocument().Forms();
+  EXPECT_EQ(1U, forms.size());
+  FormData form;
+  EXPECT_TRUE(form_util::WebFormElementToFormData(
+      forms[0], blink::WebFormControlElement(), nullptr,
+      form_util::EXTRACT_VALUE, &form, nullptr));
+
+  ASSERT_TRUE(autofill_agent_->focused_element().IsNull());
+  autofill_agent_->UndoAutofill(form);
+  EXPECT_FALSE(autofill_agent_->focused_element().IsNull());
 }
 
 }  // namespace autofill

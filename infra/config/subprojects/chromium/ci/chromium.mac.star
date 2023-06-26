@@ -69,7 +69,6 @@ ci.builder(
             config = "chromium",
             apply_configs = [
                 "mb",
-                "goma_use_local",  # to mitigate compile step timeout (crbug.com/1056935)
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
@@ -245,62 +244,30 @@ ci.thin_tester(
 )
 
 ci.thin_tester(
-    name = "Mac10.13 Tests",
+    name = "mac13-arm64-rel-tests",
     branch_selector = branches.selector.MAC_BRANCHES,
-    triggered_by = ["ci/Mac Builder"],
+    triggered_by = ["ci/mac-arm64-rel"],
     builder_spec = builder_config.builder_spec(
         execution_mode = builder_config.execution_mode.TEST,
         gclient_config = builder_config.gclient_config(
             config = "chromium",
-            apply_configs = [
-                "use_clang_coverage",
-            ],
         ),
         chromium_config = builder_config.chromium_config(
             config = "chromium",
             apply_configs = [
                 "mb",
-                "goma_use_local",  # to mitigate compile step timeout (crbug.com/1056935)
             ],
             build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
             target_bits = 64,
             target_platform = builder_config.target_platform.MAC,
         ),
-        build_gs_bucket = "chromium-mac-archive",
     ),
+    tree_closing = False,
     console_view_entry = consoles.console_view_entry(
-        category = "release",
+        category = "release|arm64",
         short_name = "13",
     ),
-    cq_mirrors_console_view = "mirrors",
-)
-
-ci.thin_tester(
-    name = "Mac10.14 Tests",
-    branch_selector = branches.selector.MAC_BRANCHES,
-    triggered_by = ["ci/Mac Builder"],
-    builder_spec = builder_config.builder_spec(
-        execution_mode = builder_config.execution_mode.TEST,
-        gclient_config = builder_config.gclient_config(
-            config = "chromium",
-        ),
-        chromium_config = builder_config.chromium_config(
-            config = "chromium",
-            apply_configs = [
-                "mb",
-                "goma_use_local",  # to mitigate compile step timeout (crbug.com/1056935)
-            ],
-            build_config = builder_config.build_config.RELEASE,
-            target_bits = 64,
-            target_platform = builder_config.target_platform.MAC,
-        ),
-        build_gs_bucket = "chromium-mac-archive",
-    ),
-    console_view_entry = consoles.console_view_entry(
-        category = "release",
-        short_name = "14",
-    ),
-    cq_mirrors_console_view = "mirrors",
 )
 
 ci.thin_tester(
@@ -316,7 +283,6 @@ ci.thin_tester(
             config = "chromium",
             apply_configs = [
                 "mb",
-                "goma_use_local",  # to mitigate compile step timeout (crbug.com/1056935)
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
@@ -344,7 +310,6 @@ ci.thin_tester(
             config = "chromium",
             apply_configs = [
                 "mb",
-                "goma_use_local",  # to mitigate compile step timeout (crbug.com/1056935)
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
@@ -370,7 +335,6 @@ ci.thin_tester(
             config = "chromium",
             apply_configs = [
                 "mb",
-                "goma_use_local",  # to mitigate compile step timeout (crbug.com/1056935)
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
@@ -384,7 +348,34 @@ ci.thin_tester(
 )
 
 ci.thin_tester(
-    name = "Mac12 Tests (dbg)",
+    name = "Mac13 Tests",
+    branch_selector = branches.selector.MAC_BRANCHES,
+    triggered_by = ["ci/Mac Builder"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
+        ),
+    ),
+    # TODO(crbug.com/1449978): Add to rotation when it's stable.
+    sheriff_rotations = args.ignore_default(None),
+    console_view_entry = consoles.console_view_entry(
+        category = "mac",
+        short_name = "13",
+    ),
+)
+
+ci.thin_tester(
+    name = "Mac13 Tests (dbg)",
     branch_selector = branches.selector.MAC_BRANCHES,
     triggered_by = ["ci/Mac Builder (dbg)"],
     builder_spec = builder_config.builder_spec(
@@ -406,7 +397,7 @@ ci.thin_tester(
     sheriff_rotations = args.ignore_default(None),
     console_view_entry = consoles.console_view_entry(
         category = "debug",
-        short_name = "12",
+        short_name = "13",
     ),
     cq_mirrors_console_view = "mirrors",
 )

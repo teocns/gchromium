@@ -642,6 +642,19 @@ std::string SerializeClientSideDetectionType(ClientSideDetectionType csd_type) {
   return "UNKNOWN_ENUM_SPECIFIED";
 }
 
+base::Value::Dict SerializeImageFeatureEmbedding(
+    ImageFeatureEmbedding image_feature_embedding) {
+  base::Value::Dict dict;
+  base::Value::List embedding_values;
+  for (const auto& value : image_feature_embedding.embedding_value()) {
+    embedding_values.Append(value);
+  }
+  dict.Set("embedding_model_version",
+           image_feature_embedding.embedding_model_version());
+  dict.Set("embedding_value", std::move(embedding_values));
+  return dict;
+}
+
 base::Value::Dict SerializeChromeUserPopulation(
     const ChromeUserPopulation& population) {
   base::Value::Dict population_dict;
@@ -826,6 +839,8 @@ base::Value::Dict SerializeReferrer(const ReferrerChainEntry& referrer) {
     case ReferrerChainEntry::RENDERER_INITIATED_WITH_USER_GESTURE:
       navigation_initiation = "RENDERER_INITIATED_WITH_USER_GESTURE";
       break;
+    case ReferrerChainEntry::COPY_PASTE_USER_INITIATED:
+      navigation_initiation = "COPY_PASTE_USER_INITIATED";
   }
   referrer_dict.Set("navigation_initiation", navigation_initiation);
 
@@ -1078,6 +1093,11 @@ std::string SerializeClientPhishingRequest(
     dict.Set(
         "client_side_detection_type",
         SerializeClientSideDetectionType(cpr.client_side_detection_type()));
+  }
+
+  if (cpr.has_image_feature_embedding()) {
+    dict.Set("image_feature_embedding",
+             SerializeImageFeatureEmbedding(cpr.image_feature_embedding()));
   }
 
   base::Value::List features;
@@ -1370,6 +1390,8 @@ std::string UrlRequestDestinationToString(
       return "FENCED_FRAME";
     case ClientSafeBrowsingReportRequest::WEB_IDENTITY:
       return "WEB_IDENTITY";
+    case ClientSafeBrowsingReportRequest::DICTIONARY:
+      return "DICTIONARY";
   }
 }
 
@@ -1621,6 +1643,9 @@ std::string SerializeHitReport(const HitReport& hit_report) {
       break;
     case ThreatSource::URL_REAL_TIME_CHECK:
       threat_source = "URL_REAL_TIME_CHECK";
+      break;
+    case ThreatSource::NATIVE_PVER5_REAL_TIME:
+      threat_source = "NATIVE_PVER5_REAL_TIME";
       break;
     case ThreatSource::UNKNOWN:
       threat_source = "UNKNOWN";

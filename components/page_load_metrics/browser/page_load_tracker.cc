@@ -12,6 +12,7 @@
 
 #include "base/check_op.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/default_tick_clock.h"
@@ -28,6 +29,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 
 namespace page_load_metrics {
@@ -48,7 +50,9 @@ const char kImageLoadEndLessThanLoadStart[] =
 const char kImageLCPLessThanLoadEnd[] =
     "PageLoad.PaintTiming.NavigationToLargestContentfulPaint."
     "ImageLCPLessThanLoadEnd";
-
+const char kImageLoadStartLessThanDocumentTtfbCause[] =
+    "PageLoad.PaintTiming.NavigationToLargestContentfulPaint."
+    "ImageLoadStartLessThanDocumentTtfbCauses";
 }  // namespace internal
 
 void RecordInternalError(InternalErrorLoadEvent event) {
@@ -57,6 +61,13 @@ void RecordInternalError(InternalErrorLoadEvent event) {
 
 void RecordPageType(internal::PageLoadTrackerPageType type) {
   base::UmaHistogramEnumeration(internal::kPageLoadTrackerPageType, type);
+}
+
+void RecordImageLoadStartLessThanDocumentTtfbCause(
+    page_load_metrics::internal::ImageLoadStartLessThanDocumentTtfbCause
+        sample) {
+  base::UmaHistogramEnumeration(
+      internal::kImageLoadStartLessThanDocumentTtfbCause, sample);
 }
 
 void RecordLargestContentfulPaintImageLoadTiming(
@@ -82,6 +93,31 @@ void RecordLargestContentfulPaintImageLoadTiming(
     UMA_HISTOGRAM_BOOLEAN(internal::kImageLCPLessThanLoadEnd,
                           largest_contentful_paint.largest_image_paint <
                               largest_contentful_paint.largest_image_load_end);
+  }
+
+  // If the images load_start is less than document_ttfb, then something may be
+  // wrong with the metric. Attempt to diagnose the cause and record it to UMA,
+  // or report 'Unknown' if no cause is identified. This code may be removed
+  // when https://crbug.com/1431906 is resolved.
+  if (largest_contentful_paint.largest_image_load_start.has_value() &&
+      largest_contentful_paint.largest_image_load_start < document_ttfb) {
+    if (largest_contentful_paint.is_loaded_from_memory_cache &&
+        largest_contentful_paint.is_preloaded_with_early_hints) {
+      RecordImageLoadStartLessThanDocumentTtfbCause(
+          internal::ImageLoadStartLessThanDocumentTtfbCause::
+              kLoadedFromMemoryCacheAndPreloadedWithEarlyHints);
+    } else if (largest_contentful_paint.is_loaded_from_memory_cache) {
+      RecordImageLoadStartLessThanDocumentTtfbCause(
+          internal::ImageLoadStartLessThanDocumentTtfbCause::
+              kLoadedFromMemoryCache);
+    } else if (largest_contentful_paint.is_preloaded_with_early_hints) {
+      RecordImageLoadStartLessThanDocumentTtfbCause(
+          internal::ImageLoadStartLessThanDocumentTtfbCause::
+              kPreloadedWithEarlyHints);
+    } else {
+      RecordImageLoadStartLessThanDocumentTtfbCause(
+          internal::ImageLoadStartLessThanDocumentTtfbCause::kUnknown);
+    }
   }
 }
 
@@ -501,7 +537,12 @@ void PageLoadTracker::Commit(content::NavigationHandle* navigation_handle) {
              PageLoadMetricsObserverInterface* observer) {
             return observer->ShouldObserveMimeType(mime_type);
           },
-          navigation_handle->GetWebContents()->GetContentsMimeType()),
+          // Query with the outermost page's MIME type so that we can ask each
+          // observer with information for the page they are interested in.
+          navigation_handle->GetRenderFrameHost()
+              ->GetOutermostMainFrameOrEmbedder()
+              ->GetPage()
+              .GetContentsMimeType()),
       /*permit_forwarding=*/false);
   InvokeAndPruneObservers("PageLoadMetricsObserver::OnCommit",
                           base::BindRepeating(
@@ -556,6 +597,16 @@ void PageLoadTracker::DidCommitSameDocumentNavigation(
     // Notify the parent of the inner main frame navigation as a sub-frame
     // navigation.
     parent_tracker_->DidFinishSubFrameNavigation(navigation_handle);
+  }
+
+  // Update soft navigation URL and UKM source id;
+  // A same-document navigation may not be a soft navigation. But when a soft
+  // navigation updates comes in later, the URL and source id updated here would
+  // correspond to that soft navigation.
+  if (navigation_handle->IsInMainFrame()) {
+    potential_soft_navigation_source_id_ =
+        ukm::ConvertToSourceId(navigation_handle->GetNavigationId(),
+                               ukm::SourceIdObj::Type::NAVIGATION_ID);
   }
 
   for (const auto& observer : observers_) {
@@ -651,8 +702,15 @@ void PageLoadTracker::FlushMetricsOnAppEnterBackground() {
 
 void PageLoadTracker::OnLoadedResource(
     const ExtraRequestCompleteInfo& extra_request_complete_info) {
-  receive_headers_start_ =
-      extra_request_complete_info.load_timing_info->receive_headers_start;
+  // The main_frame_receive_headers_start_ should be only set once during a
+  // page load. A new page load would have a new PageLoadTracker object.
+  if (extra_request_complete_info.request_destination ==
+          network::mojom::RequestDestination::kDocument &&
+      !main_frame_receive_headers_start_.has_value()) {
+    main_frame_receive_headers_start_ =
+        extra_request_complete_info.load_timing_info->receive_headers_start;
+  }
+
   for (const auto& observer : observers_) {
     observer->OnLoadedResource(extra_request_complete_info);
   }
@@ -898,10 +956,11 @@ void PageLoadTracker::OnTimingChanged() {
                .value());
 
   if (largest_contentful_image_changed) {
-    if (receive_headers_start_.has_value() && !GetNavigationStart().is_null()) {
+    if (main_frame_receive_headers_start_.has_value() &&
+        !GetNavigationStart().is_null()) {
       RecordLargestContentfulPaintImageLoadTiming(
           *paint_timing->largest_contentful_paint,
-          receive_headers_start_.value() - GetNavigationStart());
+          main_frame_receive_headers_start_.value() - GetNavigationStart());
     }
   }
 
@@ -973,6 +1032,8 @@ void PageLoadTracker::OnMainFrameMetadataChanged() {
   for (const auto& observer : observers_) {
     observer->OnLoadingBehaviorObserved(nullptr,
                                         GetMainFrameMetadata().behavior_flags);
+    observer->OnJavaScriptFrameworksObserved(
+        nullptr, GetMainFrameMetadata().framework_detection_result);
   }
 }
 
@@ -984,15 +1045,22 @@ void PageLoadTracker::OnSubframeMetadataChanged(
   }
 }
 
-void PageLoadTracker::OnSoftNavigationCountChanged(
-    uint32_t soft_navigation_count) {
-  DCHECK(soft_navigation_count >= soft_navigation_count_);
-  if (soft_navigation_count == soft_navigation_count_) {
+void PageLoadTracker::OnSoftNavigationChanged(
+    const mojom::SoftNavigationMetrics& soft_navigation_metrics) {
+  if (soft_navigation_metrics.Equals(*soft_navigation_metrics_)) {
     return;
   }
-  soft_navigation_count_ = soft_navigation_count;
+
+  CHECK(soft_navigation_metrics.count > soft_navigation_metrics_->count);
+  CHECK(soft_navigation_metrics.start_time >
+        soft_navigation_metrics_->start_time);
+  CHECK(soft_navigation_metrics.navigation_id !=
+        soft_navigation_metrics_->navigation_id);
+
+  soft_navigation_metrics_ = soft_navigation_metrics.Clone();
+
   for (const auto& observer : observers_) {
-    observer->OnSoftNavigationCountUpdated();
+    observer->OnSoftNavigationUpdated(soft_navigation_metrics_->Clone());
   }
 }
 
@@ -1217,7 +1285,11 @@ ukm::SourceId PageLoadTracker::GetPageUkmSourceId() const {
 }
 
 uint32_t PageLoadTracker::GetSoftNavigationCount() const {
-  return soft_navigation_count_;
+  return soft_navigation_metrics_->count;
+}
+
+ukm::SourceId PageLoadTracker::GetUkmSourceIdForSoftNavigation() const {
+  return potential_soft_navigation_source_id_;
 }
 
 bool PageLoadTracker::IsFirstNavigationInWebContents() const {
@@ -1293,20 +1365,20 @@ void PageLoadTracker::UpdateMetrics(
     mojom::InputTimingPtr input_timing_delta,
     const absl::optional<blink::SubresourceLoadMetrics>&
         subresource_load_metrics,
-    uint32_t soft_navigation_count) {
+    mojom::SoftNavigationMetricsPtr soft_navigation_metrics) {
   if (parent_tracker_) {
     parent_tracker_->UpdateMetrics(
         render_frame_host, timing.Clone(), metadata.Clone(), features,
         resources, render_data.Clone(), cpu_timing.Clone(),
         input_timing_delta.Clone(), subresource_load_metrics,
-        soft_navigation_count);
+        soft_navigation_metrics.Clone());
   }
 
   metrics_update_dispatcher_.UpdateMetrics(
       render_frame_host, std::move(timing), std::move(metadata),
       std::move(features), resources, std::move(render_data),
       std::move(cpu_timing), std::move(input_timing_delta),
-      subresource_load_metrics, soft_navigation_count, page_type_);
+      subresource_load_metrics, std::move(soft_navigation_metrics), page_type_);
 }
 
 void PageLoadTracker::SetPageMainFrame(content::RenderFrameHost* rfh) {

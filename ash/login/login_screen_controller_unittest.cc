@@ -34,7 +34,6 @@ namespace {
 class LoginScreenControllerTest : public AshTestBase {
  public:
   LoginScreenControllerTest() {
-    user_manager::KnownUser::RegisterPrefs(local_state()->registry());
     auth_events_recorder_ = ash::AuthEventsRecorder::CreateForTesting();
   }
 
@@ -45,7 +44,6 @@ class LoginScreenControllerTest : public AshTestBase {
 class LoginScreenControllerNoSessionTest : public NoSessionAshTestBase {
  public:
   LoginScreenControllerNoSessionTest() {
-    user_manager::KnownUser::RegisterPrefs(local_state()->registry());
     auth_events_recorder_ = ash::AuthEventsRecorder::CreateForTesting();
   }
 
@@ -122,11 +120,6 @@ TEST_F(LoginScreenControllerTest, RequestUserPodFocus) {
   // Verify FocusPod mojo call is run with the same account id.
   EXPECT_CALL(*client, OnFocusPod(id));
   controller->OnFocusPod(id);
-  base::RunLoop().RunUntilIdle();
-
-  // Verify NoPodFocused mojo call is run.
-  EXPECT_CALL(*client, OnNoPodFocused());
-  controller->OnNoPodFocused();
   base::RunLoop().RunUntilIdle();
 }
 

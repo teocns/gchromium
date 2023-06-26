@@ -41,6 +41,7 @@
 #include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/tab_dialogs.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browsing_data/content/browsing_data_helper.h"
@@ -112,6 +113,15 @@ const password_manager::InteractionsStats* FindStatsByUsername(
   auto it = base::ranges::find(
       stats, username, &password_manager::InteractionsStats::username_value);
   return it == stats.end() ? nullptr : &*it;
+}
+
+void MaybeShowPasswordManagerShortcutIPH(Browser* browser) {
+  // Don't show IPH if shortcut can't be created.
+  if (!web_app::AreWebAppsEnabled(browser->profile())) {
+    return;
+  }
+  browser->window()->MaybeShowFeaturePromo(
+      feature_engagement::kIPHPasswordManagerShortcutFeature);
 }
 
 }  // namespace
@@ -281,11 +291,13 @@ void ManagePasswordsUIController::OnPasswordAutofilled(
               !base::ranges::all_of(GetCurrentForms(), &std::u16string::empty,
                                     &password_manager::PasswordForm::
                                         GetNoteWithEmptyUniqueDisplayName);
-          if (has_non_empty_note) {
-            browser->window()->MaybeShowFeaturePromo(
-                feature_engagement::
-                    kIPHPasswordsManagementBubbleDuringSigninFeature);
+          if (has_non_empty_note &&
+              browser->window()->MaybeShowFeaturePromo(
+                  feature_engagement::
+                      kIPHPasswordsManagementBubbleDuringSigninFeature)) {
+            return;
           }
+          MaybeShowPasswordManagerShortcutIPH(browser);
         }
       }
     }
@@ -366,6 +378,10 @@ void ManagePasswordsUIController::OnBiometricAuthenticationForFilling(
 }
 
 void ManagePasswordsUIController::ShowBiometricActivationConfirmation() {
+  // Existing dialog shouldn't be closed.
+  if (dialog_controller_) {
+    return;
+  }
   passwords_data_.TransitionToState(
       password_manager::ui::BIOMETRIC_AUTHENTICATION_CONFIRMATION_STATE);
   bubble_status_ = BubbleStatus::SHOULD_POP_UP;
@@ -373,6 +389,7 @@ void ManagePasswordsUIController::ShowBiometricActivationConfirmation() {
 }
 
 void ManagePasswordsUIController::OnBiometricAuthBeforeFillingDeclined() {
+  CHECK(!dialog_controller_);
   passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
   UpdateBubbleAndIconVisibility();
 }
@@ -621,8 +638,12 @@ void ManagePasswordsUIController::SavePassword(const std::u16string& username,
   bubble_status_ = BubbleStatus::SHOWN_PENDING_ICON_UPDATE;
   if (Browser* browser = chrome::FindBrowserWithWebContents(web_contents())) {
     browser->window()->GetAutofillBubbleHandler()->OnPasswordSaved();
-    browser->window()->MaybeShowFeaturePromo(
-        feature_engagement::kIPHPasswordsManagementBubbleAfterSaveFeature);
+    if (browser->window()->MaybeShowFeaturePromo(
+            feature_engagement::
+                kIPHPasswordsManagementBubbleAfterSaveFeature)) {
+      return;
+    }
+    MaybeShowPasswordManagerShortcutIPH(browser);
   }
 }
 
@@ -673,9 +694,9 @@ void ManagePasswordsUIController::BlockMovingPasswordToAccountStore() {
 void ManagePasswordsUIController::ChooseCredential(
     const password_manager::PasswordForm& form,
     password_manager::CredentialType credential_type) {
-  DCHECK(dialog_controller_);
-  DCHECK_EQ(password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD,
-            credential_type);
+  CHECK(dialog_controller_);
+  CHECK_EQ(password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD,
+           credential_type);
   // Copy the argument before destroying the controller. |form| is a member of
   // |dialog_controller_|.
   password_manager::PasswordForm copy_form = form;
@@ -798,6 +819,16 @@ void ManagePasswordsUIController::
                          MoveJustSavedPasswordAfterAccountStoreOptIn,
                      weak_ptr_factory_.GetWeakPtr(),
                      passwords_data_.form_manager()->GetPendingCredentials()));
+}
+
+void ManagePasswordsUIController::MaybeShowIOSPasswordPromo() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  if (!browser) {
+    return;
+  }
+  browser->window()->MaybeShowIOSPasswordPromoBubble();
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 }
 
 void ManagePasswordsUIController::

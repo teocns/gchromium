@@ -77,6 +77,7 @@ void LayoutSVGShape::StyleDidChange(StyleDifference diff,
   NOT_DESTROYED();
   LayoutSVGModelObject::StyleDidChange(diff, old_style);
 
+  TransformHelper::UpdateOffsetPath(*GetElement(), old_style);
   transform_uses_reference_box_ =
       TransformHelper::DependsOnReferenceBox(StyleRef());
   SVGResources::UpdatePaints(*this, old_style, StyleRef());
@@ -140,7 +141,7 @@ void LayoutSVGShape::UpdateShapeFromElement() {
     UpdateNonScalingStrokeData();
   }
 
-  stroke_bounding_box_ = CalculateStrokeBoundingBox();
+  decorated_bounding_box_ = CalculateStrokeBoundingBox();
 }
 
 namespace {
@@ -187,7 +188,7 @@ gfx::RectF LayoutSVGShape::ApproximateStrokeBoundingBox(
 gfx::RectF LayoutSVGShape::HitTestStrokeBoundingBox() const {
   NOT_DESTROYED();
   if (StyleRef().HasStroke())
-    return stroke_bounding_box_;
+    return decorated_bounding_box_;
   return ApproximateStrokeBoundingBox(fill_bounding_box_);
 }
 
@@ -273,8 +274,10 @@ bool LayoutSVGShape::StrokeContains(const HitTestLocation& location,
     return false;
 
   if (requires_stroke) {
-    if (!StrokeBoundingBox().InclusiveContains(location.TransformedPoint()))
+    if (!DecoratedBoundingBox().InclusiveContains(
+            location.TransformedPoint())) {
       return false;
+    }
 
     if (!HasPaintServer(*this, StyleRef().StrokePaint()))
       return false;

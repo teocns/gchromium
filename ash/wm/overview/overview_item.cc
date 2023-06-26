@@ -15,6 +15,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/rounded_label_widget.h"
 #include "ash/style/system_shadow.h"
+#include "ash/wm/desks/desk_bar_controller.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/desks/templates/saved_desk_animations.h"
 #include "ash/wm/drag_window_controller.h"
@@ -33,6 +34,7 @@
 #include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/window_mini_view_header_view.h"
 #include "ash/wm/window_preview_view.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_transient_descendant_iterator.h"
@@ -234,13 +236,6 @@ void OverviewItem::RevertHideForSavedDeskLibrary(bool animate) {
 
   // `item_widget_` may be null during shutdown if the window is minimized.
   if (item_widget_) {
-    // When a template is being launched, this overview item will be hidden
-    // first so that the library widget fade out animation can take place. Once
-    // the fade out animation is done, the hide will be reverted. Here we need
-    // to make sure header and shadow are sync'ed with the item window.
-    UpdateHeaderLayout(OVERVIEW_ANIMATION_NONE);
-    UpdateRoundedCornersAndShadow();
-
     PerformFadeInLayer(item_widget_->GetLayer(), animate);
   }
 
@@ -258,11 +253,10 @@ void OverviewItem::OnMovingWindowToAnotherDesk() {
   is_moving_to_another_desk_ = true;
   // Restore the dragged item window, so that its transform is reset to
   // identity.
-  RestoreWindow(/*reset_transform=*/true);
+  RestoreWindow(/*reset_transform=*/true, /*animate=*/true);
 }
 
-void OverviewItem::RestoreWindow(bool reset_transform,
-                                 bool was_saved_desk_library_showing) {
+void OverviewItem::RestoreWindow(bool reset_transform, bool animate) {
   // TODO(oshima): SplitViewController has its own logic to adjust the
   // target state in |SplitViewController::OnOverviewModeEnding|.
   // Unify the mechanism to control it and remove ifs.
@@ -277,8 +271,7 @@ void OverviewItem::RestoreWindow(bool reset_transform,
     transient_child->ClearProperty(kForceVisibleInMiniViewKey);
 
   overview_item_view_->OnOverviewItemWindowRestoring();
-  transform_window_.RestoreWindow(reset_transform,
-                                  was_saved_desk_library_showing);
+  transform_window_.RestoreWindow(reset_transform, animate);
 
   if (!transform_window_.IsMinimized())
     return;
@@ -350,12 +343,12 @@ void OverviewItem::SetBounds(const gfx::RectF& target_bounds,
     return;
   }
 
-  // Do not animate if the resulting bounds does not change. The original
-  // window may change bounds so we still need to call `SetItemBounds()` to
-  // update the window transform.
+  // Do not animate if the resulting bounds does not change or current animation
+  // is still in progress. The original window may change bounds so we still
+  // need to call `SetItemBounds()` to update the window transform.
   OverviewAnimationType new_animation_type = animation_type;
-  if (target_bounds == target_bounds_ &&
-      !GetWindow()->layer()->GetAnimator()->is_animating()) {
+  if (GetWindow()->layer()->GetAnimator()->is_animating() ||
+      target_bounds == target_bounds_) {
     new_animation_type = OVERVIEW_ANIMATION_NONE;
   }
 
@@ -397,12 +390,9 @@ void OverviewItem::SetBounds(const gfx::RectF& target_bounds,
   // For non minimized windows, we simply apply the transform and update the
   // header.
   if (!transform_window_.IsMinimized()) {
+    UpdateHeaderLayout(is_first_update ? OVERVIEW_ANIMATION_NONE
+                                       : new_animation_type);
     SetItemBounds(target_bounds, new_animation_type, is_first_update);
-    // Update header only when the overview item window is visible.
-    if (GetWindow()->IsVisible()) {
-      UpdateHeaderLayout(is_first_update ? OVERVIEW_ANIMATION_NONE
-                                         : new_animation_type);
-    }
     return;
   }
 
@@ -692,6 +682,7 @@ void OverviewItem::Restack() {
   aura::Window* window = GetWindow();
   aura::Window* parent_window = window->parent();
   aura::Window* stacking_target = nullptr;
+
   // Stack |window| below the split view window if split view is active.
   SplitViewController* split_view_controller =
       SplitViewController::Get(root_window_);
@@ -1211,7 +1202,9 @@ void OverviewItem::SetItemBounds(const gfx::RectF& target_bounds,
   // Do not set transform for drop target, set bounds instead.
   if (overview_grid_->IsDropTargetWindow(window)) {
     const gfx::Rect drop_target_bounds =
-        ToStableSizeRoundedRect(GetWindowTargetBoundsWithInsets());
+        ToStableSizeRoundedRect(chromeos::features::IsJellyrollEnabled()
+                                    ? target_bounds_
+                                    : GetWindowTargetBoundsWithInsets());
     SetWidgetBoundsAndMaybeAnimateTransform(
         overview_grid_->drop_target_widget(), drop_target_bounds,
         animation_type, /*observer=*/nullptr);
@@ -1238,16 +1231,29 @@ void OverviewItem::SetItemBounds(const gfx::RectF& target_bounds,
           screen_rect, transformed_bounds, top_view_inset, kHeaderHeightDp);
 
   if (chromeos::features::IsJellyrollEnabled()) {
-    // Adjust the `overview_item_bounds` if the window has normal or letter
-    // dimensions type to make sure it's aligned with overview item header view
-    // after the transform.
+    // Adjust the `overview_item_bounds` x position and width if the window has
+    // normal or letter dimensions type to make sure it's aligned with overview
+    // item header view after the transform.
     if (transform_window_.type() == OverviewGridWindowFillMode::kNormal ||
         transform_window_.type() == OverviewGridWindowFillMode::kLetterBoxed) {
       overview_item_bounds.set_x(transformed_bounds.x());
-      // We minus 0.5f here because sometimes the transformed window is a little
-      // bit wider than the header view on the right side.
-      // TODO(b/280085961): Investigate a proper fix for this.
-      overview_item_bounds.set_width(transformed_bounds.width() - 0.5f);
+      overview_item_bounds.set_width(transformed_bounds.width());
+    }
+
+    // Adjust the `overview_item_bounds` y position and height if the window has
+    // normal or pillar dimensions type to make sure there's no gap between the
+    // header and the window and no empty space at the end of the overview item
+    // container.
+    if (transform_window_.type() == OverviewGridWindowFillMode::kNormal ||
+        transform_window_.type() == OverviewGridWindowFillMode::kPillarBoxed) {
+      // The window top bar's target height with the transform.
+      float window_top_inset_target_height =
+          target_bounds.height() / screen_rect.height() * top_view_inset;
+      overview_item_bounds.set_y(
+          overview_item_view_->header_view()->GetBoundsInScreen().bottom() -
+          window_top_inset_target_height);
+      overview_item_bounds.set_height(target_bounds.height() - kHeaderHeightDp +
+                                      window_top_inset_target_height);
     }
   }
 
@@ -1326,6 +1332,11 @@ void OverviewItem::CreateItemWidget() {
 }
 
 void OverviewItem::UpdateHeaderLayout(OverviewAnimationType animation_type) {
+  if (chromeos::features::IsJellyrollEnabled()) {
+    UpdateHeaderLayoutCrOSNext(animation_type);
+    return;
+  }
+
   aura::Window* widget_window = item_widget_->GetNativeWindow();
   ScopedOverviewAnimationSettings animation_settings(animation_type,
                                                      widget_window);
@@ -1348,6 +1359,52 @@ void OverviewItem::UpdateHeaderLayout(OverviewAnimationType animation_type) {
   gfx::Transform label_transform;
   label_transform.Translate(origin.x(), origin.y());
   widget_window->SetTransform(label_transform);
+}
+
+void OverviewItem::UpdateHeaderLayoutCrOSNext(
+    OverviewAnimationType animation_type) {
+  gfx::RectF current_item_bounds(item_widget_->GetWindowBoundsInScreen());
+  gfx::RectF target_item_bounds = target_bounds_;
+  wm::TranslateRectFromScreen(root_window_, &target_item_bounds);
+
+  aura::Window* widget_window = item_widget_->GetNativeWindow();
+  if (current_item_bounds.IsEmpty()) {
+    widget_window->SetBounds(ToStableSizeRoundedRect(target_item_bounds));
+    return;
+  }
+
+  const gfx::Transform item_bounds_transform =
+      gfx::TransformBetweenRects(target_item_bounds, current_item_bounds);
+  widget_window->SetBounds(ToStableSizeRoundedRect(target_item_bounds));
+  widget_window->SetTransform(item_bounds_transform);
+
+  ScopedOverviewAnimationSettings item_animation_settings(animation_type,
+                                                          widget_window);
+  // Create a start animation observer if this is an enter overview layout
+  // animation.
+  if (animation_type == OVERVIEW_ANIMATION_LAYOUT_OVERVIEW_ITEMS_ON_ENTER ||
+      animation_type == OVERVIEW_ANIMATION_ENTER_FROM_HOME_LAUNCHER) {
+    auto enter_observer = std::make_unique<EnterAnimationObserver>();
+    item_animation_settings.AddObserver(enter_observer.get());
+    Shell::Get()->overview_controller()->AddEnterAnimationObserver(
+        std::move(enter_observer));
+  }
+  widget_window->SetTransform(gfx::Transform());
+
+  // Since header view is a child of the overview item view, the bounds
+  // animation is appled to the header as well when it's applied to the overview
+  // item. However, when calculating the target bounds for the window, it's
+  // always assumed that the header's height is 40, there's a gap between the
+  // header and the window during the animation. In order to neutralize the gap,
+  // apply the reversed vertical transform to the header separately.
+  ui::Layer* header_layer = overview_item_view_->header_view()->layer();
+  float vertical_scale = item_bounds_transform.To2dScale().y();
+  gfx::Transform vertical_reverse_transform =
+      gfx::Transform::MakeScale(1.f, 1.f / vertical_scale);
+  header_layer->SetTransform(vertical_reverse_transform);
+  ScopedOverviewAnimationSettings header_animation_settings(
+      animation_type, header_layer->GetAnimator());
+  header_layer->SetTransform(gfx::Transform());
 }
 
 OverviewAnimationType

@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/mac/scoped_nsobject.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -16,21 +15,18 @@
 #include "chrome/test/base/testing_profile.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 @interface FakeHistoryMenuController : HistoryMenuCocoaController {
  @public
+  // ivars are initialized to zero, so these all start out as NO.
   BOOL _opened[3];
 }
 @end
 
 @implementation FakeHistoryMenuController
-
-- (instancetype)initTest {
-  if ((self = [super init])) {
-    _opened[1] = NO;
-    _opened[2] = NO;
-  }
-  return self;
-}
 
 - (void)openURLForItem:(const HistoryMenuBridge::HistoryItem*)item {
   _opened[item->session_id.id()] = YES;
@@ -45,9 +41,8 @@ class HistoryMenuCocoaControllerTest : public BrowserWithTestWindowTest {
     ASSERT_TRUE(profile());
 
     bridge_ = std::make_unique<HistoryMenuBridge>(profile());
-    bridge_->controller_.reset(
-        [[FakeHistoryMenuController alloc] initWithBridge:bridge_.get()]);
-    [controller() initTest];
+    bridge_->controller_ =
+        [[FakeHistoryMenuController alloc] initWithBridge:bridge_.get()];
   }
 
   void TearDown() override {
@@ -75,7 +70,7 @@ class HistoryMenuCocoaControllerTest : public BrowserWithTestWindowTest {
   }
 
   FakeHistoryMenuController* controller() {
-    return static_cast<FakeHistoryMenuController*>(bridge_->controller_.get());
+    return static_cast<FakeHistoryMenuController*>(bridge_->controller_);
   }
 
  private:
@@ -84,8 +79,8 @@ class HistoryMenuCocoaControllerTest : public BrowserWithTestWindowTest {
 };
 
 TEST_F(HistoryMenuCocoaControllerTest, OpenURLForItem) {
-  base::scoped_nsobject<NSMenu> menu([[NSMenu alloc] initWithTitle:@"History"]);
-  CreateItems(menu.get());
+  NSMenu* menu = [[NSMenu alloc] initWithTitle:@"History"];
+  CreateItems(menu);
 
   std::map<NSMenuItem*, std::unique_ptr<HistoryMenuBridge::HistoryItem>>&
       items = menu_item_map();

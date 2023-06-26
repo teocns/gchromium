@@ -96,8 +96,8 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   bool IsBidiEnabled() const { return Data().is_bidi_enabled_; }
   TextDirection BaseDirection() const { return Data().BaseDirection(); }
 
+  bool HasFloats() const { return Data().HasFloats(); }
   bool HasInitialLetterBox() const { return Data().has_initial_letter_box_; }
-
   bool HasRuby() const { return Data().has_ruby_; }
 
   bool IsBlockLevel() { return EnsureData().is_block_level_; }
@@ -105,6 +105,12 @@ class CORE_EXPORT NGInlineNode : public NGLayoutInputNode {
   // True if this node can't use the bisection in `NGParagraphLineBreaker`.
   bool IsBisectLineBreakDisabled() const {
     return Data().IsBisectLineBreakDisabled();
+  }
+  // True if this node can't use the `NGScorehLineBreaker`, that can be
+  // determined by `CollectInlines`. Conditions that can change without
+  // `CollectInlines` are in `NGLineBreaker::ShouldDisableScoreLineBreak()`.
+  bool IsScoreLineBreakDisabled() const {
+    return Data().IsScoreLineBreakDisabled();
   }
 
   // @return if this node can contain the "first formatted line".

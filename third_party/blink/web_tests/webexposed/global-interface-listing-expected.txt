@@ -929,6 +929,8 @@ interface CSSScale : CSSTransformComponent
     setter z
 interface CSSScopeRule : CSSConditionRule
     attribute @@toStringTag
+    getter end
+    getter start
     method constructor
 interface CSSSkew : CSSTransformComponent
     attribute @@toStringTag
@@ -947,6 +949,9 @@ interface CSSSkewY : CSSTransformComponent
     getter ay
     method constructor
     setter ay
+interface CSSStartingStyleRule : CSSGroupingRule
+    attribute @@toStringTag
+    method constructor
 interface CSSStyleDeclaration
     attribute @@toStringTag
     getter cssFloat
@@ -1257,6 +1262,13 @@ interface CharacterData : Node
     method replaceWith
     method substringData
     setter data
+interface ChildNodePart : Part
+    attribute @@toStringTag
+    getter children
+    getter nextSibling
+    getter previousSibling
+    method constructor
+    method replaceChildren
 interface Clipboard : EventTarget
     attribute @@toStringTag
     method constructor
@@ -1419,6 +1431,7 @@ interface CustomElementRegistry
     method constructor
     method define
     method get
+    method getName
     method upgrade
     method whenDefined
 interface CustomEvent : Event
@@ -1995,6 +2008,7 @@ interface Document : Node
     method getElementsByName
     method getElementsByTagName
     method getElementsByTagNameNS
+    method getPartRoot
     method getSelection
     method hasFocus
     method hasPrivateToken
@@ -2168,6 +2182,9 @@ interface DocumentFragment : Node
     method querySelector
     method querySelectorAll
     method replaceChildren
+interface DocumentPartRoot : PartRoot
+    attribute @@toStringTag
+    method constructor
 interface DocumentPictureInPicture : EventTarget
     attribute @@toStringTag
     getter onenter
@@ -2834,6 +2851,7 @@ interface FragmentDirective
     method createSelectorDirective
 interface GPU
     attribute @@toStringTag
+    getter wgslLanguageFeatures
     method constructor
     method getPreferredCanvasFormat
     method requestAdapter
@@ -3525,8 +3543,10 @@ interface HTMLDataListElement : HTMLElement
     method constructor
 interface HTMLDetailsElement : HTMLElement
     attribute @@toStringTag
+    getter name
     getter open
     method constructor
+    setter name
     setter open
 interface HTMLDialogElement : HTMLElement
     attribute @@toStringTag
@@ -5515,9 +5535,11 @@ interface MLGraph
     method constructor
 interface MLGraphBuilder
     attribute @@toStringTag
+    method abs
     method add
     method averagePool2d
     method build
+    method ceil
     method clamp
     method concat
     method constant
@@ -5526,6 +5548,7 @@ interface MLGraphBuilder
     method convTranspose2d
     method div
     method elu
+    method floor
     method gemm
     method hardSwish
     method input
@@ -5534,14 +5557,18 @@ interface MLGraphBuilder
     method maxPool2d
     method min
     method mul
+    method neg
     method pad
     method prelu
     method relu
     method resample2d
     method reshape
     method sigmoid
+    method slice
     method softmax
+    method split
     method sub
+    method tanh
     method transpose
 interface MLModelLoader
     attribute @@toStringTag
@@ -5799,7 +5826,6 @@ interface MediaDevices : EventTarget
     method enumerateDevices
     method getAllScreensMedia
     method getDisplayMedia
-    method getDisplayMediaSet
     method getSupportedConstraints
     method getUserMedia
     method setCaptureHandleConfig
@@ -6371,6 +6397,7 @@ interface Navigator
     method constructor
     method createHandwritingRecognizer
     method getBattery
+    method getEnvironmentIntegrity
     method getGamepads
     method getInstalledRelatedApps
     method getUserMedia
@@ -6490,6 +6517,10 @@ interface NodeList
     method item
     method keys
     method values
+interface NodePart : Part
+    attribute @@toStringTag
+    getter node
+    method constructor
 interface Notification : EventTarget
     static getter maxActions
     static getter permission
@@ -6723,6 +6754,17 @@ interface PannerNode : AudioNode
     setter panningModel
     setter refDistance
     setter rolloffFactor
+interface Part : PartRoot
+    attribute @@toStringTag
+    getter metadata
+    getter root
+    method constructor
+    method disconnect
+interface PartRoot
+    attribute @@toStringTag
+    method clone
+    method constructor
+    method getParts
 interface PasswordCredential : Credential
     attribute @@toStringTag
     getter iconURL
@@ -6915,6 +6957,7 @@ interface PerformanceNavigation
 interface PerformanceNavigationTiming : PerformanceResourceTiming
     attribute @@toStringTag
     getter activationStart
+    getter criticalCHRestart
     getter domComplete
     getter domContentLoadedEventEnd
     getter domContentLoadedEventStart
@@ -6923,6 +6966,7 @@ interface PerformanceNavigationTiming : PerformanceResourceTiming
     getter loadEventStart
     getter notRestoredReasons
     getter redirectCount
+    getter systemEntropy
     getter type
     getter unloadEventEnd
     getter unloadEventStart
@@ -7162,6 +7206,11 @@ interface PressureRecord
     getter time
     method constructor
     method toJSON
+interface PrivateAttribution
+    attribute @@toStringTag
+    method constructor
+    method getEncryptedMatchKey
+    method getHelperNetworks
 interface ProcessingInstruction : CharacterData
     attribute @@toStringTag
     getter sheet
@@ -7284,6 +7333,7 @@ interface RTCEncodedAudioFrame
     method clone
     method constructor
     method getMetadata
+    method setTimestamp
     method toString
     setter data
 interface RTCEncodedVideoFrame
@@ -9931,6 +9981,16 @@ interface VisualViewport : EventTarget
     method constructor
     setter onresize
     setter onscroll
+interface WGSLLanguageFeatures
+    attribute @@toStringTag
+    getter size
+    method @@iterator
+    method constructor
+    method entries
+    method forEach
+    method has
+    method keys
+    method values
 interface WakeLock
     attribute @@toStringTag
     method constructor
@@ -12363,6 +12423,7 @@ namespace console
     getter parent
     getter performance
     getter personalbar
+    getter privateAttribution
     getter scheduler
     getter screen
     getter screenLeft
@@ -12407,6 +12468,7 @@ namespace console
     method getScreenDetails
     method getSelection
     method matchMedia
+    method minimize
     method moveBy
     method moveTo
     method open
@@ -12582,6 +12644,7 @@ namespace console
     setter parent
     setter performance
     setter personalbar
+    setter privateAttribution
     setter scheduler
     setter screen
     setter screenLeft

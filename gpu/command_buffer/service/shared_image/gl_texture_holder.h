@@ -6,8 +6,10 @@
 #define GPU_COMMAND_BUFFER_SERVICE_SHARED_IMAGE_GL_TEXTURE_HOLDER_H_
 
 #include "gpu/command_buffer/service/shared_image/gl_common_image_backing_factory.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
 #include "ui/gl/progress_reporter.h"
+
+class GrPromiseImageTexture;
 
 namespace gpu {
 
@@ -61,7 +63,7 @@ class GLTextureHolder {
   bool ReadbackToMemory(const SkPixmap& pixmap);
 
   // Returns a promise image for the GL texture.
-  sk_sp<SkPromiseImageTexture> GetPromiseImage(
+  sk_sp<GrPromiseImageTexture> GetPromiseImage(
       SharedContextState* context_state);
 
   // Gets/sets cleared rect from gles2::Texture. Only valid to call with

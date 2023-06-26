@@ -1,7 +1,7 @@
 // Copyright 2012 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-//
+
 // This file provides utility functions for "file tasks".
 //
 // WHAT ARE FILE TASKS?
@@ -86,6 +86,10 @@
 //     "install-linux-package" and "import-crostini-image".
 //  3. Tasks where the browser process opens Files app to a folder or file, e.g.
 //     "open" and "select", through file_manager::util::OpenItem().
+//
+//  "Virtual Tasks" don't belong to any one app, and don't have a JS
+//  implementation. Executing a virtual task simply means running their C++
+//  |Execute()| method. See VirtualTask for more.
 //
 // See also: ui/file_manager/file_manager/foreground/js/file_tasks.js
 //
@@ -417,10 +421,20 @@ std::set<std::string> WordGroupExtensions();
 std::set<std::string> ExcelGroupExtensions();
 std::set<std::string> PowerPointGroupExtensions();
 
+// The same as above but MIME types.
+std::set<std::string> WordGroupMimeTypes();
+std::set<std::string> ExcelGroupMimeTypes();
+std::set<std::string> PowerPointGroupMimeTypes();
+
 // Updates the default task for each of the office file types.
 void SetWordFileHandler(Profile* profile, const TaskDescriptor& task);
 void SetExcelFileHandler(Profile* profile, const TaskDescriptor& task);
 void SetPowerPointFileHandler(Profile* profile, const TaskDescriptor& task);
+
+// Whether we have an explicit user preference stored for the file handler for
+// this extension. |extension| should contain the leading '.'.
+bool HasExplicitDefaultFileHandler(Profile* profile,
+                                   const std::string& extension);
 
 // TODO(petermarshall): Move these to a new file office_file_tasks.cc/h
 // Updates the default task for each of the office file types to a Files
@@ -434,12 +448,6 @@ void SetPowerPointFileHandlerToFilesSWA(Profile* profile,
                                         const std::string& action_id);
 
 // TODO(petermarshall): Move these to a new file office_file_tasks.cc/h
-// Sets the user preference storing whether the setup flow for office files has
-// ever been completed.
-void SetOfficeSetupComplete(Profile* profile, bool complete = true);
-// Whether or not the setup flow for office files has ever been completed.
-bool OfficeSetupComplete(Profile* profile);
-
 // Sets the user preference storing whether we should always move office files
 // to Google Drive without first asking the user.
 void SetAlwaysMoveOfficeFilesToDrive(Profile* profile, bool complete = true);

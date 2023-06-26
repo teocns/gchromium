@@ -122,9 +122,11 @@ class UrlRealTimeMechanism : public SafeBrowsingLookupMechanism {
   void OnHashDatabaseCompleteCheckResult(
       bool real_time_request_failed,
       std::unique_ptr<SafeBrowsingLookupMechanism::CompleteCheckResult> result);
-  void OnHashDatabaseCompleteCheckResultInternal(SBThreatType threat_type,
-                                                 const ThreatMetadata& metadata,
-                                                 bool real_time_request_failed);
+  void OnHashDatabaseCompleteCheckResultInternal(
+      SBThreatType threat_type,
+      const ThreatMetadata& metadata,
+      absl::optional<ThreatSource> threat_source,
+      bool real_time_request_failed);
 
   SEQUENCE_CHECKER(sequence_checker_);
 
@@ -144,6 +146,11 @@ class UrlRealTimeMechanism : public SafeBrowsingLookupMechanism {
   // Whether the high confidence allowlist can be checked. It is set to
   // false when enterprise real time URL lookup is enabled.
   bool can_check_high_confidence_allowlist_;
+
+  // Stores the response of
+  // SafeBrowsingDatabaseManager::CheckUrlForHighConfidenceAllowlist iff it was
+  // called.
+  bool did_match_allowlist_ = false;
 
   // URL Lookup service suffix for logging metrics.
   std::string url_lookup_service_metric_suffix_;

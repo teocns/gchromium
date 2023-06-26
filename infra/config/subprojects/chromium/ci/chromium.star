@@ -437,6 +437,9 @@ ci.builder(
         category = "linux",
         short_name = "dbg",
     ),
+    reclient_bootstrap_env = {
+        "RBE_clang_depscan_archive": "true",
+    },
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
 
@@ -475,6 +478,9 @@ ci.builder(
                 "linux-archive-rel.json",
             ],
         },
+    },
+    reclient_bootstrap_env = {
+        "RBE_clang_depscan_archive": "true",
     },
 )
 
@@ -549,7 +555,6 @@ ci.builder(
             apply_configs = [
                 "clobber",
                 "mb",
-                "goma_use_local",  # to mitigate compile step timeout (crbug.com/1056935).
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
@@ -611,7 +616,6 @@ ci.builder(
             apply_configs = [
                 "clobber",
                 "mb",
-                "goma_use_local",  # to mitigate compile step timeout (crbug.com/1056935).
             ],
             build_config = builder_config.build_config.RELEASE,
             target_bits = 64,
@@ -663,7 +667,7 @@ ci.builder(
     ),
     # TODO(crbug.com/1279290) builds with PGO change take long time.
     # Keep in sync with mac-official in try/chromium.star.
-    execution_timeout = 9 * time.hour,
+    execution_timeout = 15 * time.hour,
 )
 
 ci.builder(

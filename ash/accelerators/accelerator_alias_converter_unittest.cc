@@ -6,8 +6,14 @@
 
 #include <vector>
 
+#include "ash/constants/ash_features.h"
+#include "ash/public/mojom/input_device_settings.mojom.h"
 #include "ash/shell.h"
+#include "ash/system/input_device_settings/input_device_settings_controller_impl.h"
 #include "ash/test/ash_test_base.h"
+#include "base/containers/flat_map.h"
+#include "base/files/file_path.h"
+#include "base/test/scoped_feature_list.h"
 #include "device/udev_linux/fake_udev_loader.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -83,7 +89,29 @@ class FakeDeviceManager {
 
 }  // namespace
 
-using AcceleratorAliasConverterTest = AshTestBase;
+class AcceleratorAliasConverterTest : public AshTestBase {
+ public:
+  void SetTopRowAsFKeysForKeyboard(const ui::InputDevice& keyboard,
+                                   bool enabled) {
+    if (!features::IsInputDeviceSettingsSplitEnabled()) {
+      // Top row keys not fKeys prevents remapping.
+      Shell::Get()
+          ->keyboard_capability()
+          ->SetTopRowKeysAsFKeysEnabledForTesting(enabled);
+      EXPECT_EQ(enabled,
+                Shell::Get()->keyboard_capability()->TopRowKeysAreFKeys());
+      return;
+    }
+
+    auto settings = Shell::Get()
+                        ->input_device_settings_controller()
+                        ->GetKeyboardSettings(keyboard.id)
+                        ->Clone();
+    settings->top_row_are_fkeys = enabled;
+    Shell::Get()->input_device_settings_controller()->SetKeyboardSettings(
+        keyboard.id, std::move(settings));
+  }
+};
 
 TEST_F(AcceleratorAliasConverterTest, CheckTopRowAliasNoAlias) {
   std::unique_ptr<FakeDeviceManager> fake_keyboard_manager_ =
@@ -96,10 +124,7 @@ TEST_F(AcceleratorAliasConverterTest, CheckTopRowAliasNoAlias) {
 
   AcceleratorAliasConverter accelerator_alias_converter_;
 
-  // Top row keys not fKeys prevents remapping.
-  Shell::Get()->keyboard_capability()->SetTopRowKeysAsFKeysEnabledForTesting(
-      false);
-  EXPECT_FALSE(Shell::Get()->keyboard_capability()->TopRowKeysAreFKeys());
+  SetTopRowAsFKeysForKeyboard(fake_keyboard, /*enabled=*/false);
   const ui::Accelerator accelerator{ui::VKEY_ZOOM, ui::EF_ALT_DOWN};
   std::vector<ui::Accelerator> accelerator_aliases =
       accelerator_alias_converter_.CreateAcceleratorAlias(accelerator);
@@ -271,14 +296,87 @@ TEST_F(AcceleratorAliasConverterTest, CheckCapsLockAlias) {
   EXPECT_EQ(0u, accelerator_aliases.size());
 }
 
+TEST_F(AcceleratorAliasConverterTest, CheckPlayPauseHidden) {
+  AcceleratorAliasConverter accelerator_alias_converter_;
+  const ui::Accelerator play_accelerator{ui::VKEY_PLAY, ui::EF_NONE};
+  const ui::Accelerator pause_accelerator{ui::VKEY_PAUSE, ui::EF_NONE};
+
+  EXPECT_TRUE(
+      accelerator_alias_converter_.CreateAcceleratorAlias(play_accelerator)
+          .empty());
+  EXPECT_TRUE(
+      accelerator_alias_converter_.CreateAcceleratorAlias(pause_accelerator)
+          .empty());
+}
+
+TEST_F(AcceleratorAliasConverterTest, MetaFKeyRewritesSuppressed) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kInputDeviceSettingsSplit);
+
+  // Needs to be in user session to edit input device settings.
+  SimulateGuestLogin();
+
+  std::unique_ptr<FakeDeviceManager> fake_keyboard_manager_ =
+      std::make_unique<FakeDeviceManager>();
+  ui::KeyboardDevice fake_keyboard(
+      /*id=*/1, /*type=*/ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH,
+      /*name=*/kKbdTopRowLayoutUnspecified, /*phys=*/"",
+      /*sys_path=*/base::FilePath(),
+      /*vendor=*/0x2222, /*product=*/0x2222, /*version=*/0x0);
+  fake_keyboard.sys_path = base::FilePath("path");
+  fake_keyboard_manager_->AddFakeKeyboard(fake_keyboard,
+                                          kKbdTopRowLayoutUnspecified);
+
+  mojom::KeyboardSettings settings;
+  settings.top_row_are_fkeys = true;
+  settings.suppress_meta_fkey_rewrites = false;
+  Shell::Get()->input_device_settings_controller()->SetKeyboardSettings(
+      fake_keyboard.id, settings.Clone());
+
+  AcceleratorAliasConverter accelerator_alias_converter_;
+
+  const ui::Accelerator refresh_accelerator{ui::VKEY_BROWSER_REFRESH,
+                                            ui::EF_NONE};
+  std::vector<ui::Accelerator> accelerator_aliases =
+      accelerator_alias_converter_.CreateAcceleratorAlias(refresh_accelerator);
+  ASSERT_EQ(1u, accelerator_aliases.size());
+  EXPECT_EQ(ui::Accelerator(ui::VKEY_F3, ui::EF_COMMAND_DOWN),
+            accelerator_aliases[0]);
+
+  settings.suppress_meta_fkey_rewrites = true;
+  Shell::Get()->input_device_settings_controller()->SetKeyboardSettings(
+      fake_keyboard.id, settings.Clone());
+
+  accelerator_aliases =
+      accelerator_alias_converter_.CreateAcceleratorAlias(refresh_accelerator);
+  ASSERT_EQ(0u, accelerator_aliases.size());
+
+  ui::KeyboardDevice fake_internal_keyboard(
+      /*id=*/2, /*type=*/ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+      /*name=*/kKbdTopRowLayout2Tag, /*phys=*/"", /*sys_path=*/base::FilePath(),
+      /*vendor=*/0x1111, /*product=*/0x1111, /*version=*/0x0);
+  fake_internal_keyboard.sys_path = base::FilePath("path2");
+  fake_keyboard_manager_->AddFakeKeyboard(fake_internal_keyboard,
+                                          kKbdTopRowLayout2Tag);
+
+  settings.top_row_are_fkeys = true;
+  settings.suppress_meta_fkey_rewrites = false;
+  Shell::Get()->input_device_settings_controller()->SetKeyboardSettings(
+      fake_internal_keyboard.id, settings.Clone());
+
+  accelerator_aliases =
+      accelerator_alias_converter_.CreateAcceleratorAlias(refresh_accelerator);
+  ASSERT_EQ(1u, accelerator_aliases.size());
+  EXPECT_EQ(ui::Accelerator(ui::VKEY_BROWSER_REFRESH, ui::EF_COMMAND_DOWN),
+            accelerator_aliases[0]);
+}
+
 class TopRowAliasTest : public AcceleratorAliasConverterTest,
                         public testing::WithParamInterface<
                             TopRowAcceleratorAliasConverterTestData> {
+ public:
   void SetUp() override {
     AcceleratorAliasConverterTest::SetUp();
-    // Enable top row keys as fKeys.
-    Shell::Get()->keyboard_capability()->SetTopRowKeysAsFKeysEnabledForTesting(
-        true);
     TopRowAcceleratorAliasConverterTestData test_data = GetParam();
     keyboard_connection_type_ = test_data.keyboard_connection_type_;
     keyboard_layout_types_ = test_data.keyboard_layout_types_;
@@ -452,13 +550,15 @@ INSTANTIATE_TEST_SUITE_P(
         // (last item in the list).
         // In this case, the most recently connected external keyboard does not
         // have a browser forward key.
+        // As the most recently connected keyboard and the internal keyboards
+        // are both ChromeOS keyboards, no alias is generated.
         {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
           ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH,
           ui::InputDeviceType::INPUT_DEVICE_USB},
          {kKbdTopRowLayout1Tag, kKbdTopRowLayoutUnspecified,
           kKbdTopRowLayout2Tag},
          ui::Accelerator{ui::VKEY_BROWSER_FORWARD, ui::EF_NONE},
-         {ui::Accelerator{ui::VKEY_BROWSER_FORWARD, ui::EF_COMMAND_DOWN}}},
+         {}},
 
         // Since the external keyboard uses Layout1 by default, it should map to
         // F2.
@@ -488,6 +588,7 @@ TEST_P(TopRowAliasTest, CheckTopRowAlias) {
         /*name=*/layout);
     fake_keyboard.sys_path = base::FilePath("path" + layout);
     fake_keyboard_manager_->AddFakeKeyboard(fake_keyboard, layout);
+    SetTopRowAsFKeysForKeyboard(fake_keyboard, /*enabled=*/true);
     i++;
   }
 
@@ -498,7 +599,6 @@ TEST_P(TopRowAliasTest, CheckTopRowAlias) {
   base::ranges::sort(accelerator_alias);
   base::ranges::sort(expected_accelerators_);
 
-  ASSERT_TRUE(Shell::Get()->keyboard_capability()->TopRowKeysAreFKeys());
   ASSERT_EQ(expected_accelerators_.size(), accelerator_alias.size());
   for (size_t i = 0; i < expected_accelerators_.size(); i++) {
     EXPECT_EQ(expected_accelerators_[i], accelerator_alias[i]);

@@ -60,7 +60,6 @@
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
-using autofill::PopupItemId;
 using views::BubbleBorder;
 
 namespace autofill {
@@ -70,7 +69,10 @@ namespace {
 // By spec, dropdowns should always have a width which is a multiple of 12.
 constexpr int kAutofillPopupWidthMultiple = 12;
 
-constexpr int kAutofillPopupMinWidth = 0;
+// The minimum width should exceed the maximum size of a cursor, which is 128
+// (see crbug.com/1434330).
+constexpr int kAutofillPopupMinWidth = kAutofillPopupWidthMultiple * 13;
+static_assert(kAutofillPopupMinWidth > 128);
 // TODO(crbug.com/831603): move handling the max width to the base class.
 constexpr int kAutofillPopupMaxWidth = kAutofillPopupWidthMultiple * 38;
 
@@ -88,10 +90,10 @@ bool IsFooterItem(const std::vector<Suggestion>& suggestions,
 
   // Separators are a special case: They belong into the footer iff the next
   // item exists and is a footer item.
-  int frontend_id = suggestions[line_number].frontend_id;
-  return frontend_id == PopupItemId::POPUP_ITEM_ID_SEPARATOR
+  PopupItemId popup_item_id = suggestions[line_number].popup_item_id;
+  return popup_item_id == PopupItemId::kSeparator
              ? IsFooterItem(suggestions, line_number + 1)
-             : IsFooterFrontendId(frontend_id);
+             : IsFooterFrontendId(popup_item_id);
 }
 
 }  // namespace
@@ -275,10 +277,10 @@ bool PopupViewViews::AcceptSelectedCell(bool tab_key_pressed) {
     if (index->second != PopupRowView::CellType::kContent) {
       return false;
     }
-    int frontend_id = controller_->GetSuggestionAt(index->first).frontend_id;
-    if (frontend_id <= 0 &&
-        !base::Contains(kItemsTriggeringFieldFilling, frontend_id) &&
-        frontend_id != POPUP_ITEM_ID_SCAN_CREDIT_CARD) {
+    PopupItemId popup_item_id =
+        controller_->GetSuggestionAt(index->first).popup_item_id;
+    if (!base::Contains(kItemsTriggeringFieldFilling, popup_item_id) &&
+        popup_item_id != PopupItemId::kScanCreditCard) {
       return false;
     }
   }
@@ -302,8 +304,8 @@ bool PopupViewViews::RemoveSelectedCell() {
   }
 
   bool was_autocomplete =
-      controller_->GetSuggestionAt(index->first).frontend_id ==
-      POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY;
+      controller_->GetSuggestionAt(index->first).popup_item_id ==
+      PopupItemId::kAutocompleteEntry;
   if (!controller_->RemoveSuggestion(index->first)) {
     return false;
   }
@@ -361,6 +363,11 @@ void PopupViewViews::OnWidgetVisibilityChanged(views::Widget* widget,
       feature_engagement::kIPHAutofillExternalAccountProfileSuggestionFeature);
 }
 
+bool PopupViewViews::CanShowDropdownInBoundsForTesting(
+    const gfx::Rect& bounds) const {
+  return CanShowDropdownInBounds(bounds);
+}
+
 bool PopupViewViews::HasPopupRowViewAt(size_t index) const {
   return index < rows_.size() &&
          absl::holds_alternative<PopupRowView*>(rows_[index]);
@@ -401,16 +408,14 @@ void PopupViewViews::CreateChildViews() {
     for (; current_line_number < kSuggestions.size() &&
            !IsFooterItem(kSuggestions, current_line_number);
          ++current_line_number) {
-      int frontend_id = kSuggestions[current_line_number].frontend_id;
-      switch (frontend_id) {
-        case PopupItemId::POPUP_ITEM_ID_SEPARATOR:
+      switch (kSuggestions[current_line_number].popup_item_id) {
+        case PopupItemId::kSeparator:
           rows_.push_back(body_container->AddChildView(
               std::make_unique<PopupSeparatorView>()));
           break;
 
-        case PopupItemId::POPUP_ITEM_ID_MIXED_FORM_MESSAGE:
-        case PopupItemId::
-            POPUP_ITEM_ID_INSECURE_CONTEXT_PAYMENT_DISABLED_MESSAGE:
+        case PopupItemId::kMixedFormMessage:
+        case PopupItemId::kInsecureContextPaymentDisabledMessage:
           rows_.push_back(
               body_container->AddChildView(std::make_unique<PopupWarningView>(
                   kSuggestions[current_line_number])));
@@ -464,28 +469,26 @@ void PopupViewViews::CreateChildViews() {
   // Footer items need to be in their own container because they should not be
   // affected by scrolling behavior (they are "sticky" at the bottom) and
   // because they have a special background color
-  std::unique_ptr<views::BoxLayoutView> footer_container =
+  footer_container_ = content_view->AddChildView(
       views::Builder<views::BoxLayoutView>()
           .SetOrientation(views::BoxLayout::Orientation::kVertical)
           .SetBackground(
               views::CreateThemedSolidBackground(ui::kColorDropdownBackground))
-          .Build();
+          .Build());
+  content_view->SetFlexForView(footer_container_, 0);
 
   for (; current_line_number < kSuggestions.size(); ++current_line_number) {
     DCHECK(IsFooterItem(kSuggestions, current_line_number));
     // The footer can contain either footer views or separator lines.
-    if (kSuggestions[current_line_number].frontend_id ==
-        POPUP_ITEM_ID_SEPARATOR) {
-      rows_.push_back(footer_container->AddChildView(
+    if (kSuggestions[current_line_number].popup_item_id ==
+        PopupItemId::kSeparator) {
+      rows_.push_back(footer_container_->AddChildView(
           std::make_unique<PopupSeparatorView>()));
     } else {
-      rows_.push_back(footer_container->AddChildView(
+      rows_.push_back(footer_container_->AddChildView(
           PopupRowView::Create(*this, current_line_number)));
     }
   }
-
-  content_view->SetFlexForView(
-      content_view->AddChildView(std::move(footer_container)), 0);
 }
 
 int PopupViewViews::AdjustWidth(int width) const {
@@ -538,14 +541,13 @@ bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
   element_bounds.Inset(
       gfx::Insets::VH(/*vertical=*/-kElementBorderPadding, /*horizontal=*/0));
 
-  // At least one row of the popup should be shown in the bounds of the content
-  // area so that the user notices the presence of the popup.
-  int item_height =
-      body_container_ && body_container_->children().size() > 0
-          ? body_container_->children()[0]->GetPreferredSize().height()
-          : 0;
+  if ((!body_container_ || body_container_->children().empty()) &&
+      (!footer_container_ || footer_container_->children().empty())) {
+    controller_->Hide(PopupHidingReason::kNoSuggestions);
+    return false;
+  }
 
-  if (!CanShowDropdownHere(item_height, max_bounds_for_popup, element_bounds)) {
+  if (!CanShowDropdownInBounds(max_bounds_for_popup)) {
     controller_->Hide(PopupHidingReason::kInsufficientSpace);
     return false;
   }
@@ -617,6 +619,24 @@ bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
 
   SchedulePaint();
   return true;
+}
+
+bool PopupViewViews::CanShowDropdownInBounds(const gfx::Rect& bounds) const {
+  gfx::Rect element_bounds =
+      gfx::ToEnclosingRect(controller_->element_bounds());
+
+  // At least one suggestion and the sticky footer should be shown in the bounds
+  // of the content area so that the user notices the presence of the popup.
+  int min_height = 0;
+  if (body_container_ && !body_container_->children().empty()) {
+    min_height += body_container_->children()[0]->GetPreferredSize().height();
+  }
+  if (footer_container_ && !footer_container_->children().empty()) {
+    // The footer is not scrollable, its full height should be considered.
+    min_height += footer_container_->GetPreferredSize().height();
+  }
+
+  return CanShowDropdownHere(min_height, bounds, element_bounds);
 }
 
 base::WeakPtr<AutofillPopupView> PopupViewViews::GetWeakPtr() {

@@ -438,7 +438,7 @@ TEST_F(SpeculationRuleSetTest, DropUnrecognizedRules) {
       R"nvs({
         "source": "list",
         "urls": ["no-source.html"],
-        "no_vary_search_expected": "params=(a)"
+        "expects_no_vary_search": "params=(a)"
       }]})nvs",
       KURL("https://example.com/"), execution_context());
   ASSERT_TRUE(rule_set);
@@ -860,6 +860,29 @@ TEST_F(SpeculationRuleSetTest, UseCounter) {
       page_holder.GetDocument().IsUseCounted(WebFeature::kSpeculationRules));
 }
 
+// Tests that the presence of a speculationrules No-Vary-Search hint is
+// recorded.
+TEST_F(SpeculationRuleSetTest, NoVarySearchHintUseCounter) {
+  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
+      true};
+  DummyPageHolder page_holder;
+  StubSpeculationHost speculation_host;
+  page_holder.GetFrame().GetSettings()->SetScriptEnabled(true);
+  EXPECT_FALSE(page_holder.GetDocument().IsUseCounted(
+      WebFeature::kSpeculationRulesNoVarySearchHint));
+
+  const String speculation_script =
+      R"nvs({"prefetch": [{
+        "source": "list",
+        "urls": ["/foo"],
+        "expects_no_vary_search": "params=(\"a\")"
+      }]})nvs";
+  PropagateRulesToStubSpeculationHost(page_holder, speculation_host,
+                                      speculation_script);
+  EXPECT_TRUE(page_holder.GetDocument().IsUseCounted(
+      WebFeature::kSpeculationRulesNoVarySearchHint));
+}
+
 // Tests that rules removed before the task to update speculation candidates
 // runs are not reported.
 TEST_F(SpeculationRuleSetTest, AddAndRemoveInSameTask) {
@@ -931,13 +954,6 @@ TEST_F(SpeculationRuleSetTest, RemoveInMicrotask) {
   DummyPageHolder page_holder;
   StubSpeculationHost speculation_host;
 
-  if (RuntimeEnabledFeatures::
-          SpeculationRulesDocumentRulesSelectorMatchesEnabled(
-              page_holder.GetFrame().DomWindow())) {
-    GTEST_SKIP() << "This test doesn't work correctly with selector_matches "
-                    "enabled. https://crbug.com/1427644";
-  }
-
   base::RunLoop run_loop;
   base::MockCallback<base::RepeatingCallback<void(
       const Vector<mojom::blink::SpeculationCandidatePtr>&)>>
@@ -970,6 +986,7 @@ TEST_F(SpeculationRuleSetTest, RemoveInMicrotask) {
   scoped_refptr<scheduler::EventLoop> event_loop =
       frame.DomWindow()->GetAgent()->event_loop();
   event_loop->PerformMicrotaskCheckpoint();
+  frame.View()->UpdateAllLifecyclePhasesForTest();
 
   // Second simulated task removes the rule sets, then adds another one in a
   // microtask which is queued later than any queued during the removal.
@@ -1511,7 +1528,7 @@ TEST_F(DocumentRulesTest, HrefMatchesWithBaseURLAndRelativeTo) {
 TEST_F(DocumentRulesTest, DropInvalidRules) {
   ScopedSpeculationRulesDocumentRulesSelectorMatchesForTest
       enable_selector_matches{true};
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_expected{
+  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
       true};
   auto* rule_set = CreateRuleSet(
       R"({"prefetch": [)"
@@ -1628,10 +1645,10 @@ TEST_F(DocumentRulesTest, DropInvalidRules) {
         "where": {"selector_matches": [".valid", "#invalid#"]}
         },)"
 
-      // Invalid no_vary_search_expected value.
+      // Invalid expects_no_vary_search value.
       R"({"source": "list",
         "urls": ["https://example.com/prefetch/list/page1.html"],
-        "no_vary_search_expected": 0
+        "expects_no_vary_search": 0
         },)"
 
       // valid document rule.
@@ -1923,18 +1940,18 @@ auto HasReferrerPolicy(
 }
 
 auto HasNoVarySearchHint() {
-  return ::testing::Pointee(::testing::Field(
-      "no_vary_search_expected",
-      &mojom::blink::SpeculationCandidate::no_vary_search_expected,
-      ::testing::IsTrue()));
+  return ::testing::Pointee(
+      ::testing::Field("no_vary_search_hint",
+                       &mojom::blink::SpeculationCandidate::no_vary_search_hint,
+                       ::testing::IsTrue()));
 }
 
 auto NVSVariesOnKeyOrder() {
   return ::testing::AllOf(
       HasNoVarySearchHint(),
       ::testing::Pointee(::testing::Field(
-          "no_vary_search_expected",
-          &mojom::blink::SpeculationCandidate::no_vary_search_expected,
+          "no_vary_search_hint",
+          &mojom::blink::SpeculationCandidate::no_vary_search_hint,
           testing::Pointee(::testing::Field(
               "vary_on_key_order",
               &network::mojom::blink::NoVarySearch::vary_on_key_order,
@@ -1946,14 +1963,12 @@ auto NVSHasNoVaryParams(Matchers&&... params) {
   return ::testing::ResultOf(
       "no_vary_params",
       [](const auto& nvs) {
-        if (!nvs->no_vary_search_expected ||
-            !nvs->no_vary_search_expected->search_variance ||
-            !nvs->no_vary_search_expected->search_variance
-                 ->is_no_vary_params()) {
+        if (!nvs->no_vary_search_hint ||
+            !nvs->no_vary_search_hint->search_variance ||
+            !nvs->no_vary_search_hint->search_variance->is_no_vary_params()) {
           return Vector<String>();
         }
-        return nvs->no_vary_search_expected->search_variance
-            ->get_no_vary_params();
+        return nvs->no_vary_search_hint->search_variance->get_no_vary_params();
       },
       ::testing::UnorderedElementsAre(params...));
 }
@@ -2003,7 +2018,7 @@ TEST_F(DocumentRulesTest, SpeculationCandidatesReportedAfterInitialization) {
 // No-Vary-Search hint.
 TEST_F(DocumentRulesTest,
        SpeculationCandidatesReportedAfterInitializationWithNVS) {
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_expected{
+  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
       true};
   DummyPageHolder page_holder;
   StubSpeculationHost speculation_host;
@@ -2017,7 +2032,7 @@ TEST_F(DocumentRulesTest,
     {"prefetch": [{
       "source": "document",
       "where": {"href_matches": "https://foo.com/*"},
-      "no_vary_search_expected": "params=(\"a\")"
+      "expects_no_vary_search": "params=(\"a\")"
     }]}
   )nvs";
   PropagateRulesToStubSpeculationHost(page_holder, speculation_host,
@@ -3743,6 +3758,142 @@ TEST_F(DocumentRulesTest, DisplayLockedContainerTracking) {
       });
 }
 
+// Similar to SpeculationRulesTest.RemoveInMicrotask, but with relevant changes
+// to style/layout which necessitate forcing a style update after removal.
+TEST_F(DocumentRulesTest, RemoveForcesStyleUpdate) {
+  ScopedSpeculationRulesDocumentRulesSelectorMatchesForTest
+      selector_matches_enabled{true};
+
+  DummyPageHolder page_holder;
+  StubSpeculationHost speculation_host;
+
+  base::RunLoop run_loop;
+  base::MockCallback<base::RepeatingCallback<void(
+      const Vector<mojom::blink::SpeculationCandidatePtr>&)>>
+      mock_callback;
+  {
+    ::testing::InSequence sequence;
+    EXPECT_CALL(mock_callback, Run(::testing::SizeIs(2)));
+    EXPECT_CALL(mock_callback, Run(::testing::SizeIs(3)))
+        .WillOnce(::testing::Invoke([&]() { run_loop.Quit(); }));
+  }
+  speculation_host.SetCandidatesUpdatedCallback(mock_callback.Get());
+
+  LocalFrame& frame = page_holder.GetFrame();
+  Document& doc = page_holder.GetDocument();
+  frame.GetSettings()->SetScriptEnabled(true);
+  auto& broker = frame.DomWindow()->GetBrowserInterfaceBroker();
+  broker.SetBinderForTesting(
+      mojom::blink::SpeculationHost::Name_,
+      WTF::BindRepeating(&StubSpeculationHost::BindUnsafe,
+                         WTF::Unretained(&speculation_host)));
+
+  for (StringView path : {"/baz", "/quux"}) {
+    AddAnchor(*doc.body(), "https://example.com" + path);
+  }
+
+  // First simulated task adds the rule sets.
+  InsertSpeculationRules(doc,
+                         R"({"prefetch": [
+           {"source": "list", "urls": ["https://example.com/foo"]}]})");
+  HTMLScriptElement* to_remove = InsertSpeculationRules(doc,
+                                                        R"({"prefetch": [
+             {"source": "list", "urls": ["https://example.com/bar"]}]})");
+  scoped_refptr<scheduler::EventLoop> event_loop =
+      frame.DomWindow()->GetAgent()->event_loop();
+  event_loop->PerformMicrotaskCheckpoint();
+  frame.View()->UpdateAllLifecyclePhasesForTest();
+
+  // Second simulated task removes a rule set, then adds a new rule set which
+  // will match some newly added links. Since we are forced to update to handle
+  // the removal, these will be discovered during that microtask.
+  //
+  // There's some extra subtlety here -- the speculation rules update needs to
+  // propagate the new invalidation sets for this selector before the
+  // setAttribute call occurs. Otherwise this test fails because the change goes
+  // unnoticed.
+  to_remove->remove();
+  InsertSpeculationRules(doc,
+                         R"({"prefetch": [{"source": "document",
+                        "where": {"selector_matches": ".magic *"}}]})");
+  doc.body()->setAttribute("class", "magic");
+
+  event_loop->PerformMicrotaskCheckpoint();
+
+  run_loop.Run();
+  broker.SetBinderForTesting(mojom::blink::SpeculationHost::Name_, {});
+}
+
+// Checks a subtle case, wherein a ruleset is removed while speculation
+// candidate update is waiting for clean style. In this case there is a race
+// between the style update and the new microtask. In the case where the
+// microtask wins, care is needed to avoid re-entrantly updating speculation
+// candidates once it forces style clean.
+TEST_F(DocumentRulesTest, RemoveWhileWaitingForStyle) {
+  ScopedSpeculationRulesDocumentRulesSelectorMatchesForTest
+      selector_matches_enabled{true};
+
+  DummyPageHolder page_holder;
+  StubSpeculationHost speculation_host;
+
+  base::RunLoop run_loop;
+  ::testing::StrictMock<base::MockCallback<base::RepeatingCallback<void(
+      const Vector<mojom::blink::SpeculationCandidatePtr>&)>>>
+      mock_callback;
+  EXPECT_CALL(mock_callback, Run(::testing::SizeIs(1)))
+      .WillOnce(::testing::Invoke([&]() { run_loop.Quit(); }));
+  speculation_host.SetCandidatesUpdatedCallback(mock_callback.Get());
+
+  LocalFrame& frame = page_holder.GetFrame();
+  Document& doc = page_holder.GetDocument();
+  frame.GetSettings()->SetScriptEnabled(true);
+  auto& broker = frame.DomWindow()->GetBrowserInterfaceBroker();
+  broker.SetBinderForTesting(
+      mojom::blink::SpeculationHost::Name_,
+      WTF::BindRepeating(&StubSpeculationHost::BindUnsafe,
+                         WTF::Unretained(&speculation_host)));
+  auto event_loop = frame.DomWindow()->GetAgent()->event_loop();
+
+  // First, add the rule set and matching links. Style is not yet clean for the
+  // newly added links, even after the microtask. We also add a rule set with a
+  // fixed URL to avoid any optimizations that skip empty updates.
+  for (StringView path : {"/baz", "/quux"}) {
+    AddAnchor(*doc.body(), "https://example.com" + path);
+  }
+  HTMLScriptElement* to_remove = InsertSpeculationRules(doc,
+                                                        R"({"prefetch": [
+           {"source": "document", "where": {"selector_matches": "*"}}]})");
+  InsertSpeculationRules(doc,
+                         R"({"prefetch": [
+           {"source": "list", "urls": ["https://example.com/keep"]}]})");
+  event_loop->PerformMicrotaskCheckpoint();
+  EXPECT_TRUE(doc.NeedsLayoutTreeUpdate());
+
+  // Then, the rule set is removed, and we run another microtask checkpoint.
+  to_remove->remove();
+  event_loop->PerformMicrotaskCheckpoint();
+
+  // At this point, style should have been forced clean, and we should have
+  // received the mock update above.
+  EXPECT_FALSE(doc.NeedsLayoutTreeUpdate());
+
+  run_loop.Run();
+  broker.SetBinderForTesting(mojom::blink::SpeculationHost::Name_, {});
+}
+
+// Regression test, since the universal select sets rule set flags indicating
+// that the rule set potentially invalidates all elements.
+TEST_F(DocumentRulesTest, UniversalSelector) {
+  ScopedSpeculationRulesDocumentRulesSelectorMatchesForTest
+      enable_selector_matches{true};
+  DummyPageHolder page_holder;
+  page_holder.GetFrame().GetSettings()->SetScriptEnabled(true);
+  StubSpeculationHost speculation_host;
+  InsertSpeculationRules(
+      page_holder.GetDocument(),
+      R"({"prefetch": [{"source":"document", "where":{"selector_matches":"*"}}]})");
+}
+
 TEST_F(SpeculationRuleSetTest, EagernessRuntimeEnabledFlag) {
   ScopedSpeculationRulesEagernessForTest enable_eagerness{false};
 
@@ -3942,7 +4093,7 @@ TEST_F(SpeculationRuleSetTest, InvalidEagernessValue) {
 // Test that a valid No-Vary-Search hint will generate a speculation
 // candidate.
 TEST_F(SpeculationRuleSetTest, ValidNoVarySearchHintValueGeneratesCandidate) {
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_expected{
+  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
       true};
 
   DummyPageHolder page_holder;
@@ -3952,7 +4103,7 @@ TEST_F(SpeculationRuleSetTest, ValidNoVarySearchHintValueGeneratesCandidate) {
     "prefetch": [{
         "source": "list",
         "urls": ["https://example.com/prefetch/list/page1.html"],
-        "no_vary_search_expected": "params=(\"a\") "
+        "expects_no_vary_search": "params=(\"a\") "
       }]
     })";
 
@@ -3970,7 +4121,7 @@ TEST_F(SpeculationRuleSetTest, ValidNoVarySearchHintValueGeneratesCandidate) {
 // Test that an empty but valid No-Vary-Search hint will generate a speculation
 // candidate.
 TEST_F(SpeculationRuleSetTest, EmptyNoVarySearchHintValueGeneratesCandidate) {
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_expected{
+  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
       true};
 
   DummyPageHolder page_holder;
@@ -3980,7 +4131,7 @@ TEST_F(SpeculationRuleSetTest, EmptyNoVarySearchHintValueGeneratesCandidate) {
     "prefetch": [{
         "source": "list",
         "urls": ["https://example.com/prefetch/list/page1.html"],
-        "no_vary_search_expected": ""
+        "expects_no_vary_search": ""
       }]
     })";
 
@@ -3996,7 +4147,7 @@ TEST_F(SpeculationRuleSetTest, EmptyNoVarySearchHintValueGeneratesCandidate) {
 // Test that a No-Vary-Search hint equivalent to the default
 // will generate a speculation candidate.
 TEST_F(SpeculationRuleSetTest, DefaultNoVarySearchHintValueGeneratesCandidate) {
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_expected{
+  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
       true};
 
   DummyPageHolder page_holder;
@@ -4006,7 +4157,7 @@ TEST_F(SpeculationRuleSetTest, DefaultNoVarySearchHintValueGeneratesCandidate) {
     "prefetch": [{
         "source": "list",
         "urls": ["https://example.com/prefetch/list/page1.html"],
-        "no_vary_search_expected": "key-order=?0"
+        "expects_no_vary_search": "key-order=?0"
       }]
     })";
 
@@ -4022,7 +4173,7 @@ TEST_F(SpeculationRuleSetTest, DefaultNoVarySearchHintValueGeneratesCandidate) {
 // Tests that No-Vary-Search errors that cause the speculation rules to be
 // ignored are logged to the console.
 TEST_F(SpeculationRuleSetTest, ConsoleWarningForNoVarySearchHint) {
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_expected{
+  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
       true};
 
   auto* chrome_client = MakeGarbageCollected<ConsoleCapturingChromeClient>();
@@ -4038,7 +4189,7 @@ TEST_F(SpeculationRuleSetTest, ConsoleWarningForNoVarySearchHint) {
     "prefetch": [{
         "source": "list",
         "urls": ["https://example.com/prefetch/list/page1.html"],
-        "no_vary_search_expected": 0
+        "expects_no_vary_search": 0
       }]
     })");
   document.head()->appendChild(script);
@@ -4046,12 +4197,12 @@ TEST_F(SpeculationRuleSetTest, ConsoleWarningForNoVarySearchHint) {
   EXPECT_TRUE(base::ranges::any_of(
       chrome_client->ConsoleMessages(), [](const String& message) {
         return message.Contains(
-            "no_vary_search_expected's value must be a string");
+            "expects_no_vary_search's value must be a string");
       }));
 }
 
 TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
-  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_expected{
+  ScopedSpeculationRulesNoVarySearchHintForTest enable_no_vary_search_hint{
       true};
   {
     auto* rule_set =
@@ -4059,13 +4210,13 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
       "prefetch": [{
           "source": "list",
           "urls": ["https://example.com/prefetch/list/page1.html"],
-          "no_vary_search_expected": 0
+          "expects_no_vary_search": 0
         }]
       })",
                       KURL("https://example.com"), execution_context());
     EXPECT_THAT(rule_set->error_message().Utf8(),
                 ::testing::HasSubstr(
-                    "no_vary_search_expected's value must be a string"));
+                    "expects_no_vary_search's value must be a string"));
   }
   {
     auto* rule_set =
@@ -4073,7 +4224,7 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
       "prefetch": [{
           "source": "list",
           "urls": ["https://example.com/prefetch/list/page1.html"],
-          "no_vary_search_expected": "?1"
+          "expects_no_vary_search": "?1"
         }]
       })",
                       KURL("https://example.com"), execution_context());
@@ -4087,7 +4238,7 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
       "prefetch": [{
           "source": "list",
           "urls": ["https://example.com/prefetch/list/page1.html"],
-          "no_vary_search_expected": "params=?0"
+          "expects_no_vary_search": "params=?0"
         }
       ]
     })",
@@ -4100,7 +4251,7 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
       "prefetch": [{
           "source": "list",
           "urls": ["https://example.com/prefetch/list/page1.html"],
-          "no_vary_search_expected": ""
+          "expects_no_vary_search": ""
         }
       ]
     })",
@@ -4113,7 +4264,7 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
       "prefetch": [{
           "source": "list",
           "urls": ["https://example.com/prefetch/list/page1.html"],
-          "no_vary_search_expected": "para"
+          "expects_no_vary_search": "para"
         }
       ]
     })",
@@ -4129,7 +4280,7 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
       "prefetch": [{
           "source": "list",
           "urls": ["https://example.com/prefetch/list/page1.html"],
-          "no_vary_search_expected": "key-order=a"
+          "expects_no_vary_search": "key-order=a"
         }
       ]
     })",
@@ -4146,7 +4297,7 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
         {
           "source": "list",
           "urls": ["https://example.com/prefetch/list/page1.html"],
-          "no_vary_search_expected": "params=a"
+          "expects_no_vary_search": "params=a"
         }
       ]
     })",
@@ -4162,7 +4313,7 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
       "prefetch": [{
           "source": "list",
           "urls": ["https://example.com/prefetch/list/page1.html"],
-          "no_vary_search_expected": "params,except=a"
+          "expects_no_vary_search": "params,except=a"
         }
       ]
     })",
@@ -4177,7 +4328,7 @@ TEST_F(SpeculationRuleSetTest, NoVarySearchHintParseError) {
       "prefetch": [{
           "source": "list",
           "urls": ["https://example.com/prefetch/list/page1.html"],
-          "no_vary_search_expected": "except=(\"a\") "
+          "expects_no_vary_search": "except=(\"a\") "
         }
       ]
     })",

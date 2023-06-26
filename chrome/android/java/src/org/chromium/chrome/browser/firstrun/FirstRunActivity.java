@@ -23,7 +23,9 @@ import org.chromium.base.ApplicationStatus.ActivityStateListener;
 import org.chromium.base.Promise;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.back_press.SecondaryActivityBackPressUma.SecondaryActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.fonts.FontPreloader;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -32,6 +34,7 @@ import org.chromium.chrome.browser.signin.SigninCheckerProvider;
 import org.chromium.chrome.browser.signin.SigninFirstRunFragment;
 import org.chromium.chrome.browser.signin.services.FREMobileIdentityConsistencyFieldTrial;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
+import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.metrics.LowEntropySource;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.LocalizationUtils;
@@ -285,6 +288,9 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         };
         TemplateUrlServiceFactory.getForProfile(Profile.getLastUsedRegularProfile())
                 .runWhenLoaded(onNativeFinished);
+        // Notify feature engagement that FRE occurred.
+        TrackerFactory.getTrackerForProfile(Profile.getLastUsedRegularProfile())
+                .notifyEvent(EventConstants.RESTORE_TABS_ON_FIRST_RUN_SHOW_PROMO);
     }
 
     private void onNativeDependenciesFullyInitialized() {
@@ -396,6 +402,11 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
             setCurrentItemForPager(position);
         }
         return BackPressResult.SUCCESS;
+    }
+
+    @Override
+    public int getSecondaryActivity() {
+        return SecondaryActivity.FIRST_RUN;
     }
 
     // FirstRunPageDelegate:

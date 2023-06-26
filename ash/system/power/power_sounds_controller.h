@@ -8,6 +8,8 @@
 #include "ash/system/power/power_status.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 
+class PrefRegistrySimple;
+
 namespace ash {
 
 // Controller class to manage power/battery sounds.
@@ -22,6 +24,8 @@ class ASH_EXPORT PowerSoundsController
   PowerSoundsController(const PowerSoundsController&) = delete;
   PowerSoundsController& operator=(const PowerSoundsController&) = delete;
   ~PowerSoundsController() override;
+
+  static void RegisterPrefs(PrefRegistrySimple* registry);
 
   // PowerStatus::Observer:
   void OnPowerStatusChanged() override;
@@ -59,9 +63,9 @@ class ASH_EXPORT PowerSoundsController
   // Records the battery level when the `OnPowerStatusChanged()` was called.
   int battery_level_;
 
-  // True if line power is connected when the `OnPowerStatusChanged()` was
+  // True if an AC charger is connected when the `OnPowerStatusChanged()` was
   // called.
-  bool is_line_power_connected_;
+  bool is_ac_charger_connected_;
 
   chromeos::PowerManagerClient::LidState lid_state_ =
       chromeos::PowerManagerClient::LidState::OPEN;

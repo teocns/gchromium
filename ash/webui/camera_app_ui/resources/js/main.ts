@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import {
-  startColorChangeUpdater,
+  ColorChangeUpdater,
 } from
     'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 
@@ -11,6 +11,7 @@ import {
   getDefaultWindowSize,
 } from './app_window.js';
 import {assert, assertInstanceof} from './assert.js';
+import * as customEffect from './custom_effect.js';
 import {DEPLOYED_VERSION} from './deployed_version.js';
 import {CameraManager} from './device/index.js';
 import {ModeConstraints} from './device/type.js';
@@ -21,6 +22,7 @@ import {Flag} from './flag.js';
 import {GalleryButton} from './gallerybutton.js';
 import {I18nString} from './i18n_string.js';
 import {Intent} from './intent.js';
+import * as Comlink from './lib/comlink.js';
 import {loadSvgImages} from './lit/svg_wrapper.js';
 import * as metrics from './metrics.js';
 import * as filesystem from './models/file_system.js';
@@ -28,6 +30,8 @@ import * as loadTimeData from './models/load_time_data.js';
 import * as localStorage from './models/local_storage.js';
 import {ChromeHelper} from './mojo/chrome_helper.js';
 import {DeviceOperator} from './mojo/device_operator.js';
+import {WindowStateType} from './mojo/type.js';
+import {WindowInstance} from './multi_window_manager.js';
 import * as nav from './nav.js';
 import {PerfLogger} from './perf.js';
 import {preloadImagesList} from './preload_images.js';
@@ -118,12 +122,15 @@ export class App {
     }, {passive: false, capture: true});
 
     window.addEventListener('resize', () => nav.layoutShownViews());
-    windowController.addListener(() => nav.layoutShownViews());
+    windowController.addWindowStateListener(() => nav.layoutShownViews());
 
+    customEffect.setup();
     util.setupI18nElements(document.body);
+    this.setupTooltip();
     this.setupToggles();
     localStorage.cleanup();
     this.setupEffect();
+    this.showNewFeatureToast();
     this.setupExperimentalFeatures();
 
     // Set up views navigation by their DOM z-order.
@@ -137,6 +144,47 @@ export class App {
   }
 
   /**
+   * Sets up tooltips for elements having `i18n-label` attribute. This method
+   * also setup tooltips for the elements:
+   * * Added to the DOM and have a `i18n-label` attribute.
+   * * Newly set with a `i18n-label` attribute.
+   *
+   * Note `i18n-label` attribute should not be removed from elements.
+   */
+  private setupTooltip() {
+    const tooltipAttribute = 'i18n-label';
+    const elements =
+        Array.from(dom.getAll(`[${tooltipAttribute}]`, HTMLElement));
+    tooltip.setup(elements);
+    const observer = new MutationObserver((mutations) => {
+      const elements: HTMLElement[] = [];
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList') {
+          for (const node of mutation.addedNodes) {
+            if (node instanceof HTMLElement &&
+                node.hasAttribute(tooltipAttribute)) {
+              elements.push(node);
+            }
+          }
+        } else if (mutation.type === 'attributes') {
+          const {target: node, attributeName, oldValue} = mutation;
+          if (node instanceof HTMLElement &&
+              attributeName === tooltipAttribute && oldValue === null) {
+            elements.push(node);
+          }
+        }
+      }
+      tooltip.setup(elements);
+    });
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeOldValue: true,
+    });
+  }
+
+  /**
    * Sets up toggles (checkbox and radio) by data attributes.
    */
   private setupToggles() {
@@ -147,14 +195,17 @@ export class App {
           element.click();
         }
       });
-      const localStorageKey = element.dataset['key'] === undefined ?
-          null :
-          util.assertEnumVariant(LocalStorageKey, element.dataset['key']);
+      function getKey(element: HTMLInputElement) {
+        return element.dataset['key'] === undefined ?
+            null :
+            util.assertEnumVariant(LocalStorageKey, element.dataset['key']);
+      }
       const stateKey = element.dataset['state'] === undefined ?
           null :
           state.assertState(element.dataset['state']);
 
       function save(element: HTMLInputElement) {
+        const localStorageKey = getKey(element);
         if (localStorageKey !== null) {
           localStorage.set(localStorageKey, element.checked);
         }
@@ -185,6 +236,7 @@ export class App {
           }
         });
       }
+      const localStorageKey = getKey(element);
       if (localStorageKey !== null) {
         const value = localStorage.getBool(localStorageKey, element.checked);
         util.toggleChecked(element, value);
@@ -219,6 +271,26 @@ export class App {
       subtree: true,
       childList: true,
     });
+  }
+
+  private showNewFeatureToast() {
+    // TODO(b/236800499): Remove the toast around 3 milestones after the feature
+    // is launched.
+    const showTimeLapseToast = () => this.cameraManager.registerCameraUI({
+      onUpdateConfig: async () => {
+        if (localStorage.getBool(LocalStorageKey.TIME_LAPSE_DIALOG_SHOWN) ||
+            state.get(Mode.VIDEO)) {
+          return;
+        }
+        customEffect.showTimeLapseIntroToast(this.cameraView.root);
+        // Do not show the toast to users who has already seen it.
+        localStorage.set(LocalStorageKey.TIME_LAPSE_DIALOG_SHOWN, true);
+      },
+    });
+
+    if (loadTimeData.getChromeFlag(Flag.TIME_LAPSE)) {
+      showTimeLapseToast();
+    }
   }
 
   private setupExperimentalFeatures() {
@@ -264,23 +336,7 @@ export class App {
     })();
 
     const cameraResourceInitialized = new WaitableEvent();
-    const exploitUsage = async () => {
-      if (cameraResourceInitialized.isSignaled()) {
-        this.resume();
-      } else {
-        // CCA must get camera usage for completing its initialization when
-        // first launched.
-        await this.cameraManager.initialize(this.cameraView);
-        await this.cameraView.initialize();
-        cameraResourceInitialized.signal();
-      }
-    };
-    const releaseUsage = async () => {
-      assert(cameraResourceInitialized.isSignaled());
-      await this.suspend();
-    };
-    await ChromeHelper.getInstance().initCameraUsageMonitor(
-        exploitUsage, releaseUsage);
+    await this.setupMultiWindowHandling(cameraResourceInitialized);
 
     let cameraStartSuccessful = false;
 
@@ -352,6 +408,67 @@ export class App {
   beginTake(shutterType: metrics.ShutterType): Promise<void>|null {
     return this.cameraView.beginTake(shutterType);
   }
+
+  async setupMultiWindowHandling(cameraResourceInitialized: WaitableEvent):
+      Promise<void> {
+    const exploitUsage = async () => {
+      if (cameraResourceInitialized.isSignaled()) {
+        this.resume();
+      } else {
+        // CCA must get camera usage for completing its initialization when
+        // first launched.
+        await this.cameraManager.initialize(this.cameraView);
+        await this.cameraView.initialize();
+        cameraResourceInitialized.signal();
+      }
+    };
+    const releaseUsage = async () => {
+      assert(cameraResourceInitialized.isSignaled());
+      await this.suspend();
+    };
+
+    const multiWindowManagerPath = '/js/multi_window_manager.js';
+    const multiWindowManagerWorker =
+        new SharedWorker(multiWindowManagerPath, {type: 'module'});
+    const windowInstance =
+        Comlink.wrap<WindowInstance>(multiWindowManagerWorker.port);
+    addUnloadCallback(() => {
+      windowInstance.onWindowClosed().catch((e) => {
+        reportError(
+            ErrorType.MULTI_WINDOW_HANDLING_FAILURE, ErrorLevel.ERROR,
+            assertInstanceof(e, Error));
+      });
+    });
+    await windowInstance.init(
+        Comlink.proxy(releaseUsage), Comlink.proxy(exploitUsage));
+    await ChromeHelper.getInstance().initCameraWindowController();
+    windowController.addWindowStateListener(
+        (states) => {
+          const isMinimizing = states.includes(WindowStateType.MINIMIZED);
+          // If the window is minimized while recording time-lapse, the camera
+          // usage will not be paused to keep recording.
+          if (isMinimizing && state.get(state.State.RECORDING) &&
+              state.get(state.State.RECORD_TYPE_TIME_LAPSE)) {
+            return;
+          }
+          windowInstance.onVisibilityChanged(!isMinimizing).catch((e) => {
+            reportError(
+                ErrorType.MULTI_WINDOW_HANDLING_FAILURE, ErrorLevel.ERROR,
+                assertInstanceof(e, Error));
+          });
+        });
+    windowController.addWindowFocusListener((isFocused) => {
+      // If we change the focus to another CCA window, it should get the camera
+      // ownership.
+      if (isFocused) {
+        windowInstance.onVisibilityChanged(true).catch((e) => {
+          reportError(
+              ErrorType.MULTI_WINDOW_HANDLING_FAILURE, ErrorLevel.ERROR,
+              assertInstanceof(e, Error));
+        });
+      }
+    });
+  }
 }
 
 /**
@@ -422,7 +539,7 @@ async function setupDynamicColor(): Promise<void> {
     });
   }
   if (loadTimeData.getChromeFlag(Flag.JELLY)) {
-    startColorChangeUpdater();
+    ColorChangeUpdater.forDocument().start();
     await loadCSS('chrome://theme/colors.css?sets=ref,sys');
   } else {
     await loadCSS('/css/colors_default.css');

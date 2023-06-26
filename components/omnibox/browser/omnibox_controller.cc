@@ -16,49 +16,24 @@
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #include "ui/gfx/geometry/rect.h"
 
-OmniboxController::OmniboxController(
-    OmniboxView* view,
-    OmniboxEditModelDelegate* edit_model_delegate,
-    std::unique_ptr<OmniboxClient> client)
-    : OmniboxController(view,
-                        edit_model_delegate,
-                        /*autocomplete_controller=*/nullptr,
-                        std::move(client)) {}
-
-OmniboxController::OmniboxController(
-    OmniboxEditModelDelegate* edit_model_delegate,
-    std::unique_ptr<AutocompleteController> autocomplete_controller,
-    std::unique_ptr<OmniboxClient> client)
-    : OmniboxController(/*view=*/nullptr,
-                        edit_model_delegate,
-                        std::move(autocomplete_controller),
-                        std::move(client)) {}
-
-OmniboxController::OmniboxController(
-    OmniboxView* view,
-    OmniboxEditModelDelegate* edit_model_delegate,
-    std::unique_ptr<AutocompleteController> autocomplete_controller,
-    std::unique_ptr<OmniboxClient> client)
-    : client_(std::move(client)) {
-  edit_model_ = std::make_unique<OmniboxEditModel>(view, edit_model_delegate,
-                                                   client_.get());
-  // TODO(crbug.com/1404748): Pass a reference to `OmniboxController` to the
-  //  constructor of `OmniboxEditModel` so this is no longer needed.
-  edit_model_->set_omnibox_controller(this);
-
-  autocomplete_controller_ = std::move(autocomplete_controller);
-  if (!autocomplete_controller_) {
-    autocomplete_controller_ = std::make_unique<AutocompleteController>(
-        client_->CreateAutocompleteProviderClient(),
-        AutocompleteClassifier::DefaultOmniboxProviders());
-    // Only observe the `AutocompleteController` instance created here for the
-    // omnibox. `RealboxHandler` observes both its own `AutocompleteController`
-    // instance and the one created here for the omnibox via
-    // `AutocompleteControllerEmitter`. The latter is being observed for when
-    // `RealboxHandler` is used in the context of the WebUI omnibox.
+OmniboxController::OmniboxController(OmniboxView* view,
+                                     std::unique_ptr<OmniboxClient> client)
+    : client_(std::move(client)),
+      edit_model_(std::make_unique<OmniboxEditModel>(
+          /*omnibox_controller=*/this,
+          view)),
+      autocomplete_controller_(std::make_unique<AutocompleteController>(
+          client_->CreateAutocompleteProviderClient(),
+          AutocompleteClassifier::DefaultOmniboxProviders())) {
+  // Directly observe omnibox's `AutocompleteController` instance - i.e., when
+  // `view` is provided in the constructor. In the case of realbox - i.e., when
+  // `view` is not provided in the constructor - `RealboxHandler` directly
+  // observes the `AutocompleteController` instance itself.
+  if (view) {
     autocomplete_controller_->AddObserver(this);
   }
 
+  // Register the `AutocompleteController` with `AutocompleteControllerEmitter`.
   if (auto* emitter = client_->GetAutocompleteControllerEmitter()) {
     autocomplete_controller_->AddObserver(emitter);
   }
@@ -121,14 +96,6 @@ void OmniboxController::OnResultChanged(AutocompleteController* controller,
       result(), default_match_changed, /*should_preload=*/controller->done(),
       base::BindRepeating(&OmniboxController::SetRichSuggestionBitmap,
                           weak_ptr_factory_.GetWeakPtr()));
-}
-
-void OmniboxController::SetEditModel(
-    std::unique_ptr<OmniboxEditModel> edit_model) {
-  edit_model_ = std::move(edit_model);
-  // TODO(crbug.com/1404748): Pass a reference to `OmniboxController` to the
-  //  constructor of `OmniboxEditModel` so this is no longer needed.
-  edit_model_->set_omnibox_controller(this);
 }
 
 void OmniboxController::InvalidateCurrentMatch() {

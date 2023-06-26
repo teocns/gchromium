@@ -17,7 +17,8 @@ import {DomRepeat, flush, PolymerElement} from 'chrome://resources/polymer/v3_0/
 import {getTemplate} from './accelerator_edit_dialog.html.js';
 import {ViewState} from './accelerator_view.js';
 import {getShortcutProvider} from './mojo_interface_provider.js';
-import {AcceleratorConfigResult, AcceleratorInfo, AcceleratorSource} from './shortcut_types.js';
+import {AcceleratorConfigResult, AcceleratorInfo, AcceleratorSource, AcceleratorState} from './shortcut_types.js';
+import {compareAcceleratorInfos} from './shortcut_utils.js';
 
 export interface AcceleratorEditDialogElement {
   $: {
@@ -31,6 +32,9 @@ declare global {
     'accelerator-capturing-ended': CustomEvent<void>;
   }
 }
+
+// A maximum of 5 accelerators are allowed.
+const MAX_NUM_ACCELERATORS = 5;
 
 /**
  * @fileoverview
@@ -124,7 +128,9 @@ export class AcceleratorEditDialogElement extends
   updateDialogAccelerators(updatedAccels: AcceleratorInfo[]): void {
     this.set('acceleratorInfos', []);
     this.getViewList().render();
-    this.acceleratorInfos = updatedAccels;
+    this.acceleratorInfos = updatedAccels.filter(
+        accel => accel.state !== AcceleratorState.kDisabledByUser &&
+            accel.state !== AcceleratorState.kDisabledByUnavailableKeys);
   }
 
   protected onDoneButtonClicked(): void {
@@ -163,9 +169,20 @@ export class AcceleratorEditDialogElement extends
     this.focusAcceleratorItemContainer();
   }
 
+  protected showNewAccelerator(): boolean {
+    // Show new pending accelerators when ViewState is not VIEW.
+    return this.pendingNewAcceleratorState != ViewState.VIEW &&
+        this.acceleratorLimitNotReached();
+  }
+
   protected showAddButton(): boolean {
     // If the state is VIEW, no new pending accelerators are being added.
-    return this.pendingNewAcceleratorState === ViewState.VIEW;
+    return this.pendingNewAcceleratorState === ViewState.VIEW &&
+        this.acceleratorLimitNotReached();
+  }
+
+  protected acceleratorLimitNotReached(): boolean {
+    return this.acceleratorInfos.length < MAX_NUM_ACCELERATORS;
   }
 
   protected onRestoreDefaultButtonClicked(): void {
@@ -181,6 +198,11 @@ export class AcceleratorEditDialogElement extends
             }));
           }
         });
+  }
+
+  protected getSortedAccelerators(accelerators: AcceleratorInfo[]):
+      AcceleratorInfo[] {
+    return accelerators.sort(compareAcceleratorInfos);
   }
 }
 

@@ -34,8 +34,6 @@ const CGFloat kTitleHorizontalMargin = 19;
 // Trailing/leading margins for header buttons. Its used to align with the card
 // margins.
 const CGFloat kButtonHorizontalMargin = 14;
-// Font size for label text in header.
-const CGFloat kDiscoverFeedTitleFontSize = 16;
 // Font size for the custom search engine label.
 const CGFloat kCustomSearchEngineLabelFontSize = 13;
 // Font size for the hidden feed label.
@@ -49,9 +47,6 @@ const CGFloat kHeaderMenuButtonInsetSides = 2;
 const CGFloat kDiscoverFeedHeaderHeight = 40;
 const CGFloat kCustomSearchEngineLabelHeight = 18;
 // * Values below are exclusive to Web Channels.
-// The width of the segmented control to toggle between feeds.
-// TODO(crbug.com/1277974): See how segments react to longer words.
-const CGFloat kHeaderSegmentWidth = 300;
 // The height and width of the header menu button. Based on the default
 // UISegmentedControl height.
 const CGFloat kButtonSize = 28;
@@ -380,9 +375,9 @@ NSInteger kFeedSymbolPointSize = 17;
 - (UILabel*)createTitleLabel {
   UILabel* titleLabel = [[UILabel alloc] init];
   titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-  titleLabel.font = [UIFont systemFontOfSize:kDiscoverFeedTitleFontSize
-                                      weight:UIFontWeightMedium];
-  titleLabel.textColor = [UIColor colorNamed:kGrey700Color];
+  titleLabel.font =
+      CreateDynamicFont(UIFontTextStyleSubheadline, UIFontWeightMedium);
+  titleLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
   titleLabel.adjustsFontForContentSizeCategory = YES;
   titleLabel.accessibilityIdentifier =
       ntp_home::DiscoverHeaderTitleAccessibilityID();
@@ -403,8 +398,8 @@ NSInteger kFeedSymbolPointSize = 17;
   [segmentedControl setApportionsSegmentWidthsByContent:NO];
 
   // Set text font and color.
-  UIFont* font = [UIFont systemFontOfSize:kDiscoverFeedTitleFontSize
-                                   weight:UIFontWeightMedium];
+  UIFont* font =
+      CreateDynamicFont(UIFontTextStyleSubheadline, UIFontWeightMedium);
   NSDictionary* attributes =
       [NSDictionary dictionaryWithObject:font forKey:NSFontAttributeName];
   [segmentedControl setTitleTextAttributes:attributes
@@ -595,8 +590,6 @@ NSInteger kFeedSymbolPointSize = 17;
     [self.segmentedControl.leadingAnchor
         constraintEqualToAnchor:self.sortButton.trailingAnchor
                        constant:kButtonHorizontalMargin],
-    [self.segmentedControl.widthAnchor
-        constraintLessThanOrEqualToConstant:kHeaderSegmentWidth],
   ]];
 
   // Set Following segment dot size.

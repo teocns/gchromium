@@ -6,16 +6,19 @@
 
 #import <UIKit/UIKit.h>
 
+#import "base/feature_list.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/notreached.h"
 #import "base/time/time.h"
 #import "components/signin/public/base/signin_metrics.h"
+#import "components/signin/public/base/signin_switches.h"
 #import "ios/chrome/browser/first_run/first_run_metrics.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/first_run/default_browser/default_browser_screen_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/first_run_screen_delegate.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
+#import "ios/chrome/browser/ui/first_run/history_sync/history_sync_screen_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/tangible_sync/tangible_sync_screen_coordinator.h"
 #import "ios/chrome/browser/ui/screen/screen_provider.h"
@@ -55,6 +58,10 @@
 }
 
 - (void)start {
+  bool isFinchFreEnabled = base::FeatureList::IsEnabled(switches::kFinchIosFre);
+  // TODO(crbug.com/1447028): Remove this histogram when the finch experiment
+  // is finished.
+  base::UmaHistogramBoolean("FirstRun.iOSFreFinchEnabled", isFinchFreEnabled);
   [self presentScreen:[self.screenProvider nextScreenType]];
   __weak FirstRunCoordinator* weakSelf = self;
   void (^completion)(void) = ^{
@@ -71,11 +78,11 @@
   void (^completion)(void) = ^{
   };
   if (self.completed) {
+    __weak __typeof(self) weakSelf = self;
     completion = ^{
       base::UmaHistogramEnumeration("FirstRun.Stage", first_run::kComplete);
       WriteFirstRunSentinel();
-
-      [self.delegate didFinishPresentingScreens];
+      [weakSelf.delegate didFinishPresentingScreens];
     };
   }
 
@@ -84,6 +91,12 @@
 
   [self.baseViewController dismissViewControllerAnimated:YES
                                               completion:completion];
+  _navigationController = nil;
+  [super stop];
+}
+
+- (void)dealloc {
+  CHECK(!_navigationController);
 }
 
 #pragma mark - FirstRunScreenDelegate
@@ -136,6 +149,12 @@
                                                ACCESS_POINT_START_PAGE
                                promoAction:signin_metrics::PromoAction::
                                                PROMO_ACTION_NO_SIGNIN_PROMO];
+    case kHistorySync:
+      return [[HistorySyncScreenCoordinator alloc]
+          initWithBaseNavigationController:self.navigationController
+                                   browser:self.browser
+                                  firstRun:YES
+                                  delegate:self];
     case kTangibleSync:
       return [[TangibleSyncScreenCoordinator alloc]
           initWithBaseNavigationController:self.navigationController

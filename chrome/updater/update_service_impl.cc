@@ -284,10 +284,10 @@ void UpdateServiceImpl::RunPeriodicTasks(base::OnceClosure callback) {
 
   // The installer should make an updater registration, but in case it halts
   // before it does, synthesize a registration if necessary here.
-  if (!base::Contains(persisted_data_->GetAppIds(),
-                      base::ToLowerASCII(kUpdaterAppId),
-                      static_cast<std::string (*)(base::StringPiece)>(
-                          &base::ToLowerASCII))) {
+  const base::Version registered_updater_version =
+      persisted_data_->GetProductVersion(kUpdaterAppId);
+  if (!registered_updater_version.IsValid() ||
+      base::Version(kUpdaterVersion) > registered_updater_version) {
     RegistrationRequest updater_request;
     updater_request.app_id = kUpdaterAppId;
     updater_request.version = base::Version(kUpdaterVersion);
@@ -643,9 +643,9 @@ void UpdateServiceImpl::RunInstaller(const std::string& app_id,
             state_update.Run(state);
             VLOG(1) << app_id << " installation completed: " << result.error;
 
-            // TODO(crbug.com/1286574, crbug.com/1286581): Perform post-install
-            // actions, such as send pings (if `enterprise` is not set in
-            // install_settings) with the given `sessionid`.
+            // TODO(crbug.com/1286581): Perform post-install actions, such as
+            // send pings (if `enterprise` is not set in install_settings) with
+            // the given `sessionid`.
 
             std::move(callback).Run(result.error == 0 ? Result::kSuccess
                                                       : Result::kInstallFailed);

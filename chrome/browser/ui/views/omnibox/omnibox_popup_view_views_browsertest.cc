@@ -26,7 +26,6 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/omnibox/browser/actions/tab_switch_action.h"
-#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
@@ -34,6 +33,7 @@
 #include "content/public/test/test_utils.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/theme_provider.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/events/test/event_generator.h"
@@ -195,13 +195,24 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest, ThemeIntegration) {
   }
 
   // Same in the non-incognito browser.
-  EXPECT_EQ(selection_color_light, GetSelectedColor(browser()));
+  if (features::IsChromeRefresh2023()) {
+    // TODO(khalidpeer): Delete this clause once CR23 colors are supported on
+    //   themed clients. Currently themed clients fall back to pre-CR23 colors.
+    EXPECT_NE(selection_color_light, GetSelectedColor(browser()));
+  } else {
+    EXPECT_EQ(selection_color_light, GetSelectedColor(browser()));
+  }
 
   // Switch to the default theme without installing a custom theme. E.g. this is
   // what gets used on KDE or when switching to the "classic" theme in settings.
   UseDefaultTheme();
 
+  // Given that `UseDefaultTheme()` only changes the theme on Linux (i.e. the
+  // call is a no-op on non-Linux platforms), the following test logic is
+  // limited to executing only on the Linux platform.
+#if BUILDFLAG(IS_LINUX)
   EXPECT_EQ(selection_color_light, GetSelectedColor(browser()));
+#endif  // BUILDFLAG(IS_LINUX)
 }
 
 // Integration test for omnibox popup theming in Incognito.
@@ -322,7 +333,6 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
   ACMatches matches;
   AutocompleteMatch match(nullptr, 500, false,
                           AutocompleteMatchType::HISTORY_TITLE);
-  AutocompleteController* controller = edit_model()->autocomplete_controller();
   match.contents = u"https://foobar.com";
   match.description = u"FooBarCom";
   match.contents_class = {{0, 0}};
@@ -333,7 +343,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
   match.contents_class = {{0, 0}};
   match.description_class = {{0, 0}};
   matches.push_back(match);
-  controller->result_.AppendMatches(matches);
+  controller()->autocomplete_controller()->result_.AppendMatches(matches);
   popup_view()->UpdatePopupAppearance();
   EXPECT_EQ(observer.text_changed_on_listboxoption_count(), 0);
 
@@ -402,14 +412,13 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
   ACMatches matches;
   AutocompleteMatch match(nullptr, 500, false,
                           AutocompleteMatchType::HISTORY_TITLE);
-  AutocompleteController* controller = edit_model()->autocomplete_controller();
   match.contents = u"https://foobar.com";
   match.description = u"The Foo Of All Bars";
   match.has_tab_match = true;
   match.actions.push_back(base::MakeRefCounted<TabSwitchAction>(GURL()));
   matches.push_back(match);
-  controller->result_.AppendMatches(matches);
-  controller->NotifyChanged();
+  controller()->autocomplete_controller()->result_.AppendMatches(matches);
+  controller()->autocomplete_controller()->NotifyChanged();
   popup_view()->UpdatePopupAppearance();
 
   edit_model()->SetPopupSelection(OmniboxPopupSelection(1));
@@ -462,7 +471,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
       u"foo", metrics::OmniboxEventProto::BLANK,
       ChromeAutocompleteSchemeClassifier(browser()->profile()));
   input.set_omit_asynchronous_matches(true);
-  edit_model()->autocomplete_controller()->Start(input);
+  controller()->autocomplete_controller()->Start(input);
 
   // Create a match to populate the autocomplete.
   std::u16string match_url = u"https://foobar.com";
@@ -475,15 +484,14 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
   match.description = u"Foobar";
   match.allowed_to_be_default_match = true;
 
-  AutocompleteController* autocomplete_controller =
-      edit_model()->autocomplete_controller();
-  AutocompleteResult& results = autocomplete_controller->result_;
+  AutocompleteResult& results =
+      controller()->autocomplete_controller()->result_;
   ACMatches matches;
   matches.push_back(match);
   results.AppendMatches(matches);
   results.SortAndCull(input, /*template_url_service=*/nullptr,
                       triggered_feature_service());
-  autocomplete_controller->NotifyChanged();
+  controller()->autocomplete_controller()->NotifyChanged();
 
   // Check that arrowing up and down emits the event.
   TestAXEventObserver observer;

@@ -4,11 +4,15 @@
 
 #include "content/shell/app/paths_mac.h"
 
+#include "base/apple/bundle_locations.h"
 #include "base/base_paths.h"
-#include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
 #include "base/path_service.h"
 #include "content/public/common/content_paths.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -52,17 +56,17 @@ void OverrideFrameworkBundlePath() {
   base::FilePath helper_path =
       GetFrameworksPath().Append("Content Shell Framework.framework");
 
-  base::mac::SetOverrideFrameworkBundlePath(helper_path);
+  base::apple::SetOverrideFrameworkBundlePath(helper_path);
 }
 
 void OverrideOuterBundlePath() {
   base::FilePath path = GetContentsPath().DirName();
 
-  base::mac::SetOverrideOuterBundlePath(path);
+  base::apple::SetOverrideOuterBundlePath(path);
 }
 
 void OverrideChildProcessPath() {
-  base::FilePath helper_path = base::mac::FrameworkBundlePath()
+  base::FilePath helper_path = base::apple::FrameworkBundlePath()
                                    .Append("Helpers")
                                    .Append("Content Shell Helper.app")
                                    .Append("Contents")
@@ -85,8 +89,8 @@ void OverrideSourceRootPath() {
 
 base::FilePath GetResourcesPakFilePath() {
   NSString* pak_path =
-      [base::mac::FrameworkBundle() pathForResource:@"content_shell"
-                                             ofType:@"pak"];
+      [base::apple::FrameworkBundle() pathForResource:@"content_shell"
+                                               ofType:@"pak"];
 
   return base::FilePath([pak_path fileSystemRepresentation]);
 }

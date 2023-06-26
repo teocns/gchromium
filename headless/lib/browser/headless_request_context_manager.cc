@@ -26,7 +26,7 @@
 
 #if defined(HEADLESS_USE_PREFS)
 #include "components/os_crypt/sync/os_crypt.h"  // nogncheck
-#include "content/public/common/network_service_util.h"
+#include "content/public/browser/network_service_util.h"
 #endif
 
 namespace headless {
@@ -282,10 +282,10 @@ void HeadlessRequestContextManager::ConfigureNetworkContextParamsInternal(
   }
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kDiskCacheDir)) {
-    context_params->http_cache_directory =
+    context_params->file_paths->http_cache_directory =
         command_line->GetSwitchValuePath(switches::kDiskCacheDir);
   } else if (!user_data_path_.empty()) {
-    context_params->http_cache_directory =
+    context_params->file_paths->http_cache_directory =
         user_data_path_.Append(FILE_PATH_LITERAL("Cache"));
   }
   if (proxy_config_) {

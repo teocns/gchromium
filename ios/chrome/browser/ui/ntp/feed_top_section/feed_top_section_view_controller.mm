@@ -9,6 +9,7 @@
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
@@ -105,12 +106,14 @@ NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
     DCHECK(!self.promoView);
     self.promoViewContainer = [[UIView alloc] init];
     self.promoViewContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    if (GetTopOfFeedPromoStyle() == SigninPromoViewStyleCompactTitled) {
+    self.promoViewContainer.backgroundColor =
+        [UIColor colorNamed:kGrey100Color];
+
+    // TODO(b/287118358): Cleanup IsMagicStackEnabled() code from the sync promo
+    // after experiment.
+    if (IsMagicStackEnabled()) {
       self.promoViewContainer.backgroundColor =
-          [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
-    } else {
-      self.promoViewContainer.backgroundColor =
-          [UIColor colorNamed:kGrey100Color];
+          [UIColor colorNamed:kBackgroundColor];
     }
     self.promoViewContainer.layer.cornerRadius =
         kPromoViewContainerBorderRadius;

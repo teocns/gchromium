@@ -164,6 +164,9 @@ class BottomSheet extends FrameLayout
     /** A means of checking whether accessibility is currently enabled. */
     private AccessibilityUtil mAccessibilityUtil;
 
+    /** Whether or not always use the full width of the container. */
+    private boolean mAlwaysFullWidth;
+
     /**
      * A view used to render a shadow behind the sheet and extends outside the bounds of its parent
      * view.
@@ -196,8 +199,7 @@ class BottomSheet extends FrameLayout
     public boolean shouldGestureMoveSheet(MotionEvent initialEvent, MotionEvent currentEvent) {
         // If the sheet is scrolling off-screen or in the process of hiding, gestures should not
         // affect it.
-        if (getCurrentOffsetPx() < getSheetHeightForState(SheetState.PEEK)
-                || getOffsetFromBrowserControls() > 0 || isHiding()) {
+        if (getOffsetFromBrowserControls() > 0 || isHiding()) {
             return false;
         }
 
@@ -305,8 +307,10 @@ class BottomSheet extends FrameLayout
      * calculations in this class.
      * @param window Android window for getting insets.
      * @param keyboardDelegate Delegate for hiding the keyboard.
+     * @param alwaysFullWidth Whether bottom sheet is always full-width.
      */
-    public void init(Window window, KeyboardVisibilityDelegate keyboardDelegate) {
+    public void init(
+            Window window, KeyboardVisibilityDelegate keyboardDelegate, boolean alwaysFullWidth) {
         mSheetContainer = (ViewGroup) getParent();
 
         mToolbarHolder =
@@ -319,6 +323,7 @@ class BottomSheet extends FrameLayout
         mContainerWidth = mSheetContainer.getWidth();
         mContainerHeight = mSheetContainer.getHeight();
         mContentWidth = mContainerWidth;
+        mAlwaysFullWidth = alwaysFullWidth;
 
         sizeAndPositionSheetInParent();
 
@@ -419,7 +424,8 @@ class BottomSheet extends FrameLayout
         mBrowserControlsHiddenRatio = ratio;
 
         if (getSheetState() == SheetState.HIDDEN) return;
-        if (getCurrentOffsetPx() > getSheetHeightForState(SheetState.HALF)) return;
+        int state = isHalfStateEnabled() ? SheetState.HALF : SheetState.PEEK;
+        if (getCurrentOffsetPx() > getSheetHeightForState(state)) return;
 
         // Updating the offset will automatically account for the browser controls.
         setSheetOffsetFromBottom(getCurrentOffsetPx(), StateChangeReason.SWIPE);
@@ -1065,10 +1071,12 @@ class BottomSheet extends FrameLayout
 
     /** @return The maximum width of the bottom sheet based on its current state and container. */
     private int getMaxSheetWidth() {
-        int narrowWidthThreshold =
-                getResources().getDimensionPixelSize(R.dimen.bottom_sheet_narrow_width_threshold);
-        if (mContainerWidth > narrowWidthThreshold) {
-            return getResources().getDimensionPixelSize(R.dimen.bottom_sheet_narrow_width);
+        if (!mAlwaysFullWidth) {
+            int narrowWidthThreshold = getResources().getDimensionPixelSize(
+                    R.dimen.bottom_sheet_narrow_width_threshold);
+            if (mContainerWidth > narrowWidthThreshold) {
+                return getResources().getDimensionPixelSize(R.dimen.bottom_sheet_narrow_width);
+            }
         }
         return mContainerWidth;
     }

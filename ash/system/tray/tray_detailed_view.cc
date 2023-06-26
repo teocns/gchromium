@@ -12,6 +12,7 @@
 #include "ash/controls/rounded_scroll_bar.h"
 #include "ash/public/cpp/ash_view_ids.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/typography.h"
 #include "ash/system/tray/detailed_view_delegate.h"
@@ -22,7 +23,6 @@
 #include "ash/system/tray/tri_view.h"
 #include "base/check.h"
 #include "base/containers/adapters.h"
-#include "base/debug/crash_logging.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -71,19 +71,28 @@ constexpr int kQsScrollViewCornerRadius = 16;
 
 constexpr int kQsTriViewRightPadding = 16;
 
+// If there's no back button then less padding is required.
+// TODO(b/285280977): Remove when CalendarView is out of TrayDetailedView as
+// this is only used there.
+constexpr int kNoBackButtonLeftPadding = 8;
+
 // Inset the scroll bar to avoid the rounded corners at top and bottom.
 constexpr auto kQsScrollBarInsets =
     gfx::Insets::VH(kQsScrollViewCornerRadius, 0);
 
 // Configures the TriView used for the title in a detailed view.
-void ConfigureTitleTriView(TriView* tri_view, TriView::Container container) {
+void ConfigureTitleTriView(TriView* tri_view,
+                           TriView::Container container,
+                           bool create_back_button) {
   std::unique_ptr<views::BoxLayout> layout;
 
   switch (container) {
     case TriView::Container::START:
     case TriView::Container::END: {
       const int left_padding = container == TriView::Container::START
-                                   ? kUnifiedBackButtonLeftPadding
+                                   ? create_back_button
+                                         ? kUnifiedBackButtonLeftPadding
+                                         : kNoBackButtonLeftPadding
                                    : 0;
       const int right_padding =
           container == TriView::Container::END ? kQsTriViewRightPadding : 0;
@@ -105,7 +114,7 @@ void ConfigureTitleTriView(TriView* tri_view, TriView::Container container) {
           views::BoxLayout::Orientation::kVertical);
       layout->set_main_axis_alignment(
           views::BoxLayout::MainAxisAlignment::kCenter);
-      if (features::IsQsRevampEnabled()) {
+      if (features::IsQsRevampEnabled() && create_back_button) {
         layout->set_cross_axis_alignment(
             views::BoxLayout::CrossAxisAlignment::kCenter);
         break;
@@ -390,15 +399,7 @@ TrayDetailedView::TrayDetailedView(DetailedViewDelegate* delegate)
   }
 }
 
-TrayDetailedView::~TrayDetailedView() {
-  // TDV_D stands for `TrayDetailedView`'s destructor. Here using the
-  // short version since the log method has a character count limit of 40.
-  SCOPED_CRASH_KEY_BOOL("TDV_D", "title_label_", !!title_label_);
-  SCOPED_CRASH_KEY_BOOL("TDV_D", "sub_header_label_", !!sub_header_label_);
-  SCOPED_CRASH_KEY_BOOL("TDV_D", "sub_header_image_view_",
-                        !!sub_header_image_view_);
-  SCOPED_CRASH_KEY_BOOL("TDV_D", "title_separator_", !!title_separator_);
-}
+TrayDetailedView::~TrayDetailedView() = default;
 
 void TrayDetailedView::OnViewClicked(views::View* sender) {
   DCHECK(sender);
@@ -413,7 +414,8 @@ void TrayDetailedView::OverrideProgressBarAccessibleName(
 void TrayDetailedView::CreateTitleRow(int string_id, bool create_back_button) {
   DCHECK(!tri_view_);
 
-  tri_view_ = AddChildViewAt(CreateTitleTriView(string_id), 0);
+  tri_view_ =
+      AddChildViewAt(CreateTitleTriView(string_id, create_back_button), 0);
   if (create_back_button) {
     back_button_ = delegate_->CreateBackButton(base::BindRepeating(
         &TrayDetailedView::TransitionToMainView, base::Unretained(this)));
@@ -429,13 +431,12 @@ void TrayDetailedView::CreateTitleRow(int string_id, bool create_back_button) {
     buffer_view->SetPreferredSize(gfx::Size(1, kTitleRowProgressBarHeight));
     AddChildViewAt(std::move(buffer_view), kTitleRowSeparatorIndex);
   } else {
-    title_separator_ =
-        AddChildViewAt(CreateTitleSeparator(), kTitleRowSeparatorIndex);
+    AddChildViewAt(CreateTitleSeparator(), kTitleRowSeparatorIndex);
   }
 
   CreateExtraTitleRowButtons();
 
-  if (!features::IsQsRevampEnabled()) {
+  if (!features::IsQsRevampEnabled() || !create_back_button) {
     Layout();
     return;
   }
@@ -544,37 +545,32 @@ TriView* TrayDetailedView::AddScrollListSubHeader(views::View* container,
   TriView* header = TrayPopupUtils::CreateSubHeaderRowView(true);
   TrayPopupUtils::ConfigureAsStickyHeader(header);
 
-  auto* color_provider = AshColorProvider::Get();
-  sub_header_label_ = TrayPopupUtils::CreateDefaultLabel();
-  sub_header_label_->SetText(l10n_util::GetStringUTF16(text_id));
+  auto* sub_header_label = TrayPopupUtils::CreateDefaultLabel();
+  sub_header_label->SetText(l10n_util::GetStringUTF16(text_id));
 
   if (chromeos::features::IsJellyEnabled()) {
-    sub_header_label_->SetEnabledColorId(cros_tokens::kCrosSysOnSurfaceVariant);
+    sub_header_label->SetEnabledColorId(cros_tokens::kCrosSysOnSurfaceVariant);
     ash::TypographyProvider::Get()->StyleLabel(ash::TypographyToken::kCrosBody2,
-                                               *title_label_);
+                                               *sub_header_label);
   } else {
-    sub_header_label_->SetEnabledColor(color_provider->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kTextColorPrimary));
-    TrayPopupUtils::SetLabelFontList(sub_header_label_,
+    sub_header_label->SetEnabledColorId(kColorAshTextColorPrimary);
+    TrayPopupUtils::SetLabelFontList(sub_header_label,
                                      TrayPopupUtils::FontStyle::kSubHeader);
   }
 
-  header->AddView(TriView::Container::CENTER, sub_header_label_);
+  header->AddView(TriView::Container::CENTER, sub_header_label);
 
-  sub_header_image_view_ =
+  auto* sub_header_image_view =
       TrayPopupUtils::CreateMainImageView(/*use_wide_layout=*/false);
-  sub_header_icon_ = &icon;
   if (chromeos::features::IsJellyEnabled()) {
-    sub_header_image_view_->SetImage(ui::ImageModel::FromVectorIcon(
-        icon,
-        GetColorProvider()->GetColor(cros_tokens::kCrosSysOnSurfaceVariant)));
+    sub_header_image_view->SetImage(ui::ImageModel::FromVectorIcon(
+        icon, cros_tokens::kCrosSysOnSurfaceVariant));
   } else {
-    sub_header_image_view_->SetImage(gfx::CreateVectorIcon(
-        icon, color_provider->GetContentLayerColor(
-                  AshColorProvider::ContentLayerType::kIconColorPrimary)));
+    sub_header_image_view->SetImage(
+        ui::ImageModel::FromVectorIcon(icon, kColorAshIconColorPrimary));
   }
 
-  header->AddView(TriView::Container::START, sub_header_image_view_);
+  header->AddView(TriView::Container::START, sub_header_image_view);
 
   container->AddChildView(header);
   return header;
@@ -587,10 +583,6 @@ void TrayDetailedView::Reset() {
   progress_bar_ = nullptr;
   back_button_ = nullptr;
   tri_view_ = nullptr;
-  title_label_ = nullptr;
-  sub_header_label_ = nullptr;
-  sub_header_image_view_ = nullptr;
-  title_separator_ = nullptr;
 }
 
 void TrayDetailedView::ShowProgress(double value, bool visible) {
@@ -636,27 +628,31 @@ void TrayDetailedView::HandleViewClicked(views::View* view) {
   NOTREACHED();
 }
 
-std::unique_ptr<TriView> TrayDetailedView::CreateTitleTriView(int string_id) {
+std::unique_ptr<TriView> TrayDetailedView::CreateTitleTriView(
+    int string_id,
+    bool create_back_button) {
   auto tri_view = std::make_unique<TriView>(kUnifiedTopShortcutSpacing);
 
-  ConfigureTitleTriView(tri_view.get(), TriView::Container::START);
-  ConfigureTitleTriView(tri_view.get(), TriView::Container::CENTER);
-  ConfigureTitleTriView(tri_view.get(), TriView::Container::END);
+  ConfigureTitleTriView(tri_view.get(), TriView::Container::START,
+                        create_back_button);
+  ConfigureTitleTriView(tri_view.get(), TriView::Container::CENTER,
+                        create_back_button);
+  ConfigureTitleTriView(tri_view.get(), TriView::Container::END,
+                        create_back_button);
 
-  title_label_ = TrayPopupUtils::CreateDefaultLabel();
-  title_label_->SetText(l10n_util::GetStringUTF16(string_id));
+  auto* title_label = TrayPopupUtils::CreateDefaultLabel();
+  title_label->SetText(l10n_util::GetStringUTF16(string_id));
   if (chromeos::features::IsJellyEnabled()) {
-    title_label_->SetEnabledColorId(cros_tokens::kCrosSysOnSurface);
+    title_label->SetEnabledColorId(cros_tokens::kCrosSysOnSurface);
     ash::TypographyProvider::Get()->StyleLabel(
-        ash::TypographyToken::kCrosTitle1, *title_label_);
+        ash::TypographyToken::kCrosTitle1, *title_label);
   } else {
-    title_label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kTextColorPrimary));
-    TrayPopupUtils::SetLabelFontList(title_label_,
+    title_label->SetEnabledColorId(kColorAshTextColorPrimary);
+    TrayPopupUtils::SetLabelFontList(title_label,
                                      TrayPopupUtils::FontStyle::kTitle);
   }
 
-  tri_view->AddView(TriView::Container::CENTER, title_label_);
+  tri_view->AddView(TriView::Container::CENTER, title_label);
   tri_view->SetContainerVisible(TriView::Container::END, false);
 
   return tri_view;
@@ -713,54 +709,6 @@ int TrayDetailedView::GetHeightForWidth(int width) const {
 
 const char* TrayDetailedView::GetClassName() const {
   return "TrayDetailedView";
-}
-
-void TrayDetailedView::OnThemeChanged() {
-  // TDV_OTC stands for `TrayDetailedView::OnThemeChanged`. Here using the
-  // short version since the log method has a character count limit of 40.
-  SCOPED_CRASH_KEY_BOOL("TDV_OTC", "color_provider", !!AshColorProvider::Get());
-  SCOPED_CRASH_KEY_BOOL("TDV_OTC", "title_label_", !!title_label_);
-  SCOPED_CRASH_KEY_BOOL("TDV_OTC", "sub_header_label_", !!sub_header_label_);
-  SCOPED_CRASH_KEY_BOOL("TDV_OTC", "sub_header_image_view_",
-                        !!sub_header_image_view_);
-  SCOPED_CRASH_KEY_BOOL("TDV_OTC", "title_separator_", !!title_separator_);
-  SCOPED_CRASH_KEY_BOOL("TDV_OTC", "widget", !!GetWidget());
-  if (GetWidget()) {
-    SCOPED_CRASH_KEY_BOOL("TDV_OTC", "native_window",
-                          !!GetWidget()->GetNativeWindow());
-    if (GetWidget()->GetNativeWindow()) {
-      SCOPED_CRASH_KEY_BOOL("TDV_OTC", "native_window_is_destroying",
-                            GetWidget()->GetNativeWindow()->is_destroying());
-    }
-  }
-
-  SCOPED_CRASH_KEY_STRING32("TDV_OTC", "class_name", GetClassName());
-
-  views::View::OnThemeChanged();
-  auto* color_provider = AshColorProvider::Get();
-  if (title_label_) {
-    if (!chromeos::features::IsJellyEnabled()) {
-      title_label_->SetEnabledColor(color_provider->GetContentLayerColor(
-          AshColorProvider::ContentLayerType::kTextColorPrimary));
-    }
-  }
-  if (sub_header_label_) {
-    if (!chromeos::features::IsJellyEnabled()) {
-      sub_header_label_->SetEnabledColor(color_provider->GetContentLayerColor(
-          AshColorProvider::ContentLayerType::kTextColorPrimary));
-    }
-  }
-  if (sub_header_image_view_) {
-    if (!chromeos::features::IsJellyEnabled()) {
-      sub_header_image_view_->SetImage(gfx::CreateVectorIcon(
-          *sub_header_icon_,
-          color_provider->GetContentLayerColor(
-              AshColorProvider::ContentLayerType::kIconColorPrimary)));
-    }
-  }
-  if (title_separator_) {
-    title_separator_->SetColorId(ui::kColorAshSystemUIMenuSeparator);
-  }
 }
 
 }  // namespace ash

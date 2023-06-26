@@ -102,8 +102,7 @@ void PaintArtifactCompositor::SetLCDTextPreference(
   if (lcd_text_preference_ == preference) {
     return;
   }
-  SetNeedsUpdate(PaintArtifactCompositorUpdateReason::
-                     kPaintArtifactCompositorPrefersLCDText);
+  SetNeedsUpdate();
   lcd_text_preference_ = preference;
 }
 
@@ -163,7 +162,7 @@ PaintArtifactCompositor::NearestScrollTranslationForLayer(
 
 bool PaintArtifactCompositor::NeedsCompositedScrolling(
     const TransformPaintPropertyNode& scroll_translation) const {
-  // This function needs scroll_translation_nodes_ which is only available
+  // This function needs painted_scroll_translations_ which is only available
   // during full update.
   DCHECK(needs_update_);
   DCHECK(scroll_translation.ScrollNode());
@@ -171,8 +170,8 @@ bool PaintArtifactCompositor::NeedsCompositedScrolling(
     return true;
   }
   if (RuntimeEnabledFeatures::CompositeScrollAfterPaintEnabled()) {
-    auto it = scroll_translation_nodes_.find(&scroll_translation);
-    if (it == scroll_translation_nodes_.end()) {
+    auto it = painted_scroll_translations_.find(&scroll_translation);
+    if (it == painted_scroll_translations_.end()) {
       // Negative z-index scrolling contents in a non-stacking-context scroller
       // appear earlier than the ScrollHitTest of the scroller, and this
       // method can be called before ComputeNeedsCompositedScrolling() for the
@@ -199,8 +198,8 @@ bool PaintArtifactCompositor::ComputeNeedsCompositedScrolling(
       *chunk_cursor->hit_test_data->scroll_translation;
   DCHECK(scroll_translation.ScrollNode());
   // This function should be called before scroll_translation is inserted into
-  // scroll_translation_nodes_.
-  DCHECK(!scroll_translation_nodes_.Contains(&scroll_translation));
+  // painted_scroll_translations_.
+  DCHECK(!painted_scroll_translations_.Contains(&scroll_translation));
 
   if (!RuntimeEnabledFeatures::CompositeScrollAfterPaintEnabled()) {
     return scroll_translation.HasDirectCompositingReasons();
@@ -391,8 +390,7 @@ void PaintArtifactCompositor::SetNeedsFullUpdateAfterPaintIfNeeded(
 
   // Adding or removing chunks requires a full update to add/remove cc::layers.
   if (previous.PaintChunks().size() != repainted.PaintChunks().size()) {
-    SetNeedsUpdate(PaintArtifactCompositorUpdateReason::
-                       kPaintArtifactCompositorNeedsFullUpdateChunksChanged);
+    SetNeedsUpdate();
     return;
   }
 
@@ -401,9 +399,7 @@ void PaintArtifactCompositor::SetNeedsFullUpdateAfterPaintIfNeeded(
     if (NeedsFullUpdateAfterPaintingChunk(previous.PaintChunks()[i], previous,
                                           repainted.PaintChunks()[i],
                                           repainted)) {
-      SetNeedsUpdate(
-          PaintArtifactCompositorUpdateReason::
-              kPaintArtifactCompositorNeedsFullUpdateAfterPaintingChunk);
+      SetNeedsUpdate();
       return;
     }
   }
@@ -545,7 +541,7 @@ void PaintArtifactCompositor::LayerizeGroup(
       // Transform nodes for.
       if (chunk_cursor->hit_test_data &&
           chunk_cursor->hit_test_data->scroll_translation) {
-        scroll_translation_nodes_.insert(
+        painted_scroll_translations_.insert(
             chunk_cursor->hit_test_data->scroll_translation.get(),
             ComputeNeedsCompositedScrolling(*artifact, chunk_cursor));
       }
@@ -764,20 +760,24 @@ void PaintArtifactCompositor::UpdateCompositorViewportProperties(
             *properties.page_scale);
   }
   if (properties.inner_scroll_translation) {
-    ids.inner_scroll = property_tree_manager.EnsureCompositorInnerScrollNode(
-        *properties.inner_scroll_translation);
+    ids.inner_scroll =
+        property_tree_manager.EnsureCompositorInnerScrollAndTransformNode(
+            *properties.inner_scroll_translation);
     if (properties.outer_clip) {
       ids.outer_clip = property_tree_manager.EnsureCompositorClipNode(
           *properties.outer_clip);
     }
     CHECK(properties.outer_scroll_translation);
-    ids.outer_scroll = property_tree_manager.EnsureCompositorOuterScrollNode(
-        *properties.outer_scroll_translation);
+    ids.outer_scroll =
+        property_tree_manager.EnsureCompositorOuterScrollAndTransformNode(
+            *properties.outer_scroll_translation);
 
     CHECK(NeedsCompositedScrolling(*properties.inner_scroll_translation));
     CHECK(NeedsCompositedScrolling(*properties.outer_scroll_translation));
-    scroll_translation_nodes_.insert(properties.inner_scroll_translation, true);
-    scroll_translation_nodes_.insert(properties.outer_scroll_translation, true);
+    painted_scroll_translations_.insert(properties.inner_scroll_translation,
+                                        true);
+    painted_scroll_translations_.insert(properties.outer_scroll_translation,
+                                        true);
   }
 
   layer_tree_host->RegisterViewportPropertyIds(ids);
@@ -817,7 +817,7 @@ void PaintArtifactCompositor::Update(
   wtf_size_t old_size = pending_layers_.size();
   OldPendingLayerMatcher old_pending_layer_matcher(std::move(pending_layers_));
   pending_layers_.reserve(old_size);
-  scroll_translation_nodes_.clear();
+  CHECK(painted_scroll_translations_.empty());
 
   // Make compositing decisions, storing the result in |pending_layers_|.
   CollectPendingLayers(std::move(artifact));
@@ -906,7 +906,7 @@ void PaintArtifactCompositor::Update(
     for (auto* node : scroll_translation_nodes) {
       property_tree_manager.EnsureCompositorScrollNode(*node);
     }
-    for (auto* node : scroll_translation_nodes_.Keys()) {
+    for (auto* node : painted_scroll_translations_.Keys()) {
       property_tree_manager.EnsureCompositorScrollAndTransformNode(*node);
     }
   } else {
@@ -944,7 +944,7 @@ void PaintArtifactCompositor::Update(
   previous_update_for_testing_ = PreviousUpdateType::kFull;
 
   UpdateDebugInfo();
-  scroll_translation_nodes_.clear();
+  painted_scroll_translations_.clear();
   needs_update_ = false;
 
   g_s_property_tree_sequence_number++;
@@ -1378,19 +1378,6 @@ ContentLayerClientImpl* PaintArtifactCompositor::ContentLayerClientForTesting(
     }
   }
   return nullptr;
-}
-
-void PaintArtifactCompositor::SetNeedsUpdate(
-    PaintArtifactCompositorUpdateReason reason) {
-  UMA_HISTOGRAM_ENUMERATION("Blink.Paint.PaintArtifactCompositorUpdateReason",
-                            reason,
-                            PaintArtifactCompositorUpdateReason::kCount);
-  if (!needs_update_) {
-    needs_update_ = true;
-    UMA_HISTOGRAM_ENUMERATION(
-        "Blink.Paint.PaintArtifactCompositorUpdateFirstReason", reason,
-        PaintArtifactCompositorUpdateReason::kCount);
-  }
 }
 
 }  // namespace blink

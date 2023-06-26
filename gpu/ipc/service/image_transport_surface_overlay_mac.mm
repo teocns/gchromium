@@ -88,10 +88,12 @@ ImageTransportSurfaceOverlayMacEGL::ImageTransportSurfaceOverlayMacEGL(
     [ca_context_ setLayer:ca_layer_tree_coordinator_->GetCALayerForDisplay()];
   }
 
+#if BUILDFLAG(IS_MAC)
   if (features::UseGpuVsync()) {
     gpu_vsync_mac_ =
         std::make_unique<GpuVSyncMac>(delegate->GetGpuVSyncCallback());
   }
+#endif
 }
 
 ImageTransportSurfaceOverlayMacEGL::~ImageTransportSurfaceOverlayMacEGL() {
@@ -103,9 +105,11 @@ void ImageTransportSurfaceOverlayMacEGL::ApplyBackpressure() {
   // Create the fence for the current frame before waiting on the previous
   // frame's fence (to maximize CPU and GPU execution overlap).
   gl::GLContext* current_context = gl::GLContext::GetCurrent();
-  uint64_t this_frame_fence = current_context->BackpressureFenceCreate();
-  current_context->BackpressureFenceWait(previous_frame_fence_);
-  previous_frame_fence_ = this_frame_fence;
+  if (current_context) {
+    uint64_t this_frame_fence = current_context->BackpressureFenceCreate();
+    current_context->BackpressureFenceWait(previous_frame_fence_);
+    previous_frame_fence_ = this_frame_fence;
+  }
 }
 
 void ImageTransportSurfaceOverlayMacEGL::BufferPresented(
@@ -263,6 +267,7 @@ void ImageTransportSurfaceOverlayMacEGL::SetCALayerErrorCode(
   ca_layer_error_code_ = ca_layer_error_code;
 }
 
+#if BUILDFLAG(IS_MAC)
 bool ImageTransportSurfaceOverlayMacEGL::SupportsGpuVSync() const {
   return features::UseGpuVsync();
 }
@@ -282,5 +287,6 @@ void ImageTransportSurfaceOverlayMacEGL::SetGpuVSyncEnabled(bool enabled) {
 
   gpu_vsync_mac_->SetGpuVSyncEnabled(enabled);
 }
+#endif
 
 }  // namespace gpu

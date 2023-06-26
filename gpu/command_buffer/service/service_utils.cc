@@ -162,6 +162,8 @@ GpuPreferences ParseGpuPreferences(const base::CommandLine* command_line) {
   gpu_preferences.use_webgpu_adapter = ParseWebGPUAdapterName(command_line);
   gpu_preferences.use_webgpu_power_preference =
       ParseWebGPUPowerPreference(command_line);
+  gpu_preferences.force_webgpu_compat =
+      command_line->HasSwitch(switches::kForceWebGPUCompat);
   if (command_line->HasSwitch(switches::kEnableDawnBackendValidation)) {
     auto value = command_line->GetSwitchValueASCII(
         switches::kEnableDawnBackendValidation);
@@ -232,13 +234,6 @@ VulkanImplementationName ParseVulkanImplementationName(
   }
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // LACROS doesn't support Vulkan right now, to avoid LACROS picking up Linux
-  // finch, kNone is returned for LACROS.
-  // TODO(https://crbug.com/1155622): When LACROS is separated from Linux finch
-  // config.
-  return VulkanImplementationName::kNone;
-#else
   if (command_line->HasSwitch(switches::kUseVulkan)) {
     auto value = command_line->GetSwitchValueASCII(switches::kUseVulkan);
     if (value.empty() || value == switches::kVulkanImplementationNameNative) {
@@ -260,25 +255,32 @@ VulkanImplementationName ParseVulkanImplementationName(
 
   // GrContext is not going to use Vulkan.
   return VulkanImplementationName::kNone;
-#endif
 }
 
 WebGPUAdapterName ParseWebGPUAdapterName(
     const base::CommandLine* command_line) {
   if (command_line->HasSwitch(switches::kUseWebGPUAdapter)) {
     auto value = command_line->GetSwitchValueASCII(switches::kUseWebGPUAdapter);
-    if (value.empty()) {
-      return WebGPUAdapterName::kDefault;
-    } else if (value == "compat") {
-      return WebGPUAdapterName::kCompat;
-    } else if (value == "swiftshader") {
-      return WebGPUAdapterName::kSwiftShader;
-    } else if (value == "default") {
-      return WebGPUAdapterName::kDefault;
-    } else {
-      DLOG(ERROR) << "Invalid switch " << switches::kUseWebGPUAdapter << "="
-                  << value << ".";
+
+    static const struct {
+      const char* name;
+      WebGPUAdapterName value;
+    } kAdapterNames[] = {
+        {"", WebGPUAdapterName::kDefault},
+        {"default", WebGPUAdapterName::kDefault},
+        {"d3d11", WebGPUAdapterName::kD3D11},
+        {"opengles", WebGPUAdapterName::kOpenGLES},
+        {"swiftshader", WebGPUAdapterName::kSwiftShader},
+    };
+
+    for (const auto& adapter_name : kAdapterNames) {
+      if (value == adapter_name.name) {
+        return adapter_name.value;
+      }
     }
+
+    DLOG(ERROR) << "Invalid switch " << switches::kUseWebGPUAdapter << "="
+                << value << ".";
   }
   return WebGPUAdapterName::kDefault;
 }

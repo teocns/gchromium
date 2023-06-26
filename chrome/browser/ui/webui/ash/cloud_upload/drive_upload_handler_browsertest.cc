@@ -6,6 +6,7 @@
 
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
@@ -24,10 +25,15 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "storage/browser/file_system/external_mount_points.h"
 #include "storage/browser/file_system/file_system_url.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 using storage::FileSystemURL;
 
 namespace ash::cloud_upload {
+
+using ::base::test::RunOnceCallback;
+using testing::_;
+
 namespace {
 
 // Returns full test file path to the given |file_name|.
@@ -168,7 +174,7 @@ class DriveUploadHandlerTest
   const base::FilePath source_file_path() { return source_file_path_; }
 
   mojo::Remote<drivefs::mojom::DriveFsDelegate>& drivefs_delegate() {
-    return fake_drivefs_helpers_[profile()]->fake_drivefs().delegate();
+    return fake_drivefs().delegate();
   }
 
   base::FilePath observed_relative_drive_path() {
@@ -182,6 +188,10 @@ class DriveUploadHandlerTest
   }
 
  protected:
+  drivefs::FakeDriveFs& fake_drivefs() {
+    return fake_drivefs_helpers_[profile()]->fake_drivefs();
+  }
+
   base::FilePath my_files_dir_;
   base::FilePath read_only_dir_;
   base::FilePath drive_mount_point_;
@@ -202,19 +212,29 @@ class DriveUploadHandlerTest
   // signals to the DriveFs delegate.
   void SimulateDriveUploadEvents() {
     // Set file metadata for `drivefs::mojom::DriveFs::GetMetadata`.
-    fake_drivefs_helpers_[profile()]->fake_drivefs().SetMetadata(
-        observed_relative_drive_path(),
+    drivefs::FakeMetadata metadata;
+    metadata.path = observed_relative_drive_path();
+    metadata.mime_type =
         "application/"
-        "vnd.openxmlformats-officedocument.wordprocessingml.document",
-        test_file_name_, false, false, false, {}, {}, "abc123",
-        /*alternate_url=*/
+        "vnd.openxmlformats-officedocument.wordprocessingml.document";
+    metadata.original_name = test_file_name_;
+    metadata.doc_id = "abc123";
+    metadata.alternate_url =
         "https://docs.google.com/document/d/"
-        "smalldocxid?rtpof=true&usp=drive_fs",
-        /*shortcut=*/false);
+        "smalldocxid?rtpof=true&usp=drive_fs";
+    fake_drivefs().SetMetadata(std::move(metadata));
 
     // Simulate server sync events.
     drivefs::mojom::SyncingStatusPtr status =
         drivefs::mojom::SyncingStatus::New();
+    status->item_events.emplace_back(
+        absl::in_place, 12, 34, observed_relative_drive_path().value(),
+        drivefs::mojom::ItemEvent::State::kQueued, 123, 456,
+        drivefs::mojom::ItemEventReason::kTransfer);
+    drivefs_delegate()->OnSyncingStatusUpdate(status.Clone());
+    drivefs_delegate().FlushForTesting();
+
+    status = drivefs::mojom::SyncingStatus::New();
     status->item_events.emplace_back(
         absl::in_place, 12, 34, observed_relative_drive_path().value(),
         drivefs::mojom::ItemEvent::State::kCompleted, 123, 456,
@@ -225,7 +245,7 @@ class DriveUploadHandlerTest
 
   // The exit point of the test. `WaitForUploadComplete` will not complete until
   // this is called.
-  void OnUploadDone(const GURL& url) {
+  void OnUploadDone(const GURL& url, int64_t size) {
     ASSERT_FALSE(url.is_empty());
     ASSERT_TRUE(run_loop_);
     run_loop_->Quit();
@@ -267,6 +287,9 @@ IN_PROC_BROWSER_TEST_F(DriveUploadHandlerTest, UploadFromMyFiles) {
     EXPECT_FALSE(base::PathExists(drive_root_dir_.AppendASCII(test_file_name)));
   }
 
+  EXPECT_CALL(fake_drivefs(), ImmediatelyUpload(_, _))
+      .WillOnce(RunOnceCallback<1>(drive::FileError::FILE_ERROR_OK));
+
   InitiateUpload();
   WaitForUploadComplete();
 
@@ -296,6 +319,9 @@ IN_PROC_BROWSER_TEST_F(DriveUploadHandlerTest, UploadFromReadOnlyFileSystem) {
     EXPECT_TRUE(base::PathExists(read_only_dir_.AppendASCII(test_file_name)));
     EXPECT_FALSE(base::PathExists(drive_root_dir_.AppendASCII(test_file_name)));
   }
+
+  EXPECT_CALL(fake_drivefs(), ImmediatelyUpload(_, _))
+      .WillOnce(RunOnceCallback<1>(drive::FileError::FILE_ERROR_OK));
 
   InitiateUpload();
   WaitForUploadComplete();

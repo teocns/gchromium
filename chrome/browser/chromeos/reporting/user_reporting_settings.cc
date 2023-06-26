@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/reporting/user_reporting_settings.h"
 
+#include <memory>
+
 #include "base/callback_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
@@ -11,14 +13,18 @@
 #include "base/sequence_checker.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 
 namespace reporting {
 
 UserReportingSettings::UserReportingSettings(base::WeakPtr<Profile> profile)
     : profile_(profile) {
-  DCHECK(profile_);
-  pref_change_registrar_.Init(profile_->GetPrefs());
+  if (profile_) {
+    pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
+    pref_change_registrar_->Init(profile_->GetPrefs());
+    scoped_profile_observer_.Observe(profile_.get());
+  }
 }
 
 UserReportingSettings::~UserReportingSettings() = default;
@@ -30,12 +36,13 @@ base::CallbackListSubscription UserReportingSettings::AddSettingsObserver(
   DCHECK(profile_);
   DCHECK(profile_->GetPrefs()->FindPreference(path));
   DCHECK(callback);
+  DCHECK(pref_change_registrar_);
 
   auto [iterator, added_element] = settings_observers_.emplace(
       path, std::make_unique<base::RepeatingClosureList>());
   if (added_element) {
     // Initialize the pref change registrar for the specified path.
-    pref_change_registrar_.Add(
+    pref_change_registrar_->Add(
         path, base::BindRepeating(&UserReportingSettings::OnPrefChanged,
                                   weak_ptr_factory_.GetWeakPtr(), path));
   }
@@ -88,6 +95,39 @@ bool UserReportingSettings::GetList(const std::string& path,
   }
   *out_value = &pref_service->GetList(path);
   return true;
+}
+
+bool UserReportingSettings::GetReportingEnabled(const std::string& path,
+                                                bool* out_value) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(profile_);
+
+  const base::Value::List* list_value;
+  if (GetBoolean(path, out_value)) {
+    return true;
+  } else if (GetList(path, &list_value)) {
+    *out_value = !list_value->empty();
+    return true;
+  }
+
+  return false;
+}
+
+bool UserReportingSettings::IsObservingSettingsForTest(
+    const std::string& path) {
+  if (!pref_change_registrar_) {
+    return false;
+  }
+  return pref_change_registrar_->IsObserved(path);
+}
+
+void UserReportingSettings::OnProfileWillBeDestroyed(Profile* profile) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // Dispose the change registrar on profile destruction to prevent dangling
+  // pointer references to the user pref store.
+  pref_change_registrar_.reset();
+  scoped_profile_observer_.Reset();
 }
 
 void UserReportingSettings::OnPrefChanged(const std::string& path) {

@@ -30,6 +30,7 @@
 #include "third_party/blink/public/common/navigation/navigation_policy.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/navigation/navigation_initiator_activation_and_ad_status.mojom.h"
+#include "third_party/blink/public/mojom/navigation/system_entropy.mojom.h"
 #include "third_party/blink/public/mojom/navigation/was_activated_option.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
@@ -299,6 +300,11 @@ class NavigationController {
     // Indicates the reload type of this navigation.
     ReloadType reload_type = ReloadType::NONE;
 
+    // Indicates the suggested system entropy captured when the navigation
+    // began.
+    blink::mojom::SystemEntropy suggested_system_entropy =
+        blink::mojom::SystemEntropy::kNormal;
+
     // Indicates a form submission created this navigation.
     bool is_form_submission = false;
 
@@ -442,6 +448,17 @@ class NavigationController {
   // history and the current page has not loaded yet or if the load was
   // explicitly requested using SetNeedsReload().
   virtual void LoadIfNecessary() = 0;
+
+  // Reloads the current entry using the original URL used to create it. This is
+  // used for cases where the user wants to refresh a page using a different
+  // user agent after following a redirect. It is also used in the case of an
+  // intervention (e.g., preview) being served on the page and the user
+  // requesting the page without the intervention.
+  //
+  // If the current entry's original URL matches the current URL, is invalid, or
+  // contains POST data, this will result in a normal reload rather than an
+  // attempt to load the original URL.
+  virtual void LoadOriginalRequestURL() = 0;
 
   // Navigates directly to an error page in response to an event on the last
   // committed page (e.g., triggered by a subresource), with |error_page_html|

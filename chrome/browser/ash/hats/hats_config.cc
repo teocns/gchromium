@@ -20,7 +20,28 @@ HatsConfig::HatsConfig(const base::Feature& feature,
     : feature(feature),
       new_device_threshold(new_device_threshold),
       is_selected_pref_name(is_selected_pref_name),
-      cycle_end_timestamp_pref_name(cycle_end_timestamp_pref_name) {
+      cycle_end_timestamp_pref_name(cycle_end_timestamp_pref_name),
+      survey_last_interaction_timestamp_pref_name(nullptr),
+      threshold_time(base::TimeDelta()),
+      global_cap_opt_out(false) {
+  DCHECK(new_device_threshold.InDaysFloored() >= kMinDaysThreshold);
+}
+
+HatsConfig::HatsConfig(
+    const base::Feature& feature,
+    const base::TimeDelta& new_device_threshold,
+    const char* const is_selected_pref_name,
+    const char* const cycle_end_timestamp_pref_name,
+    const char* const survey_last_interaction_timestamp_pref_name,
+    const base::TimeDelta& threshold_time)
+    : feature(feature),
+      new_device_threshold(new_device_threshold),
+      is_selected_pref_name(is_selected_pref_name),
+      cycle_end_timestamp_pref_name(cycle_end_timestamp_pref_name),
+      survey_last_interaction_timestamp_pref_name(
+          survey_last_interaction_timestamp_pref_name),
+      threshold_time(threshold_time),
+      global_cap_opt_out(true) {
   DCHECK(new_device_threshold.InDaysFloored() >= kMinDaysThreshold);
 }
 
@@ -186,6 +207,14 @@ const HatsConfig kHatsBatteryLifeSurvey = {
     prefs::kHatsBatteryLifeCycleEndTs,  // cycle_end_timestamp_pref_name
 };
 
+// Peripherals experience survey -- shown after login.
+const HatsConfig kHatsPeripheralsSurvey = {
+    ::features::kHappinessTrackingSystemPeripherals,  // feature
+    base::Days(7),                                    // new_device_threshold
+    prefs::kHatsPeripheralsIsSelected,                // is_selected_pref_name
+    prefs::kHatsPeripheralsCycleEndTs,  // cycle_end_timestamp_pref_name
+};
+
 // Privacy Hub Baseline experience survey -- shown 40 seconds after the user
 // leaves the Security and Privacy page.
 const HatsConfig kPrivacyHubBaselineSurvey = {
@@ -212,6 +241,9 @@ const HatsConfig kHatsBorealisGamesSurvey = {
     base::Days(1),                                // new_device_threshold
     prefs::kHatsBorealisGamesSurveyIsSelected,    // is_selected_pref_name
     prefs::kHatsBorealisGamesSurveyCycleEndTs,  // cycle_end_timestamp_pref_name
+    prefs::kHatsBorealisGamesLastInteractionTimestamp,
+    // survey_last_interaction_timestamp_pref_name
+    base::Days(7),  // threshold_time
 };
 
 }  // namespace ash

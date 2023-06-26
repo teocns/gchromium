@@ -46,6 +46,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -986,8 +987,8 @@ TEST_F(WebAppRegistrarTest, GetAllIsolatedWebAppStoragePartitionConfigs) {
   const AppId app_id = isolated_web_app->app_id();
 
   isolated_web_app->SetScope(isolated_web_app->start_url());
-  isolated_web_app->SetIsolationData(
-      WebApp::IsolationData(InstalledBundle{.path = base::FilePath()}));
+  isolated_web_app->SetIsolationData(WebApp::IsolationData(
+      InstalledBundle{.path = base::FilePath()}, base::Version("1.0.0")));
   RegisterApp(std::move(isolated_web_app));
 
   std::vector<content::StoragePartitionConfig> storage_partition_configs =
@@ -1013,8 +1014,8 @@ TEST_F(
   const AppId app_id = isolated_web_app->app_id();
 
   isolated_web_app->SetScope(isolated_web_app->start_url());
-  isolated_web_app->SetIsolationData(
-      WebApp::IsolationData(InstalledBundle{.path = base::FilePath()}));
+  isolated_web_app->SetIsolationData(WebApp::IsolationData(
+      InstalledBundle{.path = base::FilePath()}, base::Version("1.0.0")));
   isolated_web_app->SetIsLocallyInstalled(false);
   RegisterApp(std::move(isolated_web_app));
 
@@ -1101,8 +1102,10 @@ TEST_F(WebAppRegistrarTest,
   web_app->SetDisplayMode(DisplayMode::kStandalone);
   web_app->SetUserDisplayMode(mojom::UserDisplayMode::kBrowser);
   web_app->SetIsLocallyInstalled(true);
-  web_app->SetIsolationData(WebApp::IsolationData(DevModeProxy{
-      .proxy_url = url::Origin::Create(GURL("http://127.0.0.1:8080"))}));
+  web_app->SetIsolationData(WebApp::IsolationData(
+      DevModeProxy{.proxy_url =
+                       url::Origin::Create(GURL("http://127.0.0.1:8080"))},
+      base::Version("1.0.0")));
 
   RegisterApp(std::move(web_app));
 
@@ -1233,6 +1236,75 @@ TEST_F(WebAppRegistrarTest, DefaultNotActivelyInstalled) {
   InitRegistrarWithRegistry(registry);
 
   EXPECT_FALSE(registrar().IsActivelyInstalled(app_id));
+}
+
+class WebAppRegistrarTest_ScopeExtensions : public WebAppRegistrarTest {
+ public:
+  WebAppRegistrarTest_ScopeExtensions() = default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      blink::features::kWebAppEnableScopeExtensions};
+};
+
+TEST_F(WebAppRegistrarTest_ScopeExtensions, IsUrlInAppExtendedScope) {
+  InitSyncBridge();
+
+  auto web_app = test::CreateWebApp(GURL("https://example.com/start"));
+  AppId app_id = web_app->app_id();
+
+  auto extended_scope_url = GURL("https://example.app");
+  auto extended_scope_origin = url::Origin::Create(extended_scope_url);
+
+  // Manifest entry {"origin": "https://*.example.co"}.
+  auto extended_scope_url2 = GURL("https://example.co");
+  auto extended_scope_origin2 = url::Origin::Create(extended_scope_url2);
+
+  web_app->SetValidatedScopeExtensions(
+      {ScopeExtensionInfo(extended_scope_origin),
+       ScopeExtensionInfo(extended_scope_origin2,
+                          /*has_origin_wildcard=*/true)});
+  RegisterApp(std::move(web_app));
+
+  EXPECT_EQ(
+      registrar().GetAppExtendedScopeScore(GURL("https://test.com"), app_id),
+      0u);
+
+  EXPECT_GT(registrar().GetAppExtendedScopeScore(
+                GURL("https://example.com/path"), app_id),
+            0u);
+
+  // Scope is extended to all sub-domains of example.co with the wildcard
+  // prefix.
+  EXPECT_GT(registrar().GetAppExtendedScopeScore(GURL("https://app.example.co"),
+                                                 app_id),
+            0u);
+  EXPECT_GT(registrar().GetAppExtendedScopeScore(
+                GURL("https://test.app.example.co"), app_id),
+            0u);
+  EXPECT_GT(registrar().GetAppExtendedScopeScore(
+                GURL("https://example.co/path"), app_id),
+            0u);
+
+  EXPECT_GT(registrar().GetAppExtendedScopeScore(
+                GURL("https://example.app/start"), app_id),
+            0u);
+
+  // Scope is extended to the example.app domain but not to the sub-domain
+  // test.example.app as there was no wildcard prefix.
+  EXPECT_EQ(registrar().GetAppExtendedScopeScore(
+                GURL("https://test.example.app"), app_id),
+            0u);
+
+  EXPECT_EQ(registrar().GetAppExtendedScopeScore(
+                GURL("https://other.origin.com"), app_id),
+            0u);
+  EXPECT_EQ(registrar().GetAppExtendedScopeScore(GURL("https://testexample.co"),
+                                                 app_id),
+            0u);
+  EXPECT_EQ(registrar().GetAppExtendedScopeScore(
+                GURL("https://app.example.com"), app_id),
+            0u);
 }
 
 TEST_F(WebAppRegistrarTest_TabStrip, TabbedAppNewTabUrl) {

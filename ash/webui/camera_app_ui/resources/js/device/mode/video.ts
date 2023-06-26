@@ -45,6 +45,7 @@ import {getFpsRangeFromConstraints} from '../../util.js';
 import {WaitableEvent} from '../../waitable_event.js';
 import {StreamConstraints} from '../stream_constraints.js';
 import {StreamManager} from '../stream_manager.js';
+import {StreamManagerChrome} from '../stream_manager_chrome.js';
 
 import {ModeBase, ModeFactory} from './mode_base.js';
 import {PhotoResult} from './photo.js';
@@ -123,8 +124,6 @@ function getVideoMimeType(param: h264.EncoderParameters|null): string {
 
 /**
  * Gets VideoEncoder's config from current h264 params and resolutions.
- *
- * @return VideoEncoderConfig.
  */
 function getVideoEncoderConfig(
     param: h264.EncoderParameters, resolution: Resolution): VideoEncoderConfig {
@@ -301,10 +300,13 @@ export class Video extends ModeBase {
 
   override async clear(): Promise<void> {
     await this.stopCapture();
-    if (this.captureStream !== null) {
+
+    if (StreamManagerChrome.getInstance().getCaptureStream() !== null) {
+      StreamManagerChrome.getInstance().stopCaptureStream();
+    } else if (this.captureStream !== null) {
       await StreamManager.getInstance().closeCaptureStream(this.captureStream);
-      this.captureStream = null;
     }
+    this.captureStream = null;
   }
 
   /**
@@ -546,8 +548,12 @@ export class Video extends ModeBase {
   /**
    * Gets video track of recording stream.
    */
-  private getVideoTrack(): MediaStreamTrack {
-    return this.getRecordingStream().getVideoTracks()[0];
+  private getVideoTrack(): MediaStreamVideoTrack {
+    // The type annotation on MediaStream.getVideoTracks() in @types/webrtc is
+    // not specific enough.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    return this.getRecordingStream().getVideoTracks()[0] as
+        MediaStreamVideoTrack;
   }
 
   async start(): Promise<[Promise<void>]> {
@@ -573,9 +579,16 @@ export class Video extends ModeBase {
       throw new CanceledError('Recording sound is canceled');
     }
 
-    if (this.captureConstraints !== null && this.captureStream === null) {
-      this.captureStream = await StreamManager.getInstance().openCaptureStream(
-          this.captureConstraints);
+    if (this.captureStream === null) {
+      if (expert.isEnabled(
+              expert.ExpertOption.ENABLE_MULTISTREAM_RECORDING_CHROME)) {
+        this.captureStream =
+            assertExists(StreamManagerChrome.getInstance().getCaptureStream());
+      } else if (this.captureConstraints !== null) {
+        this.captureStream =
+            await StreamManager.getInstance().openCaptureStream(
+                this.captureConstraints);
+      }
     }
     if (this.recordingImageCapture === null) {
       this.recordingImageCapture = new CrosImageCapture(this.getVideoTrack());
@@ -803,7 +816,7 @@ export class Video extends ModeBase {
         TIME_LAPSE_INITIAL_SPEED);
 
     // Creates a frame reader from track processor.
-    const track = this.getVideoTrack() as MediaStreamVideoTrack;
+    const track = this.getVideoTrack();
     const trackProcessor = new MediaStreamTrackProcessor({track});
     const reader = trackProcessor.readable.getReader();
 

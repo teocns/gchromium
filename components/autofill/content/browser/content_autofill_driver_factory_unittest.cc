@@ -68,21 +68,27 @@ class MockAutofillAgent : public mojom::AutofillAgent {
                              std::move(handle)));
   }
 
-  MOCK_METHOD(void, TriggerReparse, (), (override));
+  MOCK_METHOD(void, TriggerFormExtraction, (), (override));
   MOCK_METHOD(void,
-              TriggerReparseWithResponse,
+              TriggerFormExtractionWithResponse,
               (base::OnceCallback<void(bool)>),
               (override));
   MOCK_METHOD(void,
               FillOrPreviewForm,
               (const FormData& form, mojom::RendererFormDataAction action),
               (override));
+  MOCK_METHOD(void, UndoAutofill, (const FormData& form), (override));
   MOCK_METHOD(void,
               FieldTypePredictionsAvailable,
               (const std::vector<FormDataPredictions>& forms),
               (override));
   MOCK_METHOD(void, ClearSection, (), (override));
   MOCK_METHOD(void, ClearPreviewedForm, (), (override));
+  MOCK_METHOD(void,
+              TriggerSuggestions,
+              (FieldRendererId field_id,
+               AutofillSuggestionTriggerSource trigger_source),
+              (override));
   MOCK_METHOD(void,
               FillFieldWithValue,
               (FieldRendererId field, const std::u16string& value),
@@ -98,11 +104,6 @@ class MockAutofillAgent : public mojom::AutofillAgent {
   MOCK_METHOD(void,
               AcceptDataListSuggestion,
               (FieldRendererId field, const ::std::u16string& value),
-              (override));
-  MOCK_METHOD(void,
-              FillPasswordSuggestion,
-              (const ::std::u16string& username,
-               const ::std::u16string& password),
               (override));
   MOCK_METHOD(void,
               PreviewPasswordSuggestion,
@@ -121,6 +122,10 @@ class MockAutofillAgent : public mojom::AutofillAgent {
   MOCK_METHOD(void,
               SetFieldsEligibleForManualFilling,
               (const std::vector<FieldRendererId>& fields),
+              (override));
+  MOCK_METHOD(void,
+              GetPotentialLastFourCombinationsForStandaloneCvc,
+              (base::OnceCallback<void(const std::vector<std::string>&)>),
               (override));
 
  private:
@@ -212,7 +217,7 @@ class ContentAutofillDriverFactoryTest_WithTwoFrames
   content::RenderFrameHost* child_rfh() { return child_rfh_; }
 
  private:
-  raw_ptr<content::RenderFrameHost> child_rfh_ = nullptr;
+  raw_ptr<content::RenderFrameHost, DanglingUntriaged> child_rfh_ = nullptr;
 };
 
 TEST_F(ContentAutofillDriverFactoryTest_WithTwoFrames, TwoDrivers) {
@@ -277,26 +282,23 @@ TEST_F(ContentAutofillDriverFactoryTest, TabHidden) {
   factory_->OnVisibilityChanged(content::Visibility::HIDDEN);
 }
 
-// Test case with one frame, with BFcache and AutofillAcrossIframes enabled or
-// disabled depending on the parameter.
+// Test case with one frame, with BFcache enabled or disabled depending on the
+// parameter.
 class ContentAutofillDriverFactoryTest_WithOrWithoutBfCacheAndIframes
     : public ContentAutofillDriverFactoryTest,
-      public ::testing::WithParamInterface<std::tuple<bool, bool>> {
+      public ::testing::WithParamInterface<std::tuple<bool>> {
  public:
   ContentAutofillDriverFactoryTest_WithOrWithoutBfCacheAndIframes() {
     std::vector<base::test::FeatureRef> enabled;
     // Allow BackForwardCache for all devices regardless of their memory.
     std::vector<base::test::FeatureRef> disabled =
         content::GetDefaultDisabledBackForwardCacheFeaturesForTesting();
-    (autofill_across_iframes() ? enabled : disabled)
-        .push_back(features::kAutofillAcrossIframes);
     (use_bfcache() ? enabled : disabled)
         .push_back(::features::kBackForwardCache);
     scoped_feature_list_.InitWithFeatures(enabled, disabled);
   }
 
   bool use_bfcache() { return std::get<0>(GetParam()); }
-  bool autofill_across_iframes() { return std::get<1>(GetParam()); }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -305,7 +307,7 @@ class ContentAutofillDriverFactoryTest_WithOrWithoutBfCacheAndIframes
 INSTANTIATE_TEST_SUITE_P(
     ContentAutofillDriverFactoryTest,
     ContentAutofillDriverFactoryTest_WithOrWithoutBfCacheAndIframes,
-    testing::Combine(testing::Bool(), testing::Bool()));
+    testing::Combine(testing::Bool()));
 
 // Tests that that a same-documentation navigation does not touch the factory's
 // router.
@@ -326,8 +328,8 @@ TEST_P(ContentAutofillDriverFactoryTest_WithOrWithoutBfCacheAndIframes,
   // by ContentAutofillDriver's use of the factory callback.
 }
 
-// Tests that that a driver survives a same-origin navigation but is reset
-// afterwards.
+// Tests that that a driver is 1:1 with RenderFrameHost, which might or might
+// not change after a same-origin navigation.
 TEST_P(ContentAutofillDriverFactoryTest_WithOrWithoutBfCacheAndIframes,
        SameOriginNavigation) {
   NavigateMainFrame("https://a.com/");
@@ -339,9 +341,14 @@ TEST_P(ContentAutofillDriverFactoryTest_WithOrWithoutBfCacheAndIframes,
   // of the factory callback.
 
   NavigateMainFrame("https://a.com/after-navigation");
-  EXPECT_EQ(factory_test_api().GetDriver(orig_rfh), orig_driver);
-  // If BFCache is enabled, there will be 2 drivers as the old document is still
-  // around.
+  // If the RenderFrameHost changed, a new driver for main_rfh() is created, and
+  // if BFCache is disabled the driver for |orig_rfh| has now been removed in
+  // ContentAutofillDriverFactory::RenderFrameDeleted().
+  if (use_bfcache()) {
+    EXPECT_EQ(factory_test_api().GetDriver(orig_rfh), orig_driver);
+  } else if (main_rfh() != orig_rfh) {
+    EXPECT_EQ(factory_test_api().GetDriver(orig_rfh), nullptr);
+  }
   EXPECT_EQ(factory_test_api().num_drivers(), use_bfcache() ? 2u : 1u);
 }
 

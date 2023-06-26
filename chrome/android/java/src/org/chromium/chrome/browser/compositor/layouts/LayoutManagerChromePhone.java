@@ -89,31 +89,6 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     }
 
     @Override
-    protected LayoutManagerTabModelObserver createTabModelObserver() {
-        return new LayoutManagerTabModelObserver() {
-            @Override
-            public void willCloseTab(Tab tab, boolean animate, boolean didCloseAlone) {
-                super.willCloseTab(tab, animate, didCloseAlone);
-                if (animate) tabClosing(tab.getId());
-            }
-        };
-    }
-
-    private void tabClosing(int id) {
-        Tab closedTab = getTabById(id);
-        if (closedTab == null) return;
-
-        if (getActiveLayout().handlesTabClosing()) {
-            // The user is currently interacting with the {@code LayoutHost}.
-            // Allow the foreground layout to animate the tab closing.
-            getActiveLayout().onTabClosing(time(), id);
-        } else if (animationsEnabled() && !hasExplicitNextLayout()) {
-            startShowing(mSimpleAnimationLayout, false);
-            getActiveLayout().onTabClosing(time(), id);
-        }
-    }
-
-    @Override
     protected void tabClosed(int id, int nextId, boolean incognito, boolean tabRemoved) {
         boolean showOverview = nextId == Tab.INVALID_TAB_ID;
         if (getActiveLayoutType() != LayoutType.TAB_SWITCHER
@@ -122,15 +97,10 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             // overview mode when the animation is finished.
             if (getActiveLayoutType() == LayoutType.SIMPLE_ANIMATION) {
                 setNextLayout(getLayoutForType(LayoutType.TAB_SWITCHER), true);
+                getActiveLayout().onTabClosed(time(), id, nextId, incognito);
             } else {
-                showLayout(LayoutType.TAB_SWITCHER, true);
+                super.tabClosed(id, nextId, incognito, tabRemoved);
             }
-        }
-        getActiveLayout().onTabClosed(time(), id, nextId, incognito);
-        boolean animate = !tabRemoved && animationsEnabled();
-        if (getActiveLayoutType() != LayoutType.TAB_SWITCHER
-                && getActiveLayoutType() != LayoutType.START_SURFACE && showOverview && !animate) {
-            showLayout(LayoutType.TAB_SWITCHER, false);
         }
     }
 

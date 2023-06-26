@@ -243,8 +243,16 @@ CookieSettings::GetCookieSettingWithMetadata(
     // setting to `CONTENT_SETTING_BLOCK` so as not to accidentally change the
     // setting from `CONTENT_SETTING_SESSION_ONLY` to `CONTENT_SETTING_ALLOW` or
     // vice versa.
-    if (ShouldConsiderStorageAccessGrants(overrides) &&
-        IsAllowedByStorageAccessGrant(url, first_party_url)) {
+
+    bool has_storage_access_opt_in =
+        ShouldConsiderStorageAccessGrants(overrides);
+    bool has_storage_access_permission_grant =
+        IsAllowedByStorageAccessGrant(url, first_party_url);
+    net::cookie_util::FireStorageAccessInputHistogram(
+        /*has_opt_in=*/has_storage_access_opt_in,
+        /*has_grant=*/has_storage_access_permission_grant);
+
+    if (has_storage_access_opt_in && has_storage_access_permission_grant) {
       storage_access_result = net::cookie_util::StorageAccessResult::
           ACCESS_ALLOWED_STORAGE_ACCESS_GRANT;
     } else if (ShouldConsiderTopLevelStorageAccessGrants(overrides) &&
@@ -284,7 +292,8 @@ ContentSetting CookieSettings::GetCookieSettingInternal(
     const GURL& first_party_url,
     bool is_third_party_request,
     net::CookieSettingOverrides overrides,
-    content_settings::SettingSource* source) const {
+    content_settings::SettingSource* source,
+    base::Time* expiration) const {
   return GetCookieSettingWithMetadata(url, first_party_url,
                                       is_third_party_request, overrides)
       .cookie_setting();

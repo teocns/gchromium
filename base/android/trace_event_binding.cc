@@ -8,7 +8,7 @@
 
 #include "base/android/jni_string.h"
 #include "base/android/trace_event_binding.h"
-#include "base/base_jni_headers/TraceEvent_jni.h"
+#include "base/base_jni/TraceEvent_jni.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/base_tracing.h"
 #include "base/tracing_buildflags.h"
@@ -263,6 +263,16 @@ static void JNI_TraceEvent_Begin(JNIEnv* env,
                         ctx.event()->set_name(converter.name());
                       });
   }
+}
+
+static void JNI_TraceEvent_BeginWithIntArg(JNIEnv* env,
+                                           const JavaParamRef<jstring>& jname,
+                                           jint jarg) {
+  TraceEventDataConverter converter(env, jname, nullptr);
+  TRACE_EVENT_BEGIN(internal::kJavaTraceCategory, nullptr, "arg", jarg,
+                    [&](::perfetto::EventContext& ctx) {
+                      ctx.event()->set_name(converter.name());
+                    });
 }
 
 static void JNI_TraceEvent_End(JNIEnv* env,

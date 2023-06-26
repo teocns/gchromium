@@ -4,9 +4,8 @@
 
 #include "ash/wm/desks/desk_bar_view.h"
 
-#include "ash/wm/desks/desk_mini_view.h"
+#include "ash/wm/desks/desks_constants.h"
 #include "ui/aura/window.h"
-#include "ui/views/widget/widget.h"
 
 namespace ash {
 
@@ -16,38 +15,29 @@ namespace ash {
 DeskBarView::DeskBarView(aura::Window* root)
     : DeskBarViewBase(root, DeskBarViewBase::Type::kDeskButton) {}
 
-DeskBarView::~DeskBarView() = default;
-
 const char* DeskBarView::GetClassName() const {
   return "DeskBarView";
 }
 
-void DeskBarView::UpdateNewMiniViews(bool initializing_bar_view,
-                                     bool expanding_bar_view) {
-  CHECK(initializing_bar_view);
-  CHECK(!expanding_bar_view);
-
-  // This should not be called when a desk is removed.
-  const auto& desks = DesksController::Get()->desks();
-  CHECK_LE(mini_views_.size(), desks.size());
-
-  UpdateDeskButtonsVisibility();
-
-  // New mini views can be added at any index, so we need to iterate through and
-  // insert new mini views in a position in `mini_views_` that corresponds to
-  // their index in the `DeskController`'s list of desks.
-  int mini_view_index = 0;
-  for (const auto& desk : desks) {
-    if (!FindMiniViewForDesk(desk.get())) {
-      DeskMiniView* mini_view = scroll_view_contents_->AddChildViewAt(
-          std::make_unique<DeskMiniView>(this, root_, desk.get()),
-          mini_view_index);
-      mini_views_.insert(mini_views_.begin() + mini_view_index, mini_view);
+gfx::Size DeskBarView::CalculatePreferredSize() const {
+  // For desk button bar, it comes with dynamic width. Thus, we calculate
+  // the preferred width (summation of all child elements and paddings) and
+  // use the full available width as the upper limit.
+  int width = 0;
+  for (auto* child : scroll_view_contents_->children()) {
+    if (!child->GetVisible()) {
+      continue;
     }
-    ++mini_view_index;
+    if (width) {
+      width += kDeskBarMiniViewsSpacing;
+    }
+    width += child->GetPreferredSize().width();
   }
+  width += kDeskBarScrollViewMinimumHorizontalPaddingDeskButton * 2 +
+           kDeskBarDeskPreviewViewFocusRingThicknessAndPadding * 2;
+  width = std::min(width, GetAvailableBounds().width());
 
-  Layout();
+  return {width, GetPreferredBarHeight(root_, type_, state_)};
 }
 
 }  // namespace ash

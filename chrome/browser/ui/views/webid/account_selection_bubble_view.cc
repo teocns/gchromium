@@ -571,39 +571,40 @@ void AccountSelectionBubbleView::ShowFailureDialog(
     const std::u16string& top_frame_for_display,
     const absl::optional<std::u16string>& iframe_for_display,
     const std::u16string& idp_for_display,
-    const content::IdentityProviderMetadata& idp_metadata,
-    IdentityRegistryCallback identity_registry_callback) {
-  int subtitleLeftPadding = 2 * kLeftRightPadding;
-  if (header_icon_view_) {
-    ConfigureIdpBrandImageView(header_icon_view_, idp_metadata);
-    subtitleLeftPadding += kDesiredIdpIconSize;
-  }
-
-  std::u16string frame_in_title =
-      iframe_for_display.value_or(top_frame_for_display);
-  const std::u16string title =
-      l10n_util::GetStringFUTF16(IDS_IDP_SIGNIN_STATUS_FAILURE_DIALOG_TITLE,
-                                 frame_in_title, idp_for_display);
-  title_label_->SetText(title);
-
-  if (subtitle_label_) {
-    subtitle_label_->SetText(subtitle_);
-    subtitle_label_->SetBorder(views::CreateEmptyBorder(
-        gfx::Insets::TLBR(-kTopBottomPadding, subtitleLeftPadding,
-                          kTopBottomPadding, kLeftRightPadding)));
-  }
+    const content::IdentityProviderMetadata& idp_metadata) {
+  std::u16string title = GetTitle(top_frame_for_display, iframe_for_display,
+                                  idp_for_display, rp_context_);
+  UpdateHeader(idp_metadata, title, subtitle_,
+               /*show_back_button=*/false);
 
   RemoveNonHeaderChildViews();
+  AddChildView(std::make_unique<views::Separator>());
   auto row = std::make_unique<views::View>();
   row->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical,
-      gfx::Insets::VH(kTopBottomPadding, kLeftRightPadding)));
-  identity_registry_callback_ = std::move(identity_registry_callback);
+      gfx::Insets::VH(0, kLeftRightPadding)));
+
+  // Add body.
+  views::Label* const body = row->AddChildView(std::make_unique<views::Label>(
+      l10n_util::GetStringFUTF16(IDS_IDP_SIGNIN_STATUS_MISMATCH_DIALOG_BODY,
+                                 idp_for_display),
+      views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_SECONDARY));
+  body->SetMultiLine(true);
+  body->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+  constexpr int kBodyLineHeight = 20;
+  body->SetLineHeight(kBodyLineHeight);
+
+  // Add space between the body and the separator and the body and the continue
+  // button.
+  constexpr int kBottomSpacing = 16;
+  body->SetBorder(views::CreateEmptyBorder(
+      gfx::Insets::TLBR(kVerticalSpacing, 0, kBottomSpacing, 0)));
+
+  // Add continue button.
   auto button = std::make_unique<ContinueButton>(
-      base::BindRepeating(&Observer::ShowModalDialog,
-                          base::Unretained(observer_),
-                          idp_metadata.idp_signin_url),
-      l10n_util::GetStringUTF16(IDS_IDP_SIGNIN_STATUS_FAILURE_DIALOG_CONTINUE),
+      base::BindRepeating(&Observer::OnSigninToIdP,
+                          base::Unretained(observer_)),
+      l10n_util::GetStringUTF16(IDS_IDP_SIGNIN_STATUS_MISMATCH_DIALOG_CONTINUE),
       this, idp_metadata);
   signin_to_idp_button_ = row->AddChildView(std::move(button));
   AddChildView(std::move(row));
@@ -632,15 +633,6 @@ absl::optional<std::string> AccountSelectionBubbleView::GetDialogSubtitle()
   }
 
   return base::UTF16ToUTF8(subtitle_label_->GetText());
-}
-
-bool AccountSelectionBubbleView::HasIdentityRegistryCallback() {
-  return !identity_registry_callback_.is_null();
-}
-
-IdentityRegistryCallback
-AccountSelectionBubbleView::GetIdentityRegistryCallback() {
-  return std::move(identity_registry_callback_);
 }
 
 gfx::Rect AccountSelectionBubbleView::GetBubbleBounds() {

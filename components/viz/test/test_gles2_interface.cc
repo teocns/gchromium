@@ -31,8 +31,11 @@ static unsigned NextContextId() {
 
 TestGLES2Interface::TestGLES2Interface() : context_id_(NextContextId()) {
   // For stream textures.
-  set_have_extension_egl_image(true);
+  test_capabilities_.egl_image_external = true;
   set_max_texture_size(2048);
+
+  // By default, luminance textures are supported in GLES2.
+  test_capabilities_.supports_luminance_shared_images = true;
 }
 
 TestGLES2Interface::~TestGLES2Interface() = default;
@@ -423,10 +426,6 @@ GLenum TestGLES2Interface::GetGraphicsResetStatusKHR() {
   return GL_NO_ERROR;
 }
 
-void TestGLES2Interface::set_have_extension_egl_image(bool have) {
-  test_capabilities_.egl_image_external = have;
-}
-
 void TestGLES2Interface::set_support_texture_format_bgra8888(bool support) {
   test_capabilities_.texture_format_bgra8888 = support;
 }
@@ -453,10 +452,6 @@ void TestGLES2Interface::set_gpu_rasterization(bool gpu_rasterization) {
 
 void TestGLES2Interface::set_avoid_stencil_buffers(bool avoid_stencil_buffers) {
   test_capabilities_.avoid_stencil_buffers = avoid_stencil_buffers;
-}
-
-void TestGLES2Interface::set_support_multisample_compatibility(bool support) {
-  test_capabilities_.multisample_compatibility = support;
 }
 
 void TestGLES2Interface::set_supports_scanout_shared_images(bool support) {

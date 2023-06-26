@@ -34,6 +34,7 @@ component("clipboard_types") {
 
   if (is_apple) {
     sources += [ "clipboard_constants_mac.mm" ]
+    configs += [ "//build/config/compiler:enable_arc" ]
   }
 
   if (is_win) {
@@ -98,6 +99,8 @@ component("clipboard") {
     "clipboard_observer.cc",
     "clipboard_observer.h",
     "clipboard_sequence_number_token.h",
+    "clipboard_util.cc",
+    "clipboard_util.h",
     "custom_data_helper.cc",
     "custom_data_helper.h",
     "scoped_clipboard_writer.cc",
@@ -118,6 +121,10 @@ component("clipboard") {
     ]
   }
 
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
+
   if (is_mac) {
     sources += [
       "clipboard_mac.h",
@@ -132,8 +139,8 @@ component("clipboard") {
       "clipboard_ios.h",
       "clipboard_ios.mm",
     ]
-    configs += [ "//build/config/compiler:enable_arc" ]
   }
+
   if (is_win) {
     sources += [
       "clipboard_util_win.cc",
@@ -232,6 +239,10 @@ source_set("clipboard_test") {
 
   sources = []
   output_name = "ui_base_clipboard_test"
+
+  if (is_apple) {
+    configs += [ "//build/config/compiler:enable_arc" ]
+  }
 
   if (is_ios) {
     if (use_blink) {

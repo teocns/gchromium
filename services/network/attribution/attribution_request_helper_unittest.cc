@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/strings/string_util.h"
@@ -14,6 +15,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/uuid.h"
+#include "net/http/structured_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request.h"
@@ -25,10 +27,12 @@
 #include "services/network/attribution/attribution_verification_mediator_metrics_recorder.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/trigger_verification.h"
 #include "services/network/public/cpp/trust_token_http_headers.h"
 #include "services/network/public/mojom/attribution.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "services/network/trust_tokens/trust_token_key_commitments.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
@@ -37,6 +41,7 @@ namespace network {
 namespace {
 
 using ::network::mojom::AttributionReportingEligibility;
+using ::testing::IsEmpty;
 
 constexpr char kAttributionReportingEligible[] =
     "Attribution-Reporting-Eligible";
@@ -105,7 +110,9 @@ class AttributionRequestHelperTest : public testing::Test {
     if (with == WithVerificationHeader::kYes) {
       response->headers->AddHeader(
           AttributionVerificationMediator::kReportVerificationHeader,
-          kTestBlindSignature);
+          SerializeStructureHeaderListOfStrings(std::vector<std::string>(
+              AttributionRequestHelper::kVerificationTokensPerTrigger,
+              kTestBlindSignature)));
     }
 
     return response;
@@ -125,17 +132,10 @@ class AttributionRequestHelperTest : public testing::Test {
     auto expected_response_time = response->response_time;
     helper_->OnReceiveRedirect(
         request, std::move(response), redirect_info,
-        base::BindLambdaForTesting([&run_loop, expected_response_time,
-                                    expect_trigger_verification](
-                                       mojom::URLResponseHeadPtr response) {
+        base::BindLambdaForTesting([&](mojom::URLResponseHeadPtr response) {
           EXPECT_EQ(expected_response_time, response->response_time);
-          if (expect_trigger_verification) {
-            ASSERT_TRUE(response->trigger_verification);
-            EXPECT_TRUE(FakeCryptographer::IsToken(
-                response->trigger_verification->token(), kTestBlindSignature));
-          } else {
-            ASSERT_FALSE(response->trigger_verification);
-          }
+          CheckVerifications(response->trigger_verifications,
+                             expect_trigger_verification);
           run_loop.Quit();
         }));
     run_loop.Run();
@@ -147,13 +147,8 @@ class AttributionRequestHelperTest : public testing::Test {
     helper_->Finalize(response, run_loop.QuitClosure());
     run_loop.Run();
 
-    if (expect_trigger_verification) {
-      ASSERT_TRUE(response.trigger_verification);
-      EXPECT_TRUE(FakeCryptographer::IsToken(
-          response.trigger_verification->token(), kTestBlindSignature));
-    } else {
-      ASSERT_FALSE(response.trigger_verification);
-    }
+    CheckVerifications(response.trigger_verifications,
+                       expect_trigger_verification);
   }
 
   base::test::TaskEnvironment task_environment_;
@@ -168,6 +163,20 @@ class AttributionRequestHelperTest : public testing::Test {
   std::unique_ptr<net::URLRequestContext> context_;
   std::unique_ptr<TrustTokenKeyCommitments> trust_token_key_commitments_;
   net::TestDelegate delegate_;
+
+  void CheckVerifications(const std::vector<TriggerVerification>& verifications,
+                          bool expected_to_have_value) {
+    if (expected_to_have_value) {
+      EXPECT_EQ(verifications.size(),
+                AttributionRequestHelper::kVerificationTokensPerTrigger);
+      for (const auto& verification : verifications) {
+        EXPECT_TRUE(FakeCryptographer::IsToken(verification.token(),
+                                               kTestBlindSignature));
+      }
+    } else {
+      ASSERT_THAT(verifications, IsEmpty());
+    }
+  }
 };
 
 TEST_F(AttributionRequestHelperTest, Begin_HeadersAdded) {
@@ -185,21 +194,26 @@ TEST_F(AttributionRequestHelperTest, Begin_HeadersAdded) {
   ASSERT_TRUE(request->extra_request_headers().HasHeader(
       AttributionVerificationMediator::kReportVerificationHeader));
 
-  // The generated message should be composed of:
-  // a. The origin from which the request was made which corresponds to the
-  //    attribution destination origin.
-  // b. A generated uuid that represents the id of a future aggregatable report.
-  std::string blind_message_header;
+  std::string blind_messages_header;
   request->extra_request_headers().GetHeader(
       AttributionVerificationMediator::kReportVerificationHeader,
-      &blind_message_header);
-  std::string message = FakeCryptographer::UnblindMessage(blind_message_header);
+      &blind_messages_header);
+  std::vector<const std::string> blinded_messages =
+      DeserializeStructuredHeaderListOfStrings(blind_messages_header);
   std::string expected_origin = "https://origin.example";
+  for (const auto& blinded_message : blinded_messages) {
+    std::string message = FakeCryptographer::UnblindMessage(blinded_message);
 
-  EXPECT_TRUE(base::EndsWith(message, expected_origin));
-  std::string potential_id =
-      message.substr(0, message.length() - expected_origin.length());
-  EXPECT_TRUE(base::Uuid::ParseLowercase(potential_id).is_valid());
+    // Each generated message should be composed of:
+    // a. The origin from which the request was made which corresponds to the
+    //    attribution destination origin.
+    // b. A generated uuid that represents the id of a future aggregatable
+    // report.
+    EXPECT_TRUE(base::EndsWith(message, expected_origin));
+    std::string potential_id =
+        message.substr(0, message.length() - expected_origin.length());
+    EXPECT_TRUE(base::Uuid::ParseLowercase(potential_id).is_valid());
+  }
 
   histograms_.ExpectUniqueSample(
       "Conversions.ReportVerification.DestinationOriginStatus",
@@ -426,38 +440,63 @@ TEST_F(AttributionRequestHelperTest, CreateIfNeeded) {
 }
 
 TEST_F(AttributionRequestHelperTest, SetAttributionReportingHeaders) {
+  {
+    std::unique_ptr<net::URLRequest> request =
+        CreateTestUrlRequest(/*to_url=*/example_valid_request_url_);
+
+    ResourceRequest resource_request;
+    resource_request.attribution_reporting_eligibility =
+        AttributionReportingEligibility::kUnset;
+    SetAttributionReportingHeaders(*request, resource_request);
+    EXPECT_FALSE(request->extra_request_headers().HasHeader(
+        kAttributionReportingEligible));
+  }
+
   const struct {
     AttributionReportingEligibility eligibility;
-    const char* expected_eligible_header;
+    std::vector<std::string> required_keys;
+    std::vector<std::string> prohibited_keys;
   } kTestCases[] = {
-      {AttributionReportingEligibility::kUnset, nullptr},
-      {AttributionReportingEligibility::kEmpty, ""},
-      {AttributionReportingEligibility::kEventSource, "event-source"},
-      {AttributionReportingEligibility::kNavigationSource, "navigation-source"},
-      {AttributionReportingEligibility::kTrigger, "trigger"},
+      {AttributionReportingEligibility::kEmpty,
+       {},
+       {"event-source", "navigation-source", "trigger"}},
+      {AttributionReportingEligibility::kEventSource,
+       {"event-source"},
+       {"navigation-source", "trigger"}},
+      {AttributionReportingEligibility::kNavigationSource,
+       {"navigation-source"},
+       {"event-source", "trigger"}},
+      {AttributionReportingEligibility::kTrigger,
+       {"trigger"},
+       {"event-source", "navigation-source"}},
       {AttributionReportingEligibility::kEventSourceOrTrigger,
-       "event-source, trigger"},
+       {"event-source", "trigger"},
+       {"navigation-source"}},
   };
 
   for (const auto& test_case : kTestCases) {
     SCOPED_TRACE(test_case.eligibility);
 
-    std::unique_ptr<net::URLRequest> request = CreateTestUrlRequestFrom(
-        /*to_url=*/example_valid_request_url_,
-        /*from_url=*/GURL("https://origin.example/path/123#foo"));
+    std::unique_ptr<net::URLRequest> request =
+        CreateTestUrlRequest(/*to_url=*/example_valid_request_url_);
 
     ResourceRequest resource_request;
     resource_request.attribution_reporting_eligibility = test_case.eligibility;
     SetAttributionReportingHeaders(*request, resource_request);
 
-    if (test_case.expected_eligible_header) {
-      std::string actual;
-      request->extra_request_headers().GetHeader(kAttributionReportingEligible,
-                                                 &actual);
-      EXPECT_EQ(actual, test_case.expected_eligible_header);
-    } else {
-      EXPECT_FALSE(request->extra_request_headers().HasHeader(
-          kAttributionReportingEligible));
+    std::string actual;
+    request->extra_request_headers().GetHeader(kAttributionReportingEligible,
+                                               &actual);
+
+    auto dict = net::structured_headers::ParseDictionary(actual);
+    EXPECT_TRUE(dict.has_value());
+
+    for (const auto& key : test_case.required_keys) {
+      EXPECT_TRUE(dict->contains(key)) << key;
+    }
+
+    for (const auto& key : test_case.prohibited_keys) {
+      EXPECT_FALSE(dict->contains(key)) << key;
     }
   }
 }

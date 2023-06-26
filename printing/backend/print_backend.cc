@@ -158,7 +158,8 @@ bool PrinterSemanticCapsAndDefaults::Paper::operator==(
     const PrinterSemanticCapsAndDefaults::Paper& other) const {
   return display_name == other.display_name && vendor_id == other.vendor_id &&
          size_um == other.size_um &&
-         printable_area_um == other.printable_area_um;
+         printable_area_um == other.printable_area_um &&
+         max_height_um == other.max_height_um;
 }
 
 PrinterSemanticCapsAndDefaults::PrinterSemanticCapsAndDefaults() = default;
@@ -213,10 +214,8 @@ PrintBackend::~PrintBackend() = default;
 // static
 scoped_refptr<PrintBackend> PrintBackend::CreateInstance(
     const std::string& locale) {
-  return g_print_backend_for_test
-             ? g_print_backend_for_test
-             : PrintBackend::CreateInstanceImpl(
-                   /*print_backend_settings=*/nullptr, locale);
+  return g_print_backend_for_test ? g_print_backend_for_test
+                                  : PrintBackend::CreateInstanceImpl(locale);
 }
 
 // static

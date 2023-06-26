@@ -565,7 +565,8 @@ void InputMethodAsh::ConfirmComposition(bool reset_engine) {
   }
   if (client &&
       (client->HasCompositionText() ||
-       base::FeatureList::IsEnabled(features::kAlwaysConfirmComposition))) {
+       (base::FeatureList::IsEnabled(features::kAlwaysConfirmComposition) &&
+        client->SupportsAlwaysConfirmComposition()))) {
     const size_t characters_committed =
         client->ConfirmCompositionText(/*keep_selection*/ true);
     typing_session_manager_.CommitCharacters(characters_committed);
@@ -738,6 +739,7 @@ void InputMethodAsh::MaybeProcessPendingInputMethodResult(ui::KeyEvent* event,
         ui::KeyEvent ch_event(ui::ET_KEY_PRESSED, ui::VKEY_UNKNOWN,
                               ui::EF_NONE);
         ch_event.set_character(ch);
+        ui::SetKeyboardImeFlags(&ch_event, ui::kPropertyKeyboardImeHandledFlag);
         client->InsertChar(ch_event);
       }
     } else if (pending_commit_->text.empty()) {
@@ -957,6 +959,7 @@ SurroundingTextInfo InputMethodAsh::GetSurroundingTextInfo() {
   info.selection_range.set_start(info.selection_range.start() -
                                  text_range.start());
   info.selection_range.set_end(info.selection_range.end() - text_range.start());
+  info.offset = text_range.start();
   return info;
 }
 
@@ -970,6 +973,18 @@ void InputMethodAsh::DeleteSurroundingText(uint32_t num_char16s_before_cursor,
 
   GetTextInputClient()->ExtendSelectionAndDelete(num_char16s_before_cursor,
                                                  num_char16s_after_cursor);
+}
+
+void InputMethodAsh::ReplaceSurroundingText(
+    uint32_t length_before_selection,
+    uint32_t length_after_selection,
+    base::StringPiece16 replacement_text) {
+  if (!GetTextInputClient()) {
+    return;
+  }
+
+  GetTextInputClient()->ExtendSelectionAndReplace(
+      length_before_selection, length_after_selection, replacement_text);
 }
 
 bool InputMethodAsh::ExecuteCharacterComposer(const ui::KeyEvent& event) {

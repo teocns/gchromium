@@ -22,6 +22,10 @@ extern const char kBruschettaDisplayName[];
 
 extern const char kBruschettaPolicyId[];
 
+extern const char kBruschettaInstallerDownloadStrategyFlag[];
+extern const char kBruschettaInstallerDownloadStrategySimpleURLLoader[];
+extern const char kBruschettaInstallerDownloadStrategyDownloadService[];
+
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 enum class BruschettaResult {
@@ -40,6 +44,8 @@ enum class BruschettaResult {
 struct RunningVmPolicy {
   bool vtpm_enabled;
 };
+
+using InstallableConfig = std::pair<std::string, base::Value::Dict>;
 
 // Returns the string name of the BruschettaResult.
 const char* BruschettaResultString(const BruschettaResult res);
@@ -60,6 +66,9 @@ absl::optional<const base::Value::Dict*> GetInstallableConfig(
 
 base::flat_map<std::string, base::Value::Dict> GetInstallableConfigs(
     const Profile* profile);
+
+// In-place sort installable configs into display order.
+void SortInstallableConfigs(std::vector<InstallableConfig>* configs);
 
 // Returns true if an installable config for Bruschetta is present in the
 // enterprise policy. (e.g. kBruschettaPolicyId)

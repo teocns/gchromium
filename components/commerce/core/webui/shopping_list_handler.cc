@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
@@ -26,6 +27,46 @@
 
 namespace commerce {
 namespace {
+
+shopping_list::mojom::ProductInfoPtr ProductInfoToMojoProduct(
+    const GURL& url,
+    const absl::optional<ProductInfo>& info,
+    const std::string& locale) {
+  auto product_info = shopping_list::mojom::ProductInfo::New();
+
+  if (!info.has_value()) {
+    return product_info;
+  }
+
+  product_info->title = info->title;
+  product_info->cluster_title = info->product_cluster_title;
+  product_info->domain = base::UTF16ToUTF8(
+      url_formatter::FormatUrlForDisplayOmitSchemePathAndTrivialSubdomains(
+          GURL(url)));
+  product_info->product_url = url;
+  product_info->image_url = info->image_url;
+
+  std::unique_ptr<payments::CurrencyFormatter> formatter =
+      std::make_unique<payments::CurrencyFormatter>(info->currency_code,
+                                                    locale);
+  formatter->SetMaxFractionalDigits(2);
+
+  product_info->current_price =
+      base::UTF16ToUTF8(formatter->Format(base::NumberToString(
+          static_cast<float>(info->amount_micros) / kToMicroCurrency)));
+
+  // Only send the previous price if it is higher than the current price.
+  if (info->previous_amount_micros.has_value() &&
+      info->previous_amount_micros.value() > info->amount_micros) {
+    product_info->previous_price =
+        base::UTF16ToUTF8(formatter->Format(base::NumberToString(
+            static_cast<float>(info->previous_amount_micros.value()) /
+            kToMicroCurrency)));
+  }
+
+  return product_info;
+}
+
 shopping_list::mojom::BookmarkProductInfoPtr BookmarkNodeToMojoProduct(
     bookmarks::BookmarkModel& model,
     const bookmarks::BookmarkNode* node,
@@ -74,6 +115,66 @@ shopping_list::mojom::BookmarkProductInfoPtr BookmarkNodeToMojoProduct(
 
   return bookmark_info;
 }
+
+shopping_list::mojom::PriceInsightsInfoPtr PriceInsightsInfoToMojoObject(
+    const absl::optional<PriceInsightsInfo>& info,
+    const std::string& locale) {
+  auto insights_info = shopping_list::mojom::PriceInsightsInfo::New();
+
+  if (!info.has_value()) {
+    return insights_info;
+  }
+
+  insights_info->cluster_id = info->product_cluster_id.value();
+
+  std::unique_ptr<payments::CurrencyFormatter> formatter =
+      std::make_unique<payments::CurrencyFormatter>(info->currency_code,
+                                                    locale);
+  formatter->SetMaxFractionalDigits(2);
+
+  if (info->typical_low_price_micros.has_value() &&
+      info->typical_high_price_micros.has_value()) {
+    insights_info->typical_low_price =
+        base::UTF16ToUTF8(formatter->Format(base::NumberToString(
+            static_cast<float>(info->typical_low_price_micros.value()) /
+            kToMicroCurrency)));
+
+    insights_info->typical_high_price =
+        base::UTF16ToUTF8(formatter->Format(base::NumberToString(
+            static_cast<float>(info->typical_high_price_micros.value()) /
+            kToMicroCurrency)));
+  }
+
+  if (info->catalog_attributes.has_value()) {
+    insights_info->catalog_attributes = info->catalog_attributes.value();
+  }
+
+  if (info->jackpot_url.has_value()) {
+    insights_info->jackpot = info->jackpot_url.value();
+  }
+
+  shopping_list::mojom::PriceInsightsInfo::PriceBucket bucket;
+  switch (info->price_bucket) {
+    case PriceBucket::kUnknown:
+      bucket = shopping_list::mojom::PriceInsightsInfo::PriceBucket::kUnknown;
+      break;
+    case PriceBucket::kLowPrice:
+      bucket = shopping_list::mojom::PriceInsightsInfo::PriceBucket::kLow;
+      break;
+    case PriceBucket::kTypicalPrice:
+      bucket = shopping_list::mojom::PriceInsightsInfo::PriceBucket::kTypical;
+      break;
+    case PriceBucket::kHighPrice:
+      bucket = shopping_list::mojom::PriceInsightsInfo::PriceBucket::kHigh;
+      break;
+  }
+  insights_info->bucket = bucket;
+
+  insights_info->has_multiple_catalogs = info->has_multiple_catalogs;
+
+  return insights_info;
+}
+
 }  // namespace
 
 using shopping_list::mojom::BookmarkProductInfo;
@@ -86,14 +187,16 @@ ShoppingListHandler::ShoppingListHandler(
     ShoppingService* shopping_service,
     PrefService* prefs,
     feature_engagement::Tracker* tracker,
-    const std::string& locale)
+    const std::string& locale,
+    std::unique_ptr<Delegate> delegate)
     : remote_page_(std::move(remote_page)),
       receiver_(this, std::move(receiver)),
       bookmark_model_(bookmark_model),
       shopping_service_(shopping_service),
       pref_service_(prefs),
       tracker_(tracker),
-      locale_(locale) {
+      locale_(locale),
+      delegate_(std::move(delegate)) {
   scoped_observation_.Observe(shopping_service_);
   // It is safe to schedule updates and observe bookmarks. If the feature is
   // disabled, no new information will be fetched or provided to the frontend.
@@ -104,16 +207,23 @@ ShoppingListHandler::~ShoppingListHandler() = default;
 
 void ShoppingListHandler::GetAllPriceTrackedBookmarkProductInfo(
     GetAllPriceTrackedBookmarkProductInfoCallback callback) {
-  if (!shopping_service_->IsShoppingListEligible()) {
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback),
-                                  std::vector<BookmarkProductInfoPtr>()));
-    return;
-  }
-  GetAllPriceTrackedBookmarks(
-      shopping_service_, bookmark_model_,
-      base::BindOnce(&ShoppingListHandler::OnFetchPriceTrackedBookmarks,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  shopping_service_->WaitForReady(base::BindOnce(
+      [](base::WeakPtr<ShoppingListHandler> handler,
+         GetAllPriceTrackedBookmarkProductInfoCallback callback,
+         ShoppingService* service) {
+        if (!service || !service->IsShoppingListEligible() ||
+            handler.WasInvalidated()) {
+          base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+              FROM_HERE, base::BindOnce(std::move(callback),
+                                        std::vector<BookmarkProductInfoPtr>()));
+          return;
+        }
+
+        service->GetAllPriceTrackedBookmarks(
+            base::BindOnce(&ShoppingListHandler::OnFetchPriceTrackedBookmarks,
+                           handler, std::move(callback)));
+      },
+      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void ShoppingListHandler::OnFetchPriceTrackedBookmarks(
@@ -132,17 +242,25 @@ void ShoppingListHandler::OnFetchPriceTrackedBookmarks(
 
 void ShoppingListHandler::GetAllShoppingBookmarkProductInfo(
     GetAllShoppingBookmarkProductInfoCallback callback) {
-  if (!shopping_service_->IsShoppingListEligible()) {
-    std::move(callback).Run({});
-    return;
-  }
-  std::vector<const bookmarks::BookmarkNode*> bookmarks =
-      GetAllShoppingBookmarks(bookmark_model_);
+  shopping_service_->WaitForReady(base::BindOnce(
+      [](base::WeakPtr<ShoppingListHandler> handler,
+         GetAllShoppingBookmarkProductInfoCallback callback,
+         ShoppingService* service) {
+        if (!service || !service->IsShoppingListEligible() ||
+            handler.WasInvalidated()) {
+          std::move(callback).Run({});
+          return;
+        }
 
-  std::vector<BookmarkProductInfoPtr> info_list =
-      BookmarkListToMojoList(*bookmark_model_, bookmarks, locale_);
+        std::vector<const bookmarks::BookmarkNode*> bookmarks =
+            service->GetAllShoppingBookmarks();
 
-  std::move(callback).Run(std::move(info_list));
+        std::vector<BookmarkProductInfoPtr> info_list = BookmarkListToMojoList(
+            *(handler->bookmark_model_), bookmarks, handler->locale_);
+
+        std::move(callback).Run(std::move(info_list));
+      },
+      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void ShoppingListHandler::TrackPriceForBookmark(int64_t bookmark_id) {
@@ -238,4 +356,60 @@ void ShoppingListHandler::onPriceTrackResult(int64_t bookmark_id,
   // failed.
   remote_page_->OperationFailedForBookmark(bookmark_id, is_tracking);
 }
+
+void ShoppingListHandler::GetProductInfoForCurrentUrl(
+    GetProductInfoForCurrentUrlCallback callback) {
+  if (!shopping_service_->IsPriceInsightsEligible() || !delegate_ ||
+      !delegate_->GetCurrentTabUrl().has_value()) {
+    std::move(callback).Run(shopping_list::mojom::ProductInfo::New());
+    return;
+  }
+
+  shopping_service_->GetProductInfoForUrl(
+      delegate_->GetCurrentTabUrl().value(),
+      base::BindOnce(&ShoppingListHandler::OnFetchProductInfoForCurrentUrl,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void ShoppingListHandler::OnFetchProductInfoForCurrentUrl(
+    GetProductInfoForCurrentUrlCallback callback,
+    const GURL& url,
+    const absl::optional<ProductInfo>& info) {
+  std::move(callback).Run(ProductInfoToMojoProduct(url, info, locale_));
+}
+
+void ShoppingListHandler::GetPriceInsightsInfoForCurrentUrl(
+    GetPriceInsightsInfoForCurrentUrlCallback callback) {
+  if (!shopping_service_->IsPriceInsightsEligible() || !delegate_ ||
+      !delegate_->GetCurrentTabUrl().has_value()) {
+    std::move(callback).Run(shopping_list::mojom::PriceInsightsInfo::New());
+    return;
+  }
+
+  shopping_service_->GetPriceInsightsInfoForUrl(
+      delegate_->GetCurrentTabUrl().value(),
+      base::BindOnce(
+          &ShoppingListHandler::OnFetchPriceInsightsInfoForCurrentUrl,
+          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void ShoppingListHandler::OnFetchPriceInsightsInfoForCurrentUrl(
+    GetPriceInsightsInfoForCurrentUrlCallback callback,
+    const GURL& url,
+    const absl::optional<PriceInsightsInfo>& info) {
+  std::move(callback).Run(PriceInsightsInfoToMojoObject(info, locale_));
+}
+
+void ShoppingListHandler::ShowInsightsSidePanelUI() {
+  if (delegate_) {
+    delegate_->ShowInsightsSidePanelUI();
+  }
+}
+
+void ShoppingListHandler::SetDelegateForTesting(
+    std::unique_ptr<Delegate> delegate) {
+  delegate_.reset();
+  delegate_ = std::move(delegate);
+}
+
 }  // namespace commerce

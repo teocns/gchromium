@@ -20,7 +20,7 @@
 #include "ash/detachable_base/detachable_base_handler.h"
 #include "ash/display/display_prefs.h"
 #include "ash/display/privacy_screen_controller.h"
-#include "ash/glanceables/glanceables_util.h"
+#include "ash/glanceables/glanceables_v2_controller.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/login/login_screen_controller.h"
 #include "ash/login/ui/login_expanded_public_account_view.h"
@@ -36,6 +36,7 @@
 #include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/system/camera/autozoom_controller_impl.h"
 #include "ash/system/camera/autozoom_nudge_controller.h"
+#include "ash/system/camera/camera_app_prefs.h"
 #include "ash/system/camera/camera_effects_controller.h"
 #include "ash/system/geolocation/geolocation_controller.h"
 #include "ash/system/gesture_education/gesture_education_notification_controller.h"
@@ -48,12 +49,14 @@
 #include "ash/system/media/media_tray.h"
 #include "ash/system/message_center/message_center_controller.h"
 #include "ash/system/network/cellular_setup_notifier.h"
-#include "ash/system/network/vpn_list_view.h"
+#include "ash/system/network/vpn_detailed_view.h"
 #include "ash/system/night_light/night_light_controller_impl.h"
 #include "ash/system/palette/palette_tray.h"
 #include "ash/system/palette/palette_welcome_bubble.h"
 #include "ash/system/pcie_peripheral/pcie_peripheral_notification_controller.h"
+#include "ash/system/power/battery_saver_controller.h"
 #include "ash/system/power/power_prefs.h"
+#include "ash/system/power/power_sounds_controller.h"
 #include "ash/system/privacy_hub/privacy_hub_controller.h"
 #include "ash/system/session/logout_button_tray.h"
 #include "ash/system/session/logout_confirmation_controller.h"
@@ -75,6 +78,7 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/live_caption/pref_names.h"
 #include "components/soda/constants.h"
+#include "components/user_manager/known_user.h"
 
 namespace ash {
 
@@ -90,6 +94,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   AutozoomNudgeController::RegisterProfilePrefs(registry);
   AmbientController::RegisterProfilePrefs(registry);
   CalendarController::RegisterProfilePrefs(registry);
+  camera_app_prefs::RegisterProfilePrefs(registry);
   CameraEffectsController::RegisterProfilePrefs(registry);
   CaptureModeController::RegisterProfilePrefs(registry);
   CellularSetupNotifier::RegisterProfilePrefs(registry);
@@ -106,6 +111,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   GeolocationController::RegisterProfilePrefs(registry);
   GestureEducationNotificationController::RegisterProfilePrefs(registry,
                                                                for_test);
+  GlanceablesV2Controller::RegisterUserProfilePrefs(registry);
   holding_space_prefs::RegisterProfilePrefs(registry);
   HotspotInfoCache::RegisterProfilePrefs(registry);
   InputDeviceSettingsControllerImpl::RegisterProfilePrefs(registry);
@@ -122,6 +128,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   PaletteTray::RegisterProfilePrefs(registry);
   PaletteWelcomeBubble::RegisterProfilePrefs(registry);
   PciePeripheralNotificationController::RegisterProfilePrefs(registry);
+  PowerSoundsController::RegisterPrefs(registry);
   PrivacyHubController::RegisterProfilePrefs(registry);
   PrivacyScreenController::RegisterProfilePrefs(registry);
   ProjectorControllerImpl::RegisterProfilePrefs(registry);
@@ -134,7 +141,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
   UnifiedSystemTrayController::RegisterProfilePrefs(registry);
   MediaTray::RegisterProfilePrefs(registry);
   UsbPeripheralNotificationController::RegisterProfilePrefs(registry);
-  VPNListView::RegisterProfilePrefs(registry);
+  VpnDetailedView::RegisterProfilePrefs(registry);
   WallpaperPrefManager::RegisterProfilePrefs(registry);
   WindowCycleController::RegisterProfilePrefs(registry);
 
@@ -154,6 +161,13 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
                                  std::string());
     registry->RegisterStringPref(language::prefs::kPreferredLanguages,
                                  std::string());
+    registry->RegisterIntegerPref(prefs::kAltEventRemappedToRightClick, 0);
+    registry->RegisterIntegerPref(prefs::kSearchEventRemappedToRightClick, 0);
+    registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackDelete, 0);
+    registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackEnd, 0);
+    registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackHome, 0);
+    registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackPageUp, 0);
+    registry->RegisterIntegerPref(prefs::kKeyEventRemappedToSixPackPageDown, 0);
   }
 }
 
@@ -162,6 +176,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry, bool for_test) {
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry, bool for_test) {
   PaletteTray::RegisterLocalStatePrefs(registry);
   WallpaperPrefManager::RegisterLocalStatePrefs(registry);
+  ColorPaletteController::RegisterLocalStatePrefs(registry);
   DetachableBaseHandler::RegisterPrefs(registry);
   PowerPrefs::RegisterLocalStatePrefs(registry);
   PrivacyHubController::RegisterLocalStatePrefs(registry);
@@ -169,14 +184,17 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry, bool for_test) {
   LoginExpandedPublicAccountView::RegisterLocalStatePrefs(registry);
   LockStateController::RegisterPrefs(registry);
   quick_pair::Mediator::RegisterLocalStatePrefs(registry);
-  if (ash::features::IsQsRevampEnabled())
+  if (ash::features::IsQsRevampEnabled()) {
     QuickSettingsFooter::RegisterLocalStatePrefs(registry);
-  else
+  } else {
     TopShortcutsView::RegisterLocalStatePrefs(registry);
+  }
   KeyboardBacklightColorController::RegisterPrefs(registry);
+  BatterySaverController::RegisterLocalStatePrefs(registry);
 
   if (for_test) {
     registry->RegisterBooleanPref(prefs::kOwnerPrimaryMouseButtonRight, false);
+    user_manager::KnownUser::RegisterPrefs(registry);
   }
 }
 

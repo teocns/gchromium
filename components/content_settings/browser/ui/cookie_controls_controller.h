@@ -12,6 +12,7 @@
 #include "base/scoped_observation.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/content_settings/core/common/cookie_controls_breakage_confidence_level.h"
 #include "components/content_settings/core/common/cookie_controls_enforcement.h"
 #include "components/content_settings/core/common/cookie_controls_status.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -23,7 +24,8 @@ class WebContents;
 namespace content_settings {
 
 class CookieSettings;
-class CookieControlsView;
+class CookieControlsObserver;
+class OldCookieControlsObserver;
 
 // Handles the tab specific state for cookie controls.
 class CookieControlsController
@@ -41,7 +43,7 @@ class CookieControlsController
   // Called when the web_contents has changed.
   void Update(content::WebContents* web_contents);
 
-  // Called when CookieControlsView is closing.
+  // Called when the UI is closing.
   void OnUiClosing();
 
   // Called when the user clicks on the button to enable/disable cookie
@@ -51,10 +53,19 @@ class CookieControlsController
   // Returns whether first-party cookies are blocked.
   bool FirstPartyCookiesBlocked();
 
-  void AddObserver(CookieControlsView* obs);
-  void RemoveObserver(CookieControlsView* obs);
+  void AddObserver(OldCookieControlsObserver* obs);
+  void RemoveObserver(OldCookieControlsObserver* obs);
+
+  void AddObserver(CookieControlsObserver* obs);
+  void RemoveObserver(CookieControlsObserver* obs);
 
  private:
+  struct Status {
+    CookieControlsStatus status;
+    CookieControlsEnforcement enforcement;
+    base::Time expiration;
+  };
+
   // The observed WebContents changes during the lifetime of the
   // CookieControlsController. SiteDataObserver can't change the observed
   // object, so we need an inner class that can be recreated when necessary.
@@ -71,6 +82,7 @@ class CookieControlsController
 
     // PageSpecificContentSettings::SiteDataObserver:
     void OnSiteDataAccessed(const AccessDetails& access_details) override;
+    void OnStatefulBounceDetected() override;
 
    private:
     raw_ptr<CookieControlsController> cookie_controls_;
@@ -81,17 +93,35 @@ class CookieControlsController
   void OnCookieSettingChanged() override;
 
   // Determine the CookieControlsStatus based on |web_contents|.
-  std::pair<CookieControlsStatus, CookieControlsEnforcement> GetStatus(
-      content::WebContents* web_contents);
+  Status GetStatus(content::WebContents* web_contents);
+
+  // Determine the confidence of site being broken and user needing to use
+  // cookie controls. It affects the prominence of UI entry points. It takes
+  // into account blocked third-party cookie access, exceptions
+  // lifecycle, site engagement index and recent user activity (like frequent
+  // page reloads).
+  CookieControlsBreakageConfidenceLevel GetConfidenceLevel(
+      CookieControlsStatus status,
+      int allowed_sites,
+      int blocked_site);
 
   // Updates the blocked cookie count of |icon_|.
   void PresentBlockedCookieCounter();
 
   // Returns the number of allowed cookies.
-  int GetAllowedCookieCount();
+  int GetAllowedCookieCount() const;
 
   // Returns the number of blocked cookies.
-  int GetBlockedCookieCount();
+  int GetBlockedCookieCount() const;
+
+  // Returns the number of stateful bounces leading to this page.
+  int GetStatefulBounceCount() const;
+
+  // Returns the number of allowed sites.
+  int GetAllowedSitesCount() const;
+
+  // Returns the number of blocked sites.
+  int GetBlockedSitesCount() const;
 
   content::WebContents* GetWebContents();
 
@@ -109,7 +139,8 @@ class CookieControlsController
 
   bool should_reload_ = false;
 
-  base::ObserverList<CookieControlsView> observers_;
+  base::ObserverList<OldCookieControlsObserver> old_observers_;
+  base::ObserverList<CookieControlsObserver> observers_;
 };
 
 }  // namespace content_settings

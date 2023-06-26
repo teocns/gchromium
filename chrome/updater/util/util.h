@@ -5,7 +5,9 @@
 #ifndef CHROME_UPDATER_UTIL_UTIL_H_
 #define CHROME_UPDATER_UTIL_UTIL_H_
 
+#include <ostream>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 #include "base/command_line.h"
@@ -38,6 +40,14 @@ std::ostream& operator<<(std::ostream& os, const absl::optional<T>& opt) {
 }  // namespace base
 
 namespace updater {
+
+// This template function enables logging enum value as the underlying type.
+template <typename T>
+std::ostream& operator<<(
+    typename std::enable_if<std::is_enum<T>::value, std::ostream>::type& stream,
+    const T& e) {
+  return stream << static_cast<typename std::underlying_type<T>::type>(e);
+}
 
 namespace tagging {
 struct TagArgs;
@@ -104,30 +114,16 @@ TagParsingResult GetTagArgsForCommandLine(
     const base::CommandLine& command_line);
 TagParsingResult GetTagArgs();
 
-// Returns the arguments corresponding to `app_id` from the command line tag.
-absl::optional<tagging::AppArgs> GetAppArgsForCommandLine(
-    const base::CommandLine& command_line,
-    const std::string& app_id);
 absl::optional<tagging::AppArgs> GetAppArgs(const std::string& app_id);
 
-std::string GetDecodedInstallDataFromAppArgsForCommandLine(
-    const base::CommandLine& command_line,
-    const std::string& app_id);
 std::string GetDecodedInstallDataFromAppArgs(const std::string& app_id);
 
-std::string GetInstallDataIndexFromAppArgsForCommandLine(
-    const base::CommandLine& command_line,
-    const std::string& app_id);
 std::string GetInstallDataIndexFromAppArgs(const std::string& app_id);
 
 absl::optional<base::FilePath> GetLogFilePath(UpdaterScope scope);
 
 // Initializes logging for an executable.
 void InitLogging(UpdaterScope updater_scope);
-
-// Wraps the 'command_line' to be executed in an elevated context.
-// On macOS this is done with 'sudo'.
-base::CommandLine MakeElevated(base::CommandLine command_line);
 
 // Functor used by associative containers of strings as a case-insensitive ASCII
 // compare. `StringT` could be either UTF-8 or UTF-16.
@@ -189,11 +185,11 @@ std::wstring GetTaskDisplayName(UpdaterScope scope);
 absl::optional<base::CommandLine> CommandLineForLegacyFormat(
     const std::wstring& cmd_string);
 
-#endif  // BUILDFLAG(IS_WIN)
-
 // Returns the command line for current process, either in legacy style, or
 // in Chromium style.
 base::CommandLine GetCommandLineLegacyCompatible();
+
+#endif  // BUILDFLAG(IS_WIN)
 
 // Writes the provided string prefixed with the UTF8 byte order mark to a
 // temporary file. The temporary file is created in the specified `directory`.

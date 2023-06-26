@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <memory>
+
 #include "base/check_is_test.h"
 #include "base/functional/callback_helpers.h"
 #include "base/timer/timer.h"
@@ -36,7 +37,8 @@ class BubbleOwnerDelegate {
 // be long-lived.
 class ChipController : public permissions::PermissionRequestManager::Observer,
                        public views::WidgetObserver,
-                       public BubbleOwnerDelegate {
+                       public BubbleOwnerDelegate,
+                       public OmniboxChipButton::Observer {
  public:
   ChipController(Browser* browser_, OmniboxChipButton* chip_view);
 
@@ -46,10 +48,8 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
 
   // PermissionRequestManager::Observer:
   void OnPermissionRequestManagerDestructed() override;
-
-  void OnPromptRemoved() override;
-
-  void OnWebContentsChanged();
+  void OnTabVisibilityChanged(content::Visibility visibility) override;
+  void OnRequestsFinalized() override;
 
   // OnBubbleRemoved only triggers when a request chip (bubble) is removed, when
   // the user navigates while a confirmation chip is showing, the request is
@@ -67,24 +67,23 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
   void OnWidgetDestroying(views::Widget* widget) override;
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
 
+  // OmniboxChipButton::Observer
+  void OnChipVisibilityChanged(bool is_visible) override;
+  void OnExpandAnimationEnded() override;
+  void OnCollapseAnimationEnded() override;
+
   // Initializes the permission prompt model as well as the permission request
   // manager and observes the prompt bubble.
   void InitializePermissionPrompt(
-      content::WebContents* web_contents,
       base::WeakPtr<permissions::PermissionPrompt::Delegate> delegate,
-      base::OnceCallback<void()>);
+      base::OnceCallback<void()> = base::DoNothing());
 
   // Displays a permission prompt using the chip UI.
   void ShowPermissionPrompt(
-      content::WebContents* web_contents,
       base::WeakPtr<permissions::PermissionPrompt::Delegate> delegate);
 
   // Chip View.
   OmniboxChipButton* chip() { return chip_; }
-
-  // Hide and clean up the entire chip and associated observers, callback timers
-  // and callbacks.
-  void ResetChip();
 
   // Hide and clean up permission parts of the chip.
   void ResetPermissionPromptChip();
@@ -95,7 +94,7 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
 
   views::Widget* GetBubbleWidget();
 
-  PermissionPromptBubbleView* GetPromptBubbleView();
+  PermissionPromptBubbleBaseView* GetPromptBubbleView();
 
   bool should_expand_for_testing();
 
@@ -133,8 +132,7 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
 
  private:
   bool ShouldWaitForConfirmationToComplete();
-  void AnimateExpand(
-      base::RepeatingCallback<void()> expand_anmiation_ended_callback);
+  void AnimateExpand();
 
   // Confirmation chip.
   void HandleConfirmation(permissions::PermissionAction permission_action);
@@ -159,8 +157,6 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
   void OnPromptBubbleDismissed();
   void OnPromptExpired();
   void OnRequestChipButtonPressed();
-  void OnExpandAnimationEnded();
-  void OnChipVisibilityChanged();
 
   // Updates chip icon, text and theme with model.
   void SyncChipWithModel();
@@ -171,10 +167,6 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
   // Actions executed when the user closes the page info dialog.
   void OnPageInfoBubbleClosed(views::Widget::ClosedReason closed_reason,
                               bool reload_prompt);
-
-  // Resets all chip callbacks such as click callback, but also
-  // animation-related callbacks.
-  void ResetChipCallbacks();
 
   // Clean up utility.
   void RemoveBubbleObserverAndResetTimersAndChipCallbacks();
@@ -188,6 +180,7 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
   LocationBarView* GetLocationBarView();
 
   bool is_confirmation_showing_ = false;
+  bool is_waiting_for_confirmation_collapse = false;
 
   // The chip view this controller modifies.
   raw_ptr<OmniboxChipButton> chip_;
@@ -219,6 +212,9 @@ class ChipController : public permissions::PermissionRequestManager::Observer,
   views::ViewTracker bubble_tracker_;
 
   base::ScopedClosureRunner disallowed_custom_cursors_scope_;
+
+  base::ScopedObservation<OmniboxChipButton, OmniboxChipButton::Observer>
+      observation_{this};
 
   base::WeakPtrFactory<ChipController> weak_factory_{this};
 };

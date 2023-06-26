@@ -63,6 +63,7 @@ import * as timertick from './camera/timertick.js';
 import {VideoEncoderOptions} from './camera/video_encoder_options.js';
 import {Dialog} from './dialog.js';
 import {DocumentReview} from './document_review.js';
+import {Flash} from './flash.js';
 import {OptionPanel} from './option_panel.js';
 import {PTZPanel} from './ptz_panel.js';
 import * as review from './review.js';
@@ -139,7 +140,7 @@ export class Camera extends View implements CameraViewUI {
       this.review,
       this.documentReview,
       this.lowStorageDialogView,
-      new View(ViewName.FLASH),
+      new Flash(),
     ];
 
     this.layoutHandler = new Layout(this.cameraManager);
@@ -272,15 +273,21 @@ export class Camera extends View implements CameraViewUI {
       const modes =
           dom.getAllFrom(this.modesGroup, '.mode-item>input', HTMLInputElement);
       for (const mode of modes) {
-        mode.disabled = disabled;
+        // Use data-disabled here because:
+        // 1. `mode.disabled = true` loses focus on the element.
+        // 2. `mode.setAttribute('aria-disabled', 'true')` makes ChromeVox
+        //    always announce the element is disabled.
+        mode.dataset['disabled'] = String(disabled);
       }
     };
     state.addObserver(state.State.STREAMING, checkModesGroupDisabled);
     state.addObserver(state.State.TAKING, checkModesGroupDisabled);
+    checkModesGroupDisabled();
 
     for (const el of dom.getAll('.mode-item>input', HTMLInputElement)) {
       el.addEventListener('click', (event) => {
-        if (!this.cameraReady.isSignaled()) {
+        if (!this.cameraReady.isSignaled() ||
+            el.dataset['disabled'] === 'true') {
           event.preventDefault();
         }
       });
@@ -313,6 +320,9 @@ export class Camera extends View implements CameraViewUI {
         () => this.cameraManager.reconfigure());
     expert.addObserver(
         expert.ExpertOption.ENABLE_MULTISTREAM_RECORDING,
+        () => this.cameraManager.reconfigure());
+    expert.addObserver(
+        expert.ExpertOption.ENABLE_MULTISTREAM_RECORDING_CHROME,
         () => this.cameraManager.reconfigure());
     expert.addObserver(
         expert.ExpertOption.ENABLE_PTZ_FOR_BUILTIN,
@@ -789,12 +799,14 @@ export class Camera extends View implements CameraViewUI {
       const positive = new review.OptionGroup<boolean>({
         template: review.ButtonGroupTemplate.POSITIVE,
         options: [
-          new review.Option({text: I18nString.LABEL_SHARE}, {
-            callback: async () => {
-              sendEvent(metrics.GifResultType.SHARE);
-              await util.share(new File([blob], name, {type: MimeType.GIF}));
-            },
-          }),
+          new review.Option(
+              {text: I18nString.LABEL_SHARE, icon: 'review_share.svg'}, {
+                callback: async () => {
+                  sendEvent(metrics.GifResultType.SHARE);
+                  await util.share(
+                      new File([blob], name, {type: MimeType.GIF}));
+                },
+              }),
           new review.Option(
               {text: I18nString.LABEL_SAVE, primary: true}, {exitValue: true}),
         ],
@@ -847,7 +859,7 @@ export class Camera extends View implements CameraViewUI {
     if (autoStopped) {
       this.showLowStorageDialog(LowStorageDialogType.AUTO_STOP);
     }
-    nav.open(ViewName.FLASH);
+    nav.open(ViewName.FLASH, I18nString.MSG_PROCESSING_VIDEO);
     state.set(PerfEvent.TIME_LAPSE_CAPTURE_POST_PROCESSING, true);
     try {
       metrics.sendCaptureEvent({

@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include <variant>
 #include <vector>
 
 #include "base/containers/flat_map.h"
@@ -22,6 +23,7 @@
 #include "media/video/h264_bit_reader.h"
 #include "media/video/h264_parser.h"
 #include "media/video/h266_nalu_parser.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace media {
 
@@ -47,6 +49,11 @@ enum {
 
   // 7.4.11 num_ref_entries: [0, kMaxDpbSize + 13]
   kMaxRefEntries = 29,
+
+  kMaxTiles = 990,       // A.4.1 Table A.1
+  kMaxTileRows = 990,    // 990 tile rows and 1 column.
+  kMaxTileColumns = 30,  // A.4.1  Table A.1
+  kNumAlfFilters = 25,   // 7.3.18 Adaptive loop filter semantics
 };
 
 // Section 7.4.4.2
@@ -301,12 +308,18 @@ struct MEDIA_EXPORT H266RefPicLists {
   bool rpl_sps_flag[2];
   int rpl_idx[2];
   H266RefPicListStruct rpl_ref_lists[2];
+  // Be noted below three members actually have their
+  // second dimension indexed within 0 to associated
+  // ref_pic_list_struct's NumLtrpEntries - 1.
   int poc_lsb_lt[2][kMaxRefEntries];
   bool delta_poc_msb_cycle_present_flag[2][kMaxRefEntries];
   int delta_poc_msb_cycle_lt[2][kMaxRefEntries];
 
   // Calculated values.
   int rpls_idx[2];
+  // The second dimension is indexed within 0 to associated
+  // ref_pic_list's NumLtrpEntries - 1.
+  int unpacked_delta_poc_msb_cycle_lt[2][kMaxRefEntries];
 };
 
 // ITU-T H.274: Video usability information parameters.
@@ -520,6 +533,412 @@ struct MEDIA_EXPORT H266SPS {
   VideoChromaSampling GetChromaSampling() const;
 };
 
+struct MEDIA_EXPORT H266PPS {
+  H266PPS();
+
+  // Syntax elements.
+  int pps_pic_parameter_set_id;
+  int pps_seq_parameter_set_id;
+  bool pps_mixed_nalu_types_in_pic_flag;
+  int pps_pic_width_in_luma_samples;
+  int pps_pic_height_in_luma_samples;
+  bool pps_conformance_window_flag;
+  int pps_conf_win_left_offset;
+  int pps_conf_win_right_offset;
+  int pps_conf_win_top_offset;
+  int pps_conf_win_bottom_offset;
+  bool pps_scaling_window_explicit_signaling_flag;
+  int pps_scaling_win_left_offset;
+  int pps_scaling_win_right_offset;
+  int pps_scaling_win_top_offset;
+  int pps_scaling_win_bottom_offset;
+  bool pps_output_flag_present_flag;
+  bool pps_no_pic_partition_flag;
+  bool pps_subpic_id_mapping_present_flag;
+  int pps_num_subpics_minus1;
+  int pps_subpic_id_len_minus1;
+  int pps_subpic_id[kMaxSlices];
+  int pps_log2_ctu_size_minus5;
+  int pps_num_exp_tile_columns_minus1;
+  int pps_num_exp_tile_rows_minus1;
+  int pps_tile_column_width_minus1[kMaxTileColumns];
+  int pps_tile_row_height_minus1[kMaxTileRows];
+  bool pps_loop_filter_across_tiles_enabled_flag;
+  bool pps_rect_slice_flag;
+  bool pps_single_slice_per_subpic_flag;
+  int pps_num_slices_in_pic_minus1;
+  bool pps_tile_idx_delta_present_flag;
+  int pps_slice_width_in_tiles_minus1[kMaxSlices];
+  int pps_slice_height_in_tiles_minus1[kMaxSlices];
+  int pps_num_exp_slices_in_tile[kMaxSlices];
+  int pps_exp_slice_height_in_ctus_minus1[kMaxSlices][kMaxTileRows];
+  int pps_tile_idx_delta_val[kMaxSlices];
+  bool pps_loop_filter_across_slices_enabled_flag;
+  bool pps_cabac_init_present_flag;
+  int pps_num_ref_idx_default_active_minus1[2];
+  bool pps_rpl1_idx_present_flag;
+  bool pps_weighted_pred_flag;
+  bool pps_weighted_bipred_flag;
+  bool pps_ref_wraparound_enabled_flag;
+  int pps_pic_width_minus_wraparound_offset;
+  int pps_init_qp_minus26;
+  bool pps_cu_qp_delta_enabled_flag;
+  bool pps_chroma_tool_offsets_present_flag;
+  int pps_cb_qp_offset;
+  int pps_cr_qp_offset;
+  bool pps_joint_cbcr_qp_offset_present_flag;
+  int pps_joint_cbcr_qp_offset_value;
+  bool pps_slice_chroma_qp_offsets_present_flag;
+  int pps_cu_chroma_qp_offset_list_enabled_flag;
+  int pps_chroma_qp_offset_list_len_minus1;
+  int pps_cb_qp_offset_list[6];
+  int pps_cr_qp_offset_list[6];
+  int pps_joint_cbcr_qp_offset_list[6];
+  bool pps_deblocking_filter_control_present_flag;
+  bool pps_deblocking_filter_override_enabled_flag;
+  bool pps_deblocking_filter_disabled_flag;
+  bool pps_dbf_info_in_ph_flag;
+  int pps_luma_beta_offset_div2;
+  int pps_luma_tc_offset_div2;
+  int pps_cb_beta_offset_div2;
+  int pps_cb_tc_offset_div2;
+  int pps_cr_beta_offset_div2;
+  int pps_cr_tc_offset_div2;
+  bool pps_rpl_info_in_ph_flag;
+  bool pps_sao_info_in_ph_flag;
+  bool pps_alf_info_in_ph_flag;
+  bool pps_wp_info_in_ph_flag;
+  bool pps_qp_delta_info_in_ph_flag;
+  bool pps_picture_header_extension_present_flag;
+  bool pps_slice_header_extension_present_flag;
+  bool pps_extension_flag;
+  // Skip possible extensions
+
+  // Calculated values
+  int pic_width_in_ctbs_y;
+  int pic_height_in_ctbs_y;
+  int pic_size_in_ctbs_y;
+  int pic_width_in_min_cbs_y;
+  int pic_height_in_min_cbs_y;
+  int pic_size_in_min_cbs_y;
+  int pic_size_in_samples_y;
+  int pic_width_in_samples_c;
+  int pic_height_in_samples_c;
+  int num_tiles_in_pic;
+  int num_tile_columns;
+  int num_tile_rows;
+  int slice_height_in_ctus[kMaxSlices];
+  int num_slices_in_subpic[kMaxSlices];
+};
+
+// 7.3.2.18
+struct MEDIA_EXPORT H266AlfData {
+  H266AlfData();
+
+  // Syntax element
+  bool alf_luma_filter_signal_flag;
+  bool alf_chroma_filter_signal_flag;
+  bool alf_cc_cb_filter_signal_flag;
+  bool alf_cc_cr_filter_signal_flag;
+  bool alf_luma_clip_flag;
+  int alf_luma_num_filters_signalled_minus1;
+  int alf_luma_coeff_delta_idx[25];
+  int alf_luma_coeff_abs[25][12];
+  bool alf_luma_coeff_sign[25][12];
+  int alf_luma_clip_idx[25][12];
+  bool alf_chroma_clip_flag;
+  int alf_chroma_num_alt_filters_minus1;
+  int alf_chroma_coeff_abs[8][6];
+  bool alf_chroma_coeff_sign[8][6];
+  int alf_chroma_clip_idx[8][6];
+  int alf_cc_cb_filters_signalled_minus1;
+  int alf_cc_cb_mapped_coeff_abs[4][7];
+  bool alf_cc_cb_coeff_sign[4][7];
+  int alf_cc_cr_filters_signalled_minus1;
+  int alf_cc_cr_mapped_coeff_abs[4][7];
+  bool alf_cc_cr_coeff_sign[4][7];
+};
+
+// 7.3.2.19
+struct MEDIA_EXPORT H266LmcsData {
+  H266LmcsData();
+
+  // Syntax elements.
+  int lmcs_min_bin_idx;
+  int lmcs_delta_max_bin_idx;
+  int lmcs_delta_cw_prec_minus1;
+  int lmcs_delta_abs_cw[16];
+  bool lmcs_delta_sign_cw_flag[16];
+  int lmcs_delta_abs_crs;
+  bool lmcs_delta_sign_crs_flag;
+};
+
+// 7.3.2.20
+struct MEDIA_EXPORT H266ScalingListData {
+  H266ScalingListData();
+
+  // Syntax elements.
+  bool scaling_list_copy_mode_flag[28];
+  bool scaling_list_pred_mode_flag[28];
+  int scaling_list_pred_id_delta[28];
+  // dc coef for id in [14, 27]
+  int scaling_list_dc_coef[14];
+  int scaling_list_delta_coef[28][64];
+
+  // Calculated values.
+  int scaling_matrix_dc_rec[14];
+  int scaling_list_2x2[2][4];
+  int scaling_list_4x4[6][16];
+  int scaling_list_8x8[20][64];
+  int scaling_matrix_rec_2x2[2][2][2];
+  int scaling_matrix_rec_4x4[6][4][4];
+  int scaling_matrix_rec_8x8[20][8][8];
+};
+
+// 7.3.2.6 Adaptation parameter set
+struct MEDIA_EXPORT H266APS {
+  H266APS(int aps_type);
+  ~H266APS();
+
+  // Table 6.
+  enum ParamType {
+    kAlf = 0,
+    kLmcs = 1,
+    kScalingList = 2,
+  };
+
+  // Use to track if current APS is from PREFIX_APS or SUFFIX_APS,
+  // and the layer id this APS is supposed to apply to.
+  int nal_unit_type;
+  int nuh_layer_id;
+
+  // Syntax elements
+  int aps_params_type;
+  int aps_adaptation_parameter_set_id;
+  bool aps_chroma_present_flag;
+  bool aps_extension_flag;
+
+  std::variant<H266AlfData, H266LmcsData, H266ScalingListData> data;
+};
+
+// 7.3.8. PredWeightTable could exist in picture header or slice header.
+struct MEDIA_EXPORT H266PredWeightTable {
+  H266PredWeightTable();
+
+  // Syntax elements.
+  int luma_log2_weight_denom;
+  int delta_chroma_log2_weight_denom;
+  int num_l0_weights;
+  bool luma_weight_l0_flag[15];
+  bool chroma_weight_l0_flag[15];
+  int delta_luma_weight_l0[15];
+  int luma_offset_l0[15];
+  int delta_chroma_weight_l0[2][15];
+  int delta_chroma_offset_l0[2][15];
+  int num_l1_weights;
+  bool luma_weight_l1_flag[15];
+  bool chroma_weight_l1_flag[15];
+  int delta_luma_weight_l1[15];
+  int luma_offset_l1[15];
+  int delta_chroma_weight_l1[2][15];
+  int delta_chroma_offset_l1[2][15];
+
+  // Calculated values.
+  int chroma_log2_weight_denom;
+  int num_weights_l0;
+  int num_weights_l1;
+};
+
+// 7.3.2.8
+struct MEDIA_EXPORT H266PictureHeader {
+  H266PictureHeader();
+
+  // Implies whether the picture header structure
+  // is within PH_NUT or slice header.
+  int nal_unit_type;
+
+  // Syntax elements.
+  bool ph_gdr_or_irap_pic_flag;
+  bool ph_non_ref_pic_flag;
+  bool ph_gdr_pic_flag;
+  bool ph_inter_slice_allowed_flag;
+  bool ph_intra_slice_allowed_flag;
+  int ph_pic_parameter_set_id;
+  int ph_pic_order_cnt_lsb;
+  int ph_recovery_poc_cnt;
+  bool ph_poc_msb_cycle_present_flag;
+  int ph_poc_msb_cycle_val;
+  bool ph_alf_enabled_flag;
+  int ph_num_alf_aps_ids_luma;
+  int ph_alf_aps_id_luma[7];
+  bool ph_alf_cb_enabled_flag;
+  bool ph_alf_cr_enabled_flag;
+  int ph_alf_aps_id_chroma;
+  bool ph_alf_cc_cb_enabled_flag;
+  int ph_alf_cc_cb_aps_id;
+  bool ph_alf_cc_cr_enabled_flag;
+  int ph_alf_cc_cr_aps_id;
+  bool ph_lmcs_enabled_flag;
+  int ph_lmcs_aps_id;
+  bool ph_chroma_residual_scale_flag;
+  bool ph_explicit_scaling_list_enabled_flag;
+  int ph_scaling_list_aps_id;
+  bool ph_virtual_boundaries_present_flag;
+  int ph_num_ver_virtual_boundaries;
+  int ph_virtual_boundary_pos_x_minus1[3];
+  int ph_num_hor_virtual_boundaries;
+  int ph_virtual_boundary_pos_y_minus1[3];
+  bool ph_pic_output_flag;
+  H266RefPicLists ref_pic_lists;
+  bool ph_partition_constraints_override_flag;
+  int ph_log2_diff_min_qt_min_cb_intra_slice_luma;
+  int ph_max_mtt_hierarchy_depth_intra_slice_luma;
+  int ph_log2_diff_max_bt_min_qt_intra_slice_luma;
+  int ph_log2_diff_max_tt_min_qt_intra_slice_luma;
+  int ph_log2_diff_min_qt_min_cb_intra_slice_chroma;
+  int ph_max_mtt_hierarchy_depth_intra_slice_chroma;
+  int ph_log2_diff_max_bt_min_qt_intra_slice_chroma;
+  int ph_log2_diff_max_tt_min_qt_intra_slice_chroma;
+  int ph_cu_qp_delta_subdiv_intra_slice;
+  int ph_cu_chroma_qp_offset_subdiv_intra_slice;
+  int ph_log2_diff_min_qt_min_cb_inter_slice;
+  int ph_max_mtt_hierarchy_depth_inter_slice;
+  int ph_log2_diff_max_bt_min_qt_inter_slice;
+  int ph_log2_diff_max_tt_min_qt_inter_slice;
+  int ph_cu_qp_delta_subdiv_inter_slice;
+  int ph_cu_chroma_qp_offset_subdiv_inter_slice;
+  bool ph_temporal_mvp_enabled_flag;
+  bool ph_collocated_from_l0_flag;
+  int ph_collocated_ref_idx;
+  bool ph_mmvd_fullpel_only_flag;
+  bool ph_mvd_l1_zero_flag;
+  bool ph_bdof_disabled_flag;
+  bool ph_dmvr_disabled_flag;
+  bool ph_prof_disabled_flag;
+  H266PredWeightTable pred_weight_table;
+  int ph_qp_delta;
+  bool ph_joint_cbcr_sign_flag;
+  bool ph_sao_luma_enabled_flag;
+  bool ph_sao_chroma_enabled_flag;
+  bool ph_deblocking_params_present_flag;
+  bool ph_deblocking_filter_disabled_flag;
+  int ph_luma_beta_offset_div2;
+  int ph_luma_tc_offset_div2;
+  int ph_cb_beta_offset_div2;
+  int ph_cb_tc_offset_div2;
+  int ph_cr_beta_offset_div2;
+  int ph_cr_tc_offset_div2;
+  int ph_extension_length;
+  // Skip any possible extension bytes.
+
+  // Calculated values.
+  bool virtual_boundaries_present_flag;
+  int num_ver_virtual_boundaries;
+  int num_hor_virtual_boundaries;
+  int min_qt_log2_size_intra_y;
+  int min_qt_log2_size_intra_c;
+  int min_qt_log2_size_inter_y;
+  int slice_qp_y;
+};
+
+// 7.3.7
+struct MEDIA_EXPORT H266SliceHeader {
+  H266SliceHeader();
+  ~H266SliceHeader();
+
+  // Table 9
+  enum {
+    kSliceTypeB = 0,
+    kSliceTypeP = 1,
+    kSliceTypeI = 2,
+  };
+
+  // These are from NAL headers
+  int nal_unit_type;
+  int nuh_layer_id;
+  int temporal_id;
+  const uint8_t* nalu_data;
+  size_t nalu_size;
+  size_t header_size;  // calculated, not including emulation prevention bytes
+  size_t header_emulation_prevention_bytes;
+
+  // Syntax elements.
+  bool sh_picture_header_in_slice_header_flag;
+  H266PictureHeader picture_header;
+  int sh_subpic_id;
+  int sh_slice_address;
+  // 16-bit sh_extra_bit to be skipped
+  int sh_num_tiles_in_slice_minus1;
+  int sh_slice_type;
+  bool sh_no_output_of_prior_pics_flag;
+  bool sh_alf_enabled_flag;
+  int sh_num_alf_aps_ids_luma;
+  int sh_alf_aps_id_luma[7];
+  bool sh_alf_cb_enabled_flag;
+  bool sh_alf_cr_enabled_flag;
+  int sh_alf_aps_id_chroma;
+  bool sh_alf_cc_cb_enabled_flag;
+  int sh_alf_cc_cb_aps_id;
+  bool sh_alf_cc_cr_enabled_flag;
+  int sh_alf_cc_cr_aps_id;
+  bool sh_lmcs_used_flag;
+  bool sh_explicit_scaling_list_used_flag;
+  H266RefPicLists ref_pic_lists;
+  bool sh_num_ref_idx_active_override_flag;
+  int sh_num_ref_idx_active_minus1[2];
+  bool sh_cabac_init_flag;
+  bool sh_collocated_from_l0_flag;
+  int sh_collocated_ref_idx;
+  H266PredWeightTable sh_pred_weight_table;
+  int sh_qp_delta;
+  int sh_cb_qp_offset;
+  int sh_cr_qp_offset;
+  int sh_joint_cbcr_qp_offset;
+  bool sh_cu_chroma_qp_offset_enabled_flag;
+  bool sh_sao_luma_used_flag;
+  bool sh_sao_chroma_used_flag;
+  bool sh_deblocking_params_present_flag;
+  bool sh_deblocking_filter_disabled_flag;
+  int sh_luma_beta_offset_div2;
+  int sh_luma_tc_offset_div2;
+  int sh_cb_beta_offset_div2;
+  int sh_cb_tc_offset_div2;
+  int sh_cr_beta_offset_div2;
+  int sh_cr_tc_offset_div2;
+  bool sh_dep_quant_used_flag;
+  bool sh_sign_data_hiding_used_flag;
+  bool sh_ts_residual_coding_disabled_flag;
+  int sh_ts_residual_coding_rice_idx_minus1;
+  bool sh_reverse_last_sig_coeff_flag;
+  int sh_slice_header_extension_length;
+  // Skip possible extension bytes.
+  int sh_entry_offset_len_minus1;
+  std::vector<int> sh_entry_point_offset_minus1;
+
+  // Calculated values
+  int num_ref_idx_active[2];
+  int slice_qp_y;
+  int num_ctus_in_curr_slice;
+
+  // 8.1.1 This only applies to IRAP or GDR picture, and
+  // will be configured by parser depending on the slice
+  // type and whether it is the first picture of a layer
+  // that follows an EOS NAL unit.
+  bool no_output_before_recovery_flag;
+  // 8.1.1 Below two are not parsed from bitstream. They
+  // are knobs provided to decoder to explicitly control
+  // whether we handle CRA and GDR as CLVS start, and
+  absl::optional<bool> handle_cra_as_clvs_start_flag;
+  absl::optional<bool> handle_gdr_as_clvs_start_flag;
+  // Actual used flags by parser.
+  bool cra_as_clvs_start_flag;
+  bool gdr_as_clvs_start_flag;
+
+  bool IsISlice() const;
+  bool IsPSlice() const;
+  bool IsBSlice() const;
+};
+
 // Class to parse an Annex-B H.266 stream.
 class MEDIA_EXPORT H266Parser : public H266NaluParser {
  public:
@@ -546,13 +965,48 @@ class MEDIA_EXPORT H266Parser : public H266NaluParser {
   // the returned |*sps_id| as parameter.
   Result ParseSPS(const H266NALU& nalu, int* sps_id);
 
-  // Return a pointer to VPS with given |*vps_id| or
+  // Parse a PPS NALU and save its data in the parser, returning id
+  // of the parsed structure in |*pps_id|. To get a pointer
+  // to a given PPS structure, use GetPPS(), passing
+  // the returned |*pps_id| as parameter.
+  Result ParsePPS(const H266NALU& nalu, int* pps_id);
+
+  // Parse an APS NALU and save its data in the parser, returning id
+  // of the parsed structure in |*aps_id| and APS type in |*type|. To get a
+  // pointer to a given APS structure, use GetAPS(), passing the returned
+  // |*aps_id| and |*type| as parameter.
+  Result ParseAPS(const H266NALU& nalu, int* aps_id, H266APS::ParamType* type);
+
+  // Parse a picture header(PH) NALU and return the parsed structure
+  // in |*ph|.
+  Result ParsePHNut(const H266NALU& nalu, H266PictureHeader* ph);
+
+  // Slice headers are not used across NALUs by the parser and can be discarded
+  // after current NALU, so the parser does not store them, nor does it manage
+  // their memory. The caller has to provide and manage it instead.
+  // Parse a slice header, returning it in |*shdr|. |nalu| must be set to
+  // the NALU returned from AdvanceToNextNALU() and corresponding to |*shdr|.
+  // |first_picture| indicates if the picture current slice belongs to is the
+  // first picture of a layer in decoding order, or the first picture of a layer
+  // following EOS_NUT.
+  Result ParseSliceHeader(const H266NALU& nalu,
+                          bool first_picture,
+                          const H266PictureHeader* ph,
+                          H266SliceHeader* shdr);
+
+  // Return a pointer to VPS with given |vps_id| or
   // null if not present.
   const H266VPS* GetVPS(int vps_id) const;
 
-  // Return a pointer to SPS with given |*sps_id| or
-  // null if not present.
+  // Return a pointer to SPS with given |sps_id| or null if not present.
   const H266SPS* GetSPS(int sps_id) const;
+
+  // Return a pointer to PPS with given |pps_id| or null if not present.
+  const H266PPS* GetPPS(int pps_id) const;
+
+  // Return a pointer to APS with given |aps_id| and |type| or null if not
+  // present.
+  const H266APS* GetAPS(const H266APS::ParamType& type, int aps_id) const;
 
   static VideoCodecProfile ProfileIDCToVideoCodecProfile(int profile_idc);
 
@@ -588,9 +1042,33 @@ class MEDIA_EXPORT H266Parser : public H266NaluParser {
                          const H266SPS& sps,
                          H266VUIParameters* vui);
 
-  // VPSes/SPSes stored for future reference.
+  Result ParseRefPicLists(const H266SPS& sps,
+                          const H266PPS& pps,
+                          H266RefPicLists* ref_pic_lists);
+
+  Result ParsePredWeightTable(const H266SPS& sps,
+                              const H266PPS& pps,
+                              const H266RefPicLists& ref_pic_lists,
+                              int num_ref_idx_active[2],
+                              H266PredWeightTable* pred_weight_table);
+
+  // Called when picture header structure is in slice header.
+  Result ParsePHInSlice(const H266NALU& nalu, H266PictureHeader* ph);
+
+  // Shared picture header structure parser for PH structure in PH_NUT and slice
+  // header.
+  Result ParsePictureHeaderStructure(const H266NALU& nalu,
+                                     H266PictureHeader* ph);
+
+  // VPSes/SPSes/PPSes stored for future reference.
   base::flat_map<int, std::unique_ptr<H266VPS>> active_vps_;
   base::flat_map<int, std::unique_ptr<H266SPS>> active_sps_;
+  base::flat_map<int, std::unique_ptr<H266PPS>> active_pps_;
+  // APS of same aps_params_type share the same value space of APS ID regardless
+  // of their NALU type or nuh_layer_id.
+  base::flat_map<int, std::unique_ptr<H266APS>> active_alf_aps_;
+  base::flat_map<int, std::unique_ptr<H266APS>> active_lmcs_aps_;
+  base::flat_map<int, std::unique_ptr<H266APS>> active_scaling_list_aps_;
 };
 
 }  // namespace media

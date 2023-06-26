@@ -142,16 +142,25 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
     kSubsequenceFailed,
     // The sequence was explicitly failed as part of a test.
     kFailedForTesting,
+    // A timeout was reached during execution. This might not be fatal, but the
+    // current state can be dumped regardless.
+    kSequenceTimedOut,
     // Update this if values are added to the enumeration.
-    kMaxValue = kFailedForTesting
+    kMaxValue = kSequenceTimedOut
   };
 
   // Specifies how the context for a step is determined.
   enum class ContextMode {
     // Use the initial context for the sequence.
     kInitial,
-    // Search for the element in any context. Currently can only apply to kShown
-    // steps.
+    // Search for the element in any context.
+    //
+    // Note that these events are sent after events for specific contexts, if
+    // you have two steps in succession that are both `StepType::kActivated`
+    // with the second one having `ContextMode::kAny`, then the same activation
+    // could conceivably trigger both steps. Fortunately, this sort of thing
+    // doesn't happen in any of the real-world use cases; if it does it will be
+    // fixed with special case code.
     kAny,
     // Inherits the context from the previous step. Cannot be used on the first
     // step in a sequence.
@@ -184,7 +193,7 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
   using StepEndCallback = base::OnceCallback<void(TrackedElement* element)>;
 
   // Information passed when a sequence fails or is aborted.
-  struct AbortedData {
+  struct COMPONENT_EXPORT(UI_BASE) AbortedData {
     AbortedData();
     ~AbortedData();
     AbortedData(const AbortedData& other);
@@ -476,6 +485,12 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
   TrackedElement* GetNamedElement(const base::StringPiece& name);
   const TrackedElement* GetNamedElement(const base::StringPiece& name) const;
 
+  // Builds aborted data for the current step and the given reason.
+  AbortedData BuildAbortedData(AbortedReason reason) const;
+
+  // Gets a weak pointer to this object.
+  base::WeakPtr<InteractionSequence> AsWeakPtr();
+
  private:
   FRIEND_TEST_ALL_PREFIXES(InteractionSequenceSubsequenceTest, NamedElements);
 
@@ -491,7 +506,7 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
   // Callbacks used only during step transitions to cache certain events.
   void OnTriggerDuringStepTransition(TrackedElement* element);
   void OnElementHiddenDuringStepTransition(TrackedElement* element);
-  void OnElementHiddenWaitingForActivate(TrackedElement* element);
+  void OnElementHiddenWaitingForEvent(TrackedElement* element);
 
   // While we're transitioning steps or staging a subsequence, it's possible for
   // an activation that would trigger the following step to come in. This method
@@ -528,6 +543,7 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
 
   // Returns the next step, or null if none.
   Step* next_step();
+  const Step* next_step() const;
 
   // Returns the context for the current sequence.
   ElementContext context() const;
@@ -551,6 +567,7 @@ class COMPONENT_EXPORT(UI_BASE) InteractionSequence {
   bool started_ = false;
   bool trigger_during_callback_ = false;
   bool processing_step_ = false;
+  bool running_start_callback_ = false;
   std::unique_ptr<Step> current_step_;
   ElementTracker::Subscription next_step_hidden_subscription_;
   std::unique_ptr<Configuration> configuration_;

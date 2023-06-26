@@ -9,6 +9,7 @@
 
 #include "build/build_config.h"
 #include "components/omnibox/browser/buildflags.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -18,7 +19,7 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/jni_android.h"
-#include "components/omnibox/browser/actions/omnibox_pedal_jni_wrapper.h"
+#include "components/omnibox/browser/actions/omnibox_action_factory_android.h"
 #endif
 
 TabSwitchAction::TabSwitchAction(GURL url)
@@ -37,7 +38,9 @@ void TabSwitchAction::Execute(ExecutionContext& context) const {
 
 #if defined(SUPPORT_PEDALS_VECTOR_ICONS)
 const gfx::VectorIcon& TabSwitchAction::GetVectorIcon() const {
-  return omnibox::kSwitchIcon;
+  return OmniboxFieldTrial::IsChromeRefreshActionChipIconsEnabled()
+             ? omnibox::kSwitchCr2023Icon
+             : omnibox::kSwitchIcon;
 }
 #endif
 

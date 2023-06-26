@@ -4,6 +4,8 @@
 
 #include "components/sync/nigori/nigori_key_bag.h"
 
+#include <vector>
+
 #include "components/sync/engine/nigori/key_derivation_params.h"
 #include "components/sync/engine/nigori/nigori.h"
 #include "components/sync/protocol/nigori_specifics.pb.h"

@@ -14,6 +14,12 @@
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/components/dbus/chromebox_for_meetings/fake_cfm_hotline_client.h"
+#include "chromeos/ash/services/chromebox_for_meetings/public/cpp/fake_service_connection.h"
+#include "chromeos/ash/services/chromebox_for_meetings/public/cpp/fake_service_context.h"
+#include "chromeos/ash/services/chromebox_for_meetings/public/cpp/service_connection.h"
+#include "chromeos/ash/services/chromebox_for_meetings/public/mojom/xu_camera.mojom.h"
+#include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -21,12 +27,6 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
-#include "chromeos/ash/components/dbus/chromebox_for_meetings/fake_cfm_hotline_client.h"
-#include "chromeos/ash/services/chromebox_for_meetings/public/cpp/fake_service_connection.h"
-#include "chromeos/ash/services/chromebox_for_meetings/public/cpp/fake_service_context.h"
-#include "chromeos/ash/services/chromebox_for_meetings/public/cpp/service_connection.h"
-#include "chromeos/ash/services/chromebox_for_meetings/public/mojom/xu_camera.mojom.h"
 
 namespace ash::cfm {
 namespace {
@@ -76,11 +76,11 @@ class TestDelegate : public XuCameraService::Delegate {
   }
 };
 
-class XuCameraServiceTest : public ::testing::Test {
+class CfMXuCameraServiceTest : public ::testing::Test {
  public:
-  XuCameraServiceTest() = default;
-  XuCameraServiceTest(const XuCameraServiceTest&) = delete;
-  XuCameraServiceTest& operator=(const XuCameraServiceTest&) = delete;
+  CfMXuCameraServiceTest() = default;
+  CfMXuCameraServiceTest(const CfMXuCameraServiceTest&) = delete;
+  CfMXuCameraServiceTest& operator=(const CfMXuCameraServiceTest&) = delete;
 
   void SetUp() override {
     CfmHotlineClient::InitializeFake();
@@ -139,8 +139,7 @@ class XuCameraServiceTest : public ::testing::Test {
     EXPECT_TRUE(adaptor_remote_.is_connected());
 
     adaptor_remote_->OnBindService(
-        xu_camera_remote_.BindNewPipeAndPassReceiver().PassPipe(),
-        absl::nullopt);
+        xu_camera_remote_.BindNewPipeAndPassReceiver().PassPipe());
     EXPECT_TRUE(xu_camera_remote_.is_connected());
 
     return xu_camera_remote_;
@@ -153,25 +152,25 @@ class XuCameraServiceTest : public ::testing::Test {
       context_receiver_set_;
   mojo::Remote<chromeos::cfm::mojom::CfmServiceAdaptor> adaptor_remote_;
   FakeServiceConnectionImpl fake_service_connection_;
-  base::test::SingleThreadTaskEnvironment task_environment_;
+  content::BrowserTaskEnvironment task_environment_;
   TestDelegate delegate_;
 };
 
 // This test ensures that the XuCameraService is discoverable by its
 // mojom name by sending a signal received by CfmHotlineClient.
-TEST_F(XuCameraServiceTest, XuCameraServiceAvailable) {
+TEST_F(CfMXuCameraServiceTest, XuCameraServiceAvailable) {
   ASSERT_TRUE(GetClient()->FakeEmitSignal(mojom::XuCamera::Name_));
 }
 
 // This test ensures that the XuCameraService correctly registers itself
 // for discovery by the cfm mojom binder daemon and correctly returns a
 // working mojom remote.
-TEST_F(XuCameraServiceTest, GetXuCameraRemote) {
+TEST_F(CfMXuCameraServiceTest, GetXuCameraRemote) {
   ASSERT_TRUE(GetXuCameraRemote().is_connected());
 }
 
 // This test ensure that the XU camera can get unit id
-TEST_F(XuCameraServiceTest, GetXuCameraUnitId) {
+TEST_F(CfMXuCameraServiceTest, GetXuCameraUnitId) {
   base::RunLoop run_loop;
   auto devPath = mojom::WebcamId::NewDevPath(kFakePath);
   GetXuCameraRemote()->GetUnitId(
@@ -186,7 +185,7 @@ TEST_F(XuCameraServiceTest, GetXuCameraUnitId) {
 }
 
 // This test ensure that the XU camera can map control
-TEST_F(XuCameraServiceTest, GetXuCameraMapCtrl) {
+TEST_F(CfMXuCameraServiceTest, GetXuCameraMapCtrl) {
   auto devPath = mojom::WebcamId::NewDevPath(kFakePath);
   auto mapping = mojom::ControlMapping::New(
       /* id= */ 1, /* name= */ kName, /* guid= */ kGuid, /* selector= */ 1,
@@ -205,7 +204,7 @@ TEST_F(XuCameraServiceTest, GetXuCameraMapCtrl) {
 }
 
 // This test ensure that the XU camera can get control given a ctrl query
-TEST_F(XuCameraServiceTest, XuCameraGetCtrlWithDeviceIdCtrlMapping) {
+TEST_F(CfMXuCameraServiceTest, XuCameraGetCtrlWithDeviceIdCtrlMapping) {
   base::RunLoop run_loop;
   auto devId = mojom::WebcamId::NewDeviceId("123");
   auto mapping = mojom::CtrlType::NewMappingCtrl(mojom::ControlMapping::New(
@@ -228,7 +227,7 @@ TEST_F(XuCameraServiceTest, XuCameraGetCtrlWithDeviceIdCtrlMapping) {
 }
 
 // This test ensure that the XU camera can get control given a ctrl query
-TEST_F(XuCameraServiceTest, XuCameraGetCtrlWithDevPathCtrlMapping) {
+TEST_F(CfMXuCameraServiceTest, XuCameraGetCtrlWithDevPathCtrlMapping) {
   base::RunLoop run_loop;
   auto devPath = mojom::WebcamId::NewDevPath(kFakePath);
   auto mapping = mojom::CtrlType::NewMappingCtrl(mojom::ControlMapping::New(
@@ -250,7 +249,7 @@ TEST_F(XuCameraServiceTest, XuCameraGetCtrlWithDevPathCtrlMapping) {
 }
 
 // This test ensure that the XU camera can get control given a ctrl query
-TEST_F(XuCameraServiceTest, XuCameraGetCtrlWithDeviceIdCtrlQuery) {
+TEST_F(CfMXuCameraServiceTest, XuCameraGetCtrlWithDeviceIdCtrlQuery) {
   base::RunLoop run_loop;
   auto devId = mojom::WebcamId::NewDeviceId("123");
   auto ctrlTypeQuery =
@@ -270,7 +269,7 @@ TEST_F(XuCameraServiceTest, XuCameraGetCtrlWithDeviceIdCtrlQuery) {
 }
 
 // This test ensure that the XU camera can get control given a ctrl query
-TEST_F(XuCameraServiceTest, XuCameraGetCtrlWithDevPathCtrlQuery) {
+TEST_F(CfMXuCameraServiceTest, XuCameraGetCtrlWithDevPathCtrlQuery) {
   base::RunLoop run_loop;
   auto devPath = mojom::WebcamId::NewDevPath(kFakePath);
   auto ctrlTypeQuery =
@@ -289,7 +288,7 @@ TEST_F(XuCameraServiceTest, XuCameraGetCtrlWithDevPathCtrlQuery) {
 
 // This test ensure that the XU camera can get control length given a ctrl
 // query
-TEST_F(XuCameraServiceTest, XuCameraGetCtrlLenWithDevPathCtrlQuery) {
+TEST_F(CfMXuCameraServiceTest, XuCameraGetCtrlLenWithDevPathCtrlQuery) {
   base::RunLoop run_loop;
   auto devPath = mojom::WebcamId::NewDevPath(kFakePath);
   auto ctrlTypeQuery =
@@ -307,7 +306,7 @@ TEST_F(XuCameraServiceTest, XuCameraGetCtrlLenWithDevPathCtrlQuery) {
 }
 
 /// This test ensure that the XU camera can get control given a ctrl query
-TEST_F(XuCameraServiceTest, XuCameraSetCtrlWithDeviceIdCtrlMapping) {
+TEST_F(CfMXuCameraServiceTest, XuCameraSetCtrlWithDeviceIdCtrlMapping) {
   base::RunLoop run_loop;
   auto devId = mojom::WebcamId::NewDeviceId("123");
   auto mapping = mojom::CtrlType::NewMappingCtrl(mojom::ControlMapping::New(
@@ -328,7 +327,7 @@ TEST_F(XuCameraServiceTest, XuCameraSetCtrlWithDeviceIdCtrlMapping) {
 }
 
 /// This test ensure that the XU camera can get control given a ctrl query
-TEST_F(XuCameraServiceTest, XuCameraSetCtrlWithDevPathCtrlMapping) {
+TEST_F(CfMXuCameraServiceTest, XuCameraSetCtrlWithDevPathCtrlMapping) {
   base::RunLoop run_loop;
   auto devPath = mojom::WebcamId::NewDevPath(kFakePath);
   auto mapping = mojom::CtrlType::NewMappingCtrl(mojom::ControlMapping::New(
@@ -349,7 +348,7 @@ TEST_F(XuCameraServiceTest, XuCameraSetCtrlWithDevPathCtrlMapping) {
 }
 
 /// This test ensure that the XU camera can get control given a ctrl query
-TEST_F(XuCameraServiceTest, XuCameraSetCtrlWithDeviceIdCtrlQuery) {
+TEST_F(CfMXuCameraServiceTest, XuCameraSetCtrlWithDeviceIdCtrlQuery) {
   base::RunLoop run_loop;
   auto devId = mojom::WebcamId::NewDeviceId("123");
   auto ctrlTypeQuery =
@@ -366,7 +365,7 @@ TEST_F(XuCameraServiceTest, XuCameraSetCtrlWithDeviceIdCtrlQuery) {
 }
 
 /// This test ensure that the XU camera can get control given a ctrl query
-TEST_F(XuCameraServiceTest, XuCameraSetCtrlWithDevPathCtrlQuery) {
+TEST_F(CfMXuCameraServiceTest, XuCameraSetCtrlWithDevPathCtrlQuery) {
   base::RunLoop run_loop;
   auto devPath = mojom::WebcamId::NewDevPath(kFakePath);
   auto ctrlTypeQuery =

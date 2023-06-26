@@ -7,9 +7,9 @@
 #include <CoreText/CoreText.h>
 #include <Foundation/Foundation.h>
 
+#include "base/apple/bridging.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/mac/bridging.h"
 #include "base/mac/foundation_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -30,22 +30,14 @@ void InitializeSkFontMgrForTest() {
     [font_urls addObject:font_url.absoluteURL];
   }
 
-  if (@available(macOS 10.15, *)) {
-    CTFontManagerRegisterFontURLs(
-        base::mac::NSToCFPtrCast(font_urls), kCTFontManagerScopeProcess,
-        /*enabled=*/true, ^bool(CFArrayRef errors, bool done) {
-          if (CFArrayGetCount(errors)) {
-            DLOG(FATAL) << "Failed to activate fonts.";
-          }
-          return true;
-        });
-  } else {
-    if (!CTFontManagerRegisterFontsForURLs(base::mac::NSToCFPtrCast(font_urls),
-                                           kCTFontManagerScopeProcess,
-                                           /*errors=*/nullptr)) {
-      DLOG(FATAL) << "Failed to activate fonts.";
-    }
-  }
+  CTFontManagerRegisterFontURLs(
+      base::apple::NSToCFPtrCast(font_urls), kCTFontManagerScopeProcess,
+      /*enabled=*/true, ^bool(CFArrayRef errors, bool done) {
+        if (CFArrayGetCount(errors)) {
+          DLOG(FATAL) << "Failed to activate fonts.";
+        }
+        return true;
+      });
 }
 
 }  // namespace skia

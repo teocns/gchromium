@@ -7,41 +7,39 @@
 #import <memory>
 
 #import "components/bookmarks/common/bookmark_features.h"
+#import "components/prefs/pref_service.h"
+#import "components/signin/public/base/signin_pref_names.h"
 #import "components/signin/public/identity_manager/account_info.h"
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
-#import "ios/chrome/browser/main/browser.h"
+#import "components/sync/service/sync_service.h"
+#import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_consumer.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 @interface BookmarkPromoController () <SigninPromoViewConsumer,
-                                       IdentityManagerObserverBridgeDelegate> {
-  bool _isIncognito;
-  base::WeakPtr<Browser> _browser;
-  std::unique_ptr<signin::IdentityManagerObserverBridge>
-      _identityManagerObserverBridge;
-}
-
-// Mediator to use for the sign-in promo view displayed in the bookmark view.
-@property(nonatomic, readwrite, strong)
-    SigninPromoViewMediator* signinPromoViewMediator;
+                                       IdentityManagerObserverBridgeDelegate>
 
 @end
 
-@implementation BookmarkPromoController
-
-@synthesize delegate = _delegate;
-@synthesize shouldShowSigninPromo = _shouldShowSigninPromo;
-@synthesize signinPromoViewMediator = _signinPromoViewMediator;
+@implementation BookmarkPromoController {
+  base::WeakPtr<Browser> _browser;
+  std::unique_ptr<signin::IdentityManagerObserverBridge>
+      _identityManagerObserverBridge;
+  // Mediator to use for the sign-in promo view displayed in the bookmark view.
+  SigninPromoViewMediator* _signinPromoViewMediator;
+}
 
 - (instancetype)initWithBrowser:(Browser*)browser
                        delegate:(id<BookmarkPromoControllerDelegate>)delegate
@@ -53,39 +51,29 @@
     _delegate = delegate;
     ChromeBrowserState* browserState =
         browser->GetBrowserState()->GetOriginalChromeBrowserState();
-    // TODO(crbug.com/1426262): Decide whether to show the signin promo in
-    // incognito mode and revisit this code.
-    // Incognito browser can go away before this class is released (once the
-    // last incognito winwdow is closed), this code avoids keeping a pointer to
-    // it.
-    _isIncognito = browserState->IsOffTheRecord();
-    if (!_isIncognito) {
-      _browser = browser->AsWeakPtr();
-      _identityManagerObserverBridge.reset(
-          new signin::IdentityManagerObserverBridge(
-              IdentityManagerFactory::GetForBrowserState(browserState), self));
-      _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
-                initWithBrowser:browser
-          accountManagerService:ChromeAccountManagerServiceFactory::
-                                    GetForBrowserState(browserState)
-                    authService:AuthenticationServiceFactory::
-                                    GetForBrowserState(browserState)
-                    prefService:browserState->GetPrefs()
-                    accessPoint:signin_metrics::AccessPoint::
-                                    ACCESS_POINT_BOOKMARK_MANAGER
-                      presenter:presenter
-             baseViewController:baseViewController];
-      _signinPromoViewMediator.signInOnly = base::FeatureList::IsEnabled(
-          bookmarks::kEnableBookmarksAccountStorage);
-      _signinPromoViewMediator.consumer = self;
-    }
+    _browser = browser->AsWeakPtr();
+    _identityManagerObserverBridge.reset(
+        new signin::IdentityManagerObserverBridge(
+            IdentityManagerFactory::GetForBrowserState(browserState), self));
+    _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
+              initWithBrowser:browser
+        accountManagerService:ChromeAccountManagerServiceFactory::
+                                  GetForBrowserState(browserState)
+                  authService:AuthenticationServiceFactory::GetForBrowserState(
+                                  browserState)
+                  prefService:browserState->GetPrefs()
+                  accessPoint:signin_metrics::AccessPoint::
+                                  ACCESS_POINT_BOOKMARK_MANAGER
+                    presenter:presenter
+           baseViewController:baseViewController];
+    _signinPromoViewMediator.consumer = self;
     [self updateShouldShowSigninPromo];
   }
   return self;
 }
 
 - (void)dealloc {
-  [self shutdown];
+  CHECK(!_browser);
 }
 
 - (void)shutdown {
@@ -96,7 +84,6 @@
 }
 
 - (void)hidePromoCell {
-  DCHECK(!_isIncognito);
   DCHECK(_browser);
   self.shouldShowSigninPromo = NO;
 }
@@ -109,10 +96,6 @@
 }
 
 - (void)updateShouldShowSigninPromo {
-  if (_isIncognito) {
-    self.shouldShowSigninPromo = NO;
-    return;
-  }
   DCHECK(_browser);
   ChromeBrowserState* browserState =
       _browser->GetBrowserState()->GetOriginalChromeBrowserState();
@@ -130,8 +113,24 @@
   signin::IdentityManager* identityManager =
       IdentityManagerFactory::GetForBrowserState(browserState);
   if (!identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
-    // If the user is not signed in, the promo should be visible.
-    self.shouldShowSigninPromo = YES;
+    if (base::FeatureList::IsEnabled(
+            bookmarks::kEnableBookmarksAccountStorage)) {
+      PrefService* prefs = browserState->GetPrefs();
+      const std::string lastSignedInGaiaId =
+          prefs->GetString(prefs::kGoogleServicesLastGaiaId);
+      // If the last signed-in user did not remove data during sign-out, don't
+      // show the signin promo.
+      if (lastSignedInGaiaId.empty()) {
+        self.shouldShowSigninPromo = YES;
+        _signinPromoViewMediator.signInOnly = YES;
+      } else {
+        self.shouldShowSigninPromo = NO;
+      }
+    } else {
+      // If the user is not signed in, the promo should be visible.
+      self.shouldShowSigninPromo = YES;
+      _signinPromoViewMediator.signInOnly = NO;
+    }
     return;
   }
   if (identityManager->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
@@ -139,17 +138,25 @@
     self.shouldShowSigninPromo = NO;
     return;
   }
-  if (!base::FeatureList::IsEnabled(
-          bookmarks::kEnableBookmarksAccountStorage)) {
-    // If the account storage feature is not available, the promo should be
-    // visible to show "Turn on Sync promo".
+  syncer::SyncService* syncService =
+      SyncServiceFactory::GetForBrowserState(browserState);
+  if (!bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(syncService)) {
+    // The user signed in, but not opted into syncing bookmarks - show sync
+    // promo.
     self.shouldShowSigninPromo = YES;
+    _signinPromoViewMediator.signInOnly = NO;
     return;
   }
-  // if the account storage feature is available and the user is signed in only,
-  // the promo should be visible only if the first sync is not finished yet.
-  // This is show the activity indicator.
-  self.shouldShowSigninPromo = [self.delegate isPerformingInitialSync];
+  if ([self.delegate isPerformingInitialSync]) {
+    // The user is opted into syncing bookmarks, but the first sync is not
+    // finished yet - keep the promo visible to show the spinner.
+    self.shouldShowSigninPromo = YES;
+    _signinPromoViewMediator.signInOnly = YES;
+    return;
+  }
+  // The user is opted into syncing bookmarks and the first sync is done - hide
+  // the promo.
+  self.shouldShowSigninPromo = NO;
 }
 
 #pragma mark - IdentityManagerObserverBridgeDelegate

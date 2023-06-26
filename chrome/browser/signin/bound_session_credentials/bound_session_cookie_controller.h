@@ -29,6 +29,11 @@ class BoundSessionCookieController {
  public:
   class Delegate {
    public:
+    // Called when the cookie refresh request results in a persistent error that
+    // can't be fixed by retrying. `BoundSessionCookieController` is expected to
+    // be deleted after this call.
+    virtual void TerminateSession() = 0;
+
     // Called when the cookie tracked in this controller has a change in its
     // expiration date. Cookie deletion is considered as a change in the
     // expiration date to the null time.
@@ -57,6 +62,9 @@ class BoundSessionCookieController {
  protected:
   const GURL url_;
   const std::string cookie_name_;
+  // Reduced by threshold to guarantee cookie will be fresh when cookies are
+  // added to the request, as URL Loader throttle(s) attached to the request may
+  // decide to defer it.
   base::Time cookie_expiration_time_;
   raw_ptr<Delegate> delegate_;
 };

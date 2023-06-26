@@ -358,9 +358,7 @@ void AdminTemplateLaunchTracker::LaunchTemplate(SavedDeskDelegate* delegate,
 
   // Set apps to launch on the current desk.
   auto* desks_controller = DesksController::Get();
-  const int desk_index =
-      desks_controller->GetDeskIndex(desks_controller->active_desk());
-  admin_template->SetDeskIndex(desk_index);
+  admin_template->SetDeskUuid(desks_controller->active_desk()->uuid());
 
   UpdateAdminTemplateActivationIndices(*admin_template);
 
@@ -461,6 +459,16 @@ void AdminTemplateLaunchTracker::LaunchTemplate(SavedDeskDelegate* delegate,
 
   // Finally, launch the apps.
   delegate->LaunchAppsFromSavedDesk(std::move(admin_template));
+}
+
+void AdminTemplateLaunchTracker::FlushPendingUpdate() {
+  if (update_delay_timer_.IsRunning()) {
+    update_delay_timer_.FireNow();
+  }
+}
+
+bool AdminTemplateLaunchTracker::IsActive() const {
+  return !window_observers_.empty();
 }
 
 void AdminTemplateLaunchTracker::OnObserverCreated(

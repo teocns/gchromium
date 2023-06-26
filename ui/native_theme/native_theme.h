@@ -17,7 +17,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/models/menu_separator_types.h"
-#include "ui/color/color_provider_manager.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
@@ -144,10 +144,6 @@ class NATIVE_THEME_EXPORT NativeTheme {
     kMaxValue = kCustom,
   };
 
-  // IMPORTANT!
-  // This enum is reporting in metrics. Do not reorder; add additional values at
-  // the end.
-  //
   // This represents the OS-level high contrast theme. kNone unless the default
   // system color scheme is kPlatformHighContrast.
   enum class PlatformHighContrastColorScheme {
@@ -405,9 +401,8 @@ class NATIVE_THEME_EXPORT NativeTheme {
   // Returns the key corresponding to this native theme object.
   // Use `use_custom_frame` == true when Chromium renders the titlebar.
   // False when the window manager renders the titlebar (currently GTK only).
-  ColorProviderManager::Key GetColorProviderKey(
-      scoped_refptr<ColorProviderManager::ThemeInitializerSupplier>
-          custom_theme,
+  ColorProviderKey GetColorProviderKey(
+      scoped_refptr<ColorProviderKey::ThemeInitializerSupplier> custom_theme,
       bool use_custom_frame = true) const;
 
   // Returns a shared instance of the native theme that should be used for web
@@ -455,7 +450,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
 
   // Returns true when the NativeTheme uses a light-on-dark color scheme. If
   // you're considering using this function to choose between two hard-coded
-  // colors, you probably shouldn't. Instead, use GetSystemColor().
+  // colors, you probably shouldn't. Instead, use ColorProvider::GetColor().
   virtual bool ShouldUseDarkColors() const;
 
   // Returns the user's current page colors.
@@ -494,17 +489,17 @@ class NATIVE_THEME_EXPORT NativeTheme {
   void set_system_colors(const std::map<SystemThemeColor, SkColor>& colors);
   ui::SystemTheme system_theme() const { return system_theme_; }
 
-  // Set the user_color for ColorProviderManager::Key.
+  // Set the user_color for ColorProviderKey.
   void set_user_color(absl::optional<SkColor> user_color) {
     user_color_ = user_color;
   }
   absl::optional<SkColor> user_color() const { return user_color_; }
 
   void set_scheme_variant(
-      absl::optional<ui::ColorProviderManager::SchemeVariant> scheme_variant) {
+      absl::optional<ui::ColorProviderKey::SchemeVariant> scheme_variant) {
     scheme_variant_ = scheme_variant;
   }
-  absl::optional<ui::ColorProviderManager::SchemeVariant> scheme_variant() {
+  absl::optional<ui::ColorProviderKey::SchemeVariant> scheme_variant() const {
     return scheme_variant_;
   }
 
@@ -597,7 +592,7 @@ class NATIVE_THEME_EXPORT NativeTheme {
 
   // System color scheme variant. Used in `ColorProvider::Key` to specify the
   // transforms of `user_color_` which generate colors.
-  absl::optional<ui::ColorProviderManager::SchemeVariant> scheme_variant_;
+  absl::optional<ui::ColorProviderKey::SchemeVariant> scheme_variant_;
 
   bool should_use_dark_colors_ = false;
   const ui::SystemTheme system_theme_;

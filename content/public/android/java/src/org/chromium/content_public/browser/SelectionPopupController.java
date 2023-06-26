@@ -8,8 +8,11 @@ import android.content.Intent;
 import android.view.ActionMode;
 import android.view.textclassifier.TextClassifier;
 
+import androidx.annotation.NonNull;
+
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
+import org.chromium.content_public.browser.selection.SelectionDropdownMenuDelegate;
 import org.chromium.ui.base.WindowAndroid;
 
 /**
@@ -58,17 +61,30 @@ public interface SelectionPopupController {
     }
 
     /**
+     * Set allow using magnifer built using surface control instead of the system-proivded one.
+     */
+    static void setAllowSurfaceControlMagnifier() {
+        SelectionPopupControllerImpl.setAllowSurfaceControlMagnifier();
+    }
+
+    /**
+     * Check if need to disable SurfaceControl during selection.
+     */
+    static boolean needsSurfaceViewDuringSelection() {
+        return !SelectionPopupControllerImpl.isMagnifierWithSurfaceControlSupported();
+    }
+
+    /**
      * Set {@link ActionMode.Callback} used by {@link SelectionPopupController}.
      * @param callback ActionMode.Callback instance.
      */
     void setActionModeCallback(ActionMode.Callback2 callback);
 
     /**
-     * Set {@link ActionMode.Callback} used by {@link SelectionPopupController} when no text is
-     * selected.
-     * @param callback ActionMode.Callback instance.
+     * Sets the {@link AdditionalSelectionMenuItemProvider} used by {@link SelectionPopupController}
+     * when no text is selected.
      */
-    void setNonSelectionActionModeCallback(ActionMode.Callback callback);
+    void setNonSelectionAdditionalMenuItemProvider(AdditionalSelectionMenuItemProvider provider);
 
     /**
      * @return {@link SelectionClient.ResultCallback} instance.
@@ -157,4 +173,9 @@ public interface SelectionPopupController {
      * @param focused If the WebContents currently has focus.
      */
     void updateTextSelectionUI(boolean focused);
+
+    /**
+     * Set the dropdown menu delegate that handles showing a dropdown style text selection menu.
+     */
+    void setDropdownMenuDelegate(@NonNull SelectionDropdownMenuDelegate dropdownMenuDelegate);
 }

@@ -4,10 +4,9 @@
 
 #include "chrome/updater/mac/setup/wake_task.h"
 
-#include <CoreFoundation/CoreFoundation.h>
+#include <Foundation/Foundation.h>
 
 #include "base/files/file_path.h"
-#include "base/mac/foundation_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/strings/strcat.h"
 #include "base/strings/sys_string_conversions.h"
@@ -17,6 +16,10 @@
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/util/util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace updater {
 
@@ -44,8 +47,7 @@ TEST(WakeTask, NotModified) {
         ],
         @LAUNCH_JOBKEY_STARTINTERVAL : @3600,
         @LAUNCH_JOBKEY_ABANDONPROCESSGROUP : @YES,
-        @LAUNCH_JOBKEY_LIMITLOADTOSESSIONTYPE : @"System",
-        @"AssociatedBundleIdentifiers" : @MAC_BUNDLE_IDENTIFIER_STRING
+        @LAUNCH_JOBKEY_LIMITLOADTOSESSIONTYPE : @"System"
       };
       break;
     case UpdaterScope::kUser:
@@ -64,14 +66,12 @@ TEST(WakeTask, NotModified) {
         ],
         @LAUNCH_JOBKEY_STARTINTERVAL : @3600,
         @LAUNCH_JOBKEY_ABANDONPROCESSGROUP : @YES,
-        @LAUNCH_JOBKEY_LIMITLOADTOSESSIONTYPE : @"Aqua",
-        @"AssociatedBundleIdentifiers" : @MAC_BUNDLE_IDENTIFIER_STRING
+        @LAUNCH_JOBKEY_LIMITLOADTOSESSIONTYPE : @"Aqua"
       };
       break;
   }
-  EXPECT_TRUE([expected
-      isEqualToDictionary:base::mac::CFToNSCast(
-                              *CreateWakeLaunchdPlist(GetTestScope()))]);
+  EXPECT_TRUE(
+      [expected isEqualToDictionary:CreateWakeLaunchdPlist(GetTestScope())]);
 }
 
 }  // namespace updater

@@ -244,14 +244,17 @@ void SetFlags(IsolateHolder::ScriptMode mode,
                          "--no-compact-code-space-with-stack");
   SetV8FlagsIfOverridden(features::kV8CompactWithStack, "--compact-with-stack",
                          "--no-compact-with-stack");
-  SetV8FlagsIfOverridden(features::kV8CrashOnEvacuationFailure,
-                         "--crash-on-aborted-evacuation",
-                         "--no-crash-on-aborted-evacuation");
   SetV8FlagsIfOverridden(features::kV8OptimizeJavascript, "--opt", "--no-opt");
   SetV8FlagsIfOverridden(features::kV8FlushBytecode, "--flush-bytecode",
                          "--no-flush-bytecode");
   SetV8FlagsIfOverridden(features::kV8FlushBaselineCode,
                          "--flush-baseline-code", "--no-flush-baseline-code");
+  SetV8FlagsIfOverridden(features::kV8FlushCodeBasedOnTabVisibility,
+                         "--flush-code-based-on-tab-visibility",
+                         "--no-flush-code-based-on-tab-visibility");
+  SetV8FlagsIfOverridden(features::kV8FlushCodeBasedOnTime,
+                         "--flush-code-based-on-time",
+                         "--no-flush-code-based-on-time");
   SetV8FlagsIfOverridden(features::kV8OffThreadFinalization,
                          "--finalize-streaming-on-background",
                          "--no-finalize-streaming-on-background");
@@ -261,6 +264,9 @@ void SetFlags(IsolateHolder::ScriptMode mode,
         static_cast<int>(
             features::kV8MemoryReducerStartDelay.Get().InMilliseconds()));
   }
+  SetV8FlagsIfOverridden(features::kV8ConcurrentMarkingHighPriorityThreads,
+                         "--concurrent-marking-high-priority-threads",
+                         "--no-concurrent-marking-high-priority-threads");
   SetV8FlagsIfOverridden(features::kV8LazyFeedbackAllocation,
                          "--lazy-feedback-allocation",
                          "--no-lazy-feedback-allocation");
@@ -289,6 +295,8 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kV8Sparkplug, "--sparkplug",
                          "--no-sparkplug");
   SetV8FlagsIfOverridden(features::kV8Turbofan, "--turbofan", "--no-turbofan");
+  SetV8FlagsIfOverridden(features::kV8Turboshaft, "--turboshaft",
+                         "--no-turboshaft");
   SetV8FlagsIfOverridden(features::kV8ConcurrentSparkplug,
                          "--concurrent-sparkplug", "--no-concurrent-sparkplug");
   SetV8FlagsIfOverridden(features::kV8SparkplugNeedsShortBuiltinCalls,
@@ -320,6 +328,12 @@ void SetFlags(IsolateHolder::ScriptMode mode,
     }
   }
 
+  if (base::FeatureList::IsEnabled(features::kV8FlushCodeBasedOnTime)) {
+    if (int old_time = features::kV8FlushCodeOldTime.Get()) {
+      SetV8FlagsFormatted("--bytecode-old-time=%i", old_time);
+    }
+  }
+
   // Make sure aliases of kV8SlowHistograms only enable the feature to
   // avoid contradicting settings between multiple finch experiments.
   bool any_slow_histograms_alias =
@@ -335,6 +349,10 @@ void SetFlags(IsolateHolder::ScriptMode mode,
     SetV8FlagsIfOverridden(features::kV8SlowHistograms, "--slow-histograms",
                            "--no-slow-histograms");
   }
+
+  SetV8FlagsIfOverridden(features::kV8IgnitionElideRedundantTdzChecks,
+                         "--ignition-elide-redundant-tdz-checks",
+                         "--no-ignition-elide-redundant-tdz-checks");
 
   // JavaScript language features.
   SetV8FlagsIfOverridden(features::kJavaScriptSymbolAsWeakMapKey,
@@ -371,6 +389,10 @@ void SetFlags(IsolateHolder::ScriptMode mode,
 
   SetV8FlagsIfOverridden(features::kJavaScriptCompileHintsMagic,
                          "--compile-hints-magic", "--no-compile-hints-magic");
+
+  SetV8FlagsIfOverridden(features::kJavaScriptIteratorHelpers,
+                         "--harmony-iterator-helpers",
+                         "--no-harmony-iterator-helpers");
 
   // WebAssembly features.
 

@@ -16,7 +16,7 @@
 #include "components/grit/download_internals_resources_map.h"
 #include "ios/chrome/browser/download/background_service/background_download_service_factory.h"
 #include "ios/chrome/browser/shared/model/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/url/chrome_url_constants.h"
+#include "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #include "ios/web/public/webui/web_ui_ios.h"
 #include "ios/web/public/webui/web_ui_ios_data_source.h"
 #include "ios/web/public/webui/web_ui_ios_message_handler.h"
@@ -163,10 +163,8 @@ DownloadInternalsUI::DownloadInternalsUI(web::WebUIIOS* web_ui,
   web::WebUIIOSDataSource* html_source =
       web::WebUIIOSDataSource::Create(kChromeUIDownloadInternalsHost);
   html_source->UseStringsJs();
-  for (size_t i = 0; i < kDownloadInternalsResourcesSize; ++i) {
-    html_source->AddResourcePath(kDownloadInternalsResources[i].path,
-                                 kDownloadInternalsResources[i].id);
-  }
+  html_source->AddResourcePaths(base::make_span(
+      kDownloadInternalsResources, kDownloadInternalsResourcesSize));
   html_source->SetDefaultResource(
       IDR_DOWNLOAD_INTERNALS_DOWNLOAD_INTERNALS_HTML);
   web::WebUIIOSDataSource::Add(ChromeBrowserState::FromWebUIIOS(web_ui),

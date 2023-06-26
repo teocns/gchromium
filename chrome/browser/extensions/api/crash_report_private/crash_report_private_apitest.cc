@@ -289,7 +289,7 @@ IN_PROC_BROWSER_TEST_F(CrashReportPrivateApiTest, CalledFromWebContentsInTab) {
   // Run the script in the |web_content| that has loaded |extension_| instead of
   // |ExecuteScriptInBackgroundPage| so
   // |chrome::FindBrowserWithWebContents(web_contents)| is not |nullptr|.
-  EXPECT_EQ(true, ExecuteScript(web_content, kTestScript));
+  EXPECT_EQ(true, ExecJs(web_content, kTestScript));
 
   auto report = crash_endpoint_->WaitForReport();
   EXPECT_THAT(
@@ -327,7 +327,7 @@ IN_PROC_BROWSER_TEST_P(CrashReportPrivateCalledFromSwaTest,
   ASSERT_TRUE(embedded_test_server()->Started());
   // Create and launch a test web app, opens in an app window.
   GURL start_url = embedded_test_server()->GetURL("/test_app.html");
-  auto web_app_info = std::make_unique<WebAppInstallInfo>();
+  auto web_app_info = std::make_unique<web_app::WebAppInstallInfo>();
   web_app_info->start_url = start_url;
   web_app::AppId app_id =
       web_app::test::InstallWebApp(profile(), std::move(web_app_info));
@@ -347,7 +347,7 @@ IN_PROC_BROWSER_TEST_P(CrashReportPrivateCalledFromSwaTest,
       },
       () => window.domAutomationController.send(""));
   )";
-  EXPECT_EQ(true, ExecuteScript(web_content, kTestScript));
+  EXPECT_EQ(true, ExecJs(web_content, kTestScript));
 
   auto report = endpoint.WaitForReport();
 
@@ -384,7 +384,7 @@ IN_PROC_BROWSER_TEST_P(CrashReportPrivateCalledFromSwaTest,
       },
       () => window.domAutomationController.send(""));
   )";
-  EXPECT_EQ(true, ExecuteScript(web_content, kTestScript));
+  EXPECT_EQ(true, ExecJs(web_content, kTestScript));
 
   auto report = endpoint.WaitForReport();
 

@@ -12,10 +12,14 @@
 #include "base/metrics/histogram_functions.h"
 #include "components/metrics/metrics_switches.h"
 #include "components/sync/base/model_type.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/sync/driver/sync_service_utils.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_service_utils.h"
 #include "components/unified_consent/url_keyed_data_collection_consent_helper.h"
 #include "google_apis/gaia/google_service_auth_error.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/components/kiosk/kiosk_utils.h"  // nogncheck
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 using unified_consent::UrlKeyedDataCollectionConsentHelper;
 
@@ -23,7 +27,15 @@ namespace ukm {
 namespace {
 
 bool CanUploadUkmForType(syncer::SyncService* sync_service,
-                         syncer::ModelType model_type) {
+                         syncer::ModelType model_type,
+                         bool msbb_consent) {
+#if BUILDFLAG(IS_CHROMEOS)
+  // Enable uploading of UKM for Kiosk only if MSBB consent is set.
+  if (chromeos::IsKioskSession()) {
+    return msbb_consent;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   switch (GetUploadToGoogleState(sync_service, model_type)) {
     case syncer::UploadState::NOT_ACTIVE:
       return false;
@@ -39,7 +51,7 @@ bool CanUploadUkmForType(syncer::SyncService* sync_service,
 
 BASE_FEATURE(kAppMetricsOnlyRelyOnAppSync,
              "AppMetricsOnlyRelyOnAppSync",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 UkmConsentStateObserver::UkmConsentStateObserver() = default;
 
@@ -72,23 +84,35 @@ UkmConsentStateObserver::ProfileState UkmConsentStateObserver::GetProfileState(
   const bool msbb_consent =
       consent_helper->IsEnabled() || metrics::IsMsbbSettingForcedOnForUkm();
 
-  if (msbb_consent)
+  if (msbb_consent) {
     state.SetConsentType(MSBB);
+  }
 
   if (msbb_consent &&
-      CanUploadUkmForType(sync_service, syncer::ModelType::EXTENSIONS)) {
+      CanUploadUkmForType(sync_service, syncer::ModelType::EXTENSIONS,
+                          msbb_consent)) {
     state.SetConsentType(EXTENSIONS);
   }
 
-  if ((msbb_consent ||
-       base::FeatureList::IsEnabled(kAppMetricsOnlyRelyOnAppSync)) &&
-      CanUploadUkmForType(sync_service, syncer::ModelType::APPS)) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // ChromeOS allows for AppSync to be enabled without MSBB consent.
+  const bool msbb_status = msbb_consent || base::FeatureList::IsEnabled(
+                                               kAppMetricsOnlyRelyOnAppSync);
+  const bool app_sync_consent =
+      CanUploadUkmForType(sync_service, syncer::ModelType::APPS,
+                          msbb_consent) ||
+      // Demo mode is a special managed guest session that doesn't support
+      // AppKM. To support AppKM an exception needs to be made within UKM.
+      IsDeviceInDemoMode();
+
+  if (msbb_status && app_sync_consent) {
     state.SetConsentType(APPS);
   }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (base::FeatureList::IsEnabled(kAppMetricsOnlyRelyOnAppSync) &&
-      IsDeviceInDemoMode()) {
+#else
+  // This separation isn't actually needed for non ChromeOs devices. But for
+  // clarity it is added.
+  if (msbb_consent && CanUploadUkmForType(sync_service, syncer::ModelType::APPS,
+                                          msbb_consent)) {
     state.SetConsentType(APPS);
   }
 #endif

@@ -10,20 +10,18 @@
 
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
+#include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/form_forest.h"
 #include "components/autofill/core/browser/autofill_driver.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace autofill {
-
-class ContentAutofillDriver;
 
 // ContentAutofillRouter routes events between ContentAutofillDriver objects in
 // order to handle frame-transcending forms.
@@ -233,14 +231,12 @@ class ContentAutofillRouter {
       FormData form,
       const FormFieldData& field,
       const gfx::RectF& bounding_box,
-      AutoselectFirstSuggestion autoselect_first_suggestion,
-      FormElementWasClicked form_element_was_clicked,
+      AutofillSuggestionTriggerSource trigger_source,
       void (*callback)(ContentAutofillDriver* target,
                        const FormData& form,
                        const FormFieldData& field,
                        const gfx::RectF& bounding_box,
-                       AutoselectFirstSuggestion autoselect_first_suggestion,
-                       FormElementWasClicked form_element_was_clicked));
+                       AutofillSuggestionTriggerSource trigger_source));
   void HidePopup(ContentAutofillDriver* source,
                  void (*callback)(ContentAutofillDriver* target));
   void FocusNoLongerOnForm(ContentAutofillDriver* source,
@@ -299,6 +295,12 @@ class ContentAutofillRouter {
       void (*callback)(ContentAutofillDriver* target,
                        mojom::RendererFormDataAction action,
                        const FormData& form));
+  void UndoAutofill(
+      ContentAutofillDriver* source,
+      const FormData& data,
+      const url::Origin& triggered_origin,
+      const base::flat_map<FieldGlobalId, ServerFieldType>& field_type_map,
+      void (*callback)(ContentAutofillDriver* target, const FormData& form));
   void SendAutofillTypePredictionsToRenderer(
       ContentAutofillDriver* source,
       const std::vector<FormDataPredictions>& type_predictions,
@@ -322,6 +324,13 @@ class ContentAutofillRouter {
   void RendererShouldClearPreviewedForm(
       ContentAutofillDriver* source,
       void (*callback)(ContentAutofillDriver* target));
+  void RendererShouldTriggerSuggestions(
+      ContentAutofillDriver* source,
+      const FieldGlobalId& field,
+      AutofillSuggestionTriggerSource trigger_source,
+      void (*callback)(ContentAutofillDriver* target,
+                       const FieldRendererId& field,
+                       AutofillSuggestionTriggerSource trigger_source));
   void RendererShouldFillFieldWithValue(
       ContentAutofillDriver* source,
       const FieldGlobalId& field,
@@ -348,31 +357,24 @@ class ContentAutofillRouter {
   friend class ContentAutofillRouterTestApi;
 
   // Returns the driver of |frame| stored in |form_forest_|.
+  // Does not invalidate any forms in the FormForest.
   ContentAutofillDriver* DriverOfFrame(LocalFrameToken frame);
 
-  // Calls ContentAutofillDriver::TriggerReparse() for all drivers in
+  // Calls ContentAutofillDriver::TriggerFormExtraction() for all drivers in
   // |form_forest_| except for |exception|.
-  void TriggerReparseExcept(ContentAutofillDriver* exception);
+  void TriggerFormExtractionExcept(ContentAutofillDriver* exception);
 
   // Update the last queried and source and do cleanup work.
   void SetLastQueriedSource(ContentAutofillDriver* source);
   void SetLastQueriedTarget(ContentAutofillDriver* target);
-
-  // The URL of a main frame managed by the ContentAutofillRouter.
-  // TODO(crbug.com/1240247): Remove.
-  std::string MainUrlForDebugging() const;
-
-  // The frame managed by the ContentAutofillRouter that was last passed to
-  // an event.
-  // TODO(crbug.com/1240247): Remove.
-  content::GlobalRenderFrameHostId some_rfh_for_debugging_;
 
   // The forest of forms. See its documentation for the usage protocol.
   internal::FormForest form_forest_;
 
   // The driver that triggered the last AskForValuesToFill() call.
   // Update with SetLastQueriedSource().
-  raw_ptr<ContentAutofillDriver> last_queried_source_ = nullptr;
+  raw_ptr<ContentAutofillDriver, DanglingUntriaged> last_queried_source_ =
+      nullptr;
   // The driver to which the last AskForValuesToFill() call was routed.
   // Update with SetLastQueriedTarget().
   raw_ptr<ContentAutofillDriver> last_queried_target_ = nullptr;

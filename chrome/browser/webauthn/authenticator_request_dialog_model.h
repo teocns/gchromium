@@ -17,6 +17,7 @@
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/strings/string_piece.h"
+#include "base/timer/timer.h"
 #include "base/types/strong_alias.h"
 #include "build/build_config.h"
 #include "chrome/browser/webauthn/authenticator_reference.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/webauthn/observable_authenticator_list.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/global_routing_id.h"
+#include "device/fido/cable/v2_constants.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_transport_protocol.h"
@@ -109,6 +111,9 @@ class AuthenticatorRequestDialogModel {
     kCableActivate,
     kAndroidAccessory,
     kCableV2QRCode,
+    kCableV2Connecting,
+    kCableV2Connected,
+    kCableV2Error,
 
     // Authenticator Client PIN.
     kClientPinChange,
@@ -182,16 +187,18 @@ class AuthenticatorRequestDialogModel {
     using Transport =
         base::StrongAlias<class TransportTag, AuthenticatorTransport>;
     using WindowsAPI = base::StrongAlias<class WindowsAPITag, absl::monostate>;
+    using ICloudKeychain =
+        base::StrongAlias<class iCloudKeychainTag, absl::monostate>;
     using Phone = base::StrongAlias<class PhoneTag, std::string>;
     using AddPhone = base::StrongAlias<class AddPhoneTag, absl::monostate>;
-    using Type = absl::variant<Transport, WindowsAPI, Phone, AddPhone>;
+    using Type =
+        absl::variant<Transport, WindowsAPI, Phone, AddPhone, ICloudKeychain>;
 
     Mechanism(Type type,
               std::u16string name,
               std::u16string short_name,
               const gfx::VectorIcon& icon,
-              base::RepeatingClosure callback,
-              bool is_priority);
+              base::RepeatingClosure callback);
     ~Mechanism();
     Mechanism(Mechanism&&);
     Mechanism(const Mechanism&) = delete;
@@ -202,16 +209,20 @@ class AuthenticatorRequestDialogModel {
     const std::u16string short_name;
     const raw_ref<const gfx::VectorIcon> icon;
     const base::RepeatingClosure callback;
-    // priority is true if this mechanism should be activated immediately.
-    // Only a single Mechanism in a list should have priority.
-    const bool priority;
   };
 
   // PairedPhone represents a paired caBLEv2 device.
   struct PairedPhone {
+    // Indicates the source of the pairing information.
+    enum class PairingSource {
+      kQR,
+      kSyncDeviceInfo,
+    };
+
     PairedPhone() = delete;
     PairedPhone(const PairedPhone&);
     PairedPhone(
+        PairingSource paired_source,
         const std::string& name,
         size_t contact_id,
         const std::array<uint8_t, device::kP256X962Length> public_key_x962);
@@ -221,6 +232,10 @@ class AuthenticatorRequestDialogModel {
 
     static bool CompareByName(const PairedPhone& a, const PairedPhone& b);
 
+    // pairing_source indicates the source of this pairing. Pairings from sync
+    // device info also sync their passkey metadata to Chrome, so they should be
+    // the ones dispatched to when preselecting one such credential.
+    PairingSource pairing_source;
     // name is the human-friendly name of the phone. It may be unreasonably
     // long, however, and should be elided to fit within UIs.
     std::string name;
@@ -318,15 +333,21 @@ class AuthenticatorRequestDialogModel {
   // Valid action when at step: kNotStarted.
   void StartGuidedFlowForMostLikelyTransportOrShowMechanismSelection();
 
-  // Hides the modal Chrome UI dialog and shows the native Windows WebAuthn
-  // UI instead.
-  void HideDialogAndDispatchToNativeWindowsApi();
-
-  // Proceeds straight to the platform authenticator prompt.
-  void HideDialogAndDispatchToPlatformAuthenticator();
+  // Proceeds straight to the platform authenticator prompt. If `type` is
+  // `nullopt` then it actives the default platform authenticator. Otherwise it
+  // actives the platform authenticator of the given type.
+  void HideDialogAndDispatchToPlatformAuthenticator(
+      absl::optional<device::AuthenticatorType> type = absl::nullopt);
 
   // Called when an attempt to contact a phone failed.
   void OnPhoneContactFailed(const std::string& name);
+
+  // Called when some caBLE event (e.g. receiving a BLE message, connecting to
+  // the tunnel server, etc) happens.
+  void OnCableEvent(device::cablev2::Event event);
+
+  // Called when `cable_connecting_sheet_timer_` completes.
+  void OnCableConnectingTimerComplete();
 
   // StartPhonePairing triggers the display of a QR code for pairing a new
   // phone.
@@ -454,6 +475,10 @@ class AuthenticatorRequestDialogModel {
   // Returns true if the event was handled.
   bool OnWinUserCancelled();
 
+  // To be called when a hybrid connection fails. Returns true if the event
+  // was handled.
+  bool OnHybridTransportError();
+
   // To be called when the Bluetooth adapter powered state changes.
   void OnBluetoothPoweredStateChanged(bool powered);
 
@@ -481,6 +506,9 @@ class AuthenticatorRequestDialogModel {
   // disallows an attestation permission request.
   void OnAttestationPermissionResponse(bool attestation_permission_granted);
 
+  // Adds or removes an authenticator to the list of known authenticators. The
+  // first authenticator added with transport `kInternal` (or without a
+  // transport) is considered to be the default platform authenticator.
   void AddAuthenticator(const device::FidoAuthenticator& authenticator);
   void RemoveAuthenticator(base::StringPiece authenticator_id);
 
@@ -668,6 +696,12 @@ class AuthenticatorRequestDialogModel {
   // |HideDialogAndDispatchToNativeWindowsApi|.
   void StartWinNativeApi(size_t mechanism_index);
 
+  void StartICloudKeychain(size_t mechanism_index);
+
+  // Contacts the "priority" paired phone from sync. At least one sync phone
+  // must be available to call this.
+  void ContactPrioritySyncedPhone();
+
   // Contacts a paired phone. The phone is specified by name.
   void ContactPhone(const std::string& name, size_t mechanism_index);
   void ContactPhoneAfterOffTheRecordInterstitial(std::string name);
@@ -676,9 +710,12 @@ class AuthenticatorRequestDialogModel {
   void StartConditionalMediationRequest();
 
   void DispatchRequestAsync(AuthenticatorReference* authenticator);
-  void DispatchRequestAsyncInternal(const std::string& authenticator_id);
 
   void ContactNextPhoneByName(const std::string& name);
+
+  // Returns a phone that has been paired through Chrome Sync, or absl::nullopt
+  // if there isn't one.
+  absl::optional<PairedPhone> GetPrioritySyncedPhone();
 
   // PopulateMechanisms fills in |mechanisms_|.
   void PopulateMechanisms();
@@ -788,6 +825,21 @@ class AuthenticatorRequestDialogModel {
   // contact_phone_callback can be run with a |PairedPhone::contact_id| in order
   // to contact the indicated phone.
   base::RepeatingCallback<void(size_t)> contact_phone_callback_;
+
+  // cable_device_ready_ is true if a CTAP-level request has been sent to a
+  // caBLE device. At this point we assume that any transport errors are
+  // cancellations on the device, not networking errors.
+  bool cable_device_ready_ = false;
+
+  // cable_connecting_sheet_timer_ is started when we start displaying
+  // the "connecting..." sheet for a caBLE connection. To avoid flashing the UI,
+  // the sheet won't be automatically replaced until it completes.
+  base::OneShotTimer cable_connecting_sheet_timer_;
+
+  // cable_connecting_ready_to_advance_ is set to true if we are ready to
+  // advance the "connecting" sheet but are waiting for
+  // `cable_connecting_sheet_timer_` to complete.
+  bool cable_connecting_ready_to_advance_ = false;
 
   absl::optional<std::string> cable_qr_string_;
 

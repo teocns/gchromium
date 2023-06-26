@@ -14,6 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/version.h"
 #include "chrome/updater/enum_traits.h"
+#include "chrome/updater/util/util.h"
 #include "components/update_client/update_client.h"
 
 namespace updater {
@@ -56,7 +57,7 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
     // concurrently.
     kUpdateInProgress = 1,
 
-    // Not used. TODO(crbug.com/1014591).
+    // Not used. TODO(crbug.com/1290331).
     kUpdateCanceled = 2,
 
     // The function failed because of a throttling policy such as load shedding.
@@ -352,11 +353,6 @@ struct EnumTraits<UpdateService::ErrorCategory> {
   static constexpr ErrorCategory first_elem = ErrorCategory::kNone;
   static constexpr ErrorCategory last_elem = ErrorCategory::kUpdateCheck;
 };
-
-inline std::ostream& operator<<(std::ostream& os,
-                                const UpdateService::Result& result) {
-  return os << static_cast<int>(result);
-}
 
 std::ostream& operator<<(std::ostream& os,
                          const UpdateService::UpdateState& update_state);

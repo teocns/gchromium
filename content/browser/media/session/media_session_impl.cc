@@ -24,7 +24,6 @@
 #include "content/browser/renderer_host/back_forward_cache_disable.h"
 #include "content/browser/renderer_host/back_forward_cache_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/media/constants.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/navigation_handle.h"
@@ -37,6 +36,7 @@
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "services/media_session/public/cpp/media_image_manager.h"
 #include "services/media_session/public/mojom/audio_focus.mojom.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "ui/gfx/favicon_size.h"
@@ -48,7 +48,6 @@
 namespace content {
 
 using blink::mojom::MediaSessionPlaybackState;
-using MediaSessionUserAction = MediaSessionUmaHelper::MediaSessionUserAction;
 using media_session::mojom::MediaAudioVideoState;
 using media_session::mojom::MediaPlaybackState;
 using media_session::mojom::MediaSessionImageType;
@@ -112,54 +111,6 @@ size_t ComputeFrameDepth(RenderFrameHost* rfh,
   }
   (*map_rfh_to_depth)[rfh] = depth;
   return depth;
-}
-
-MediaSessionUserAction MediaSessionActionToUserAction(
-    media_session::mojom::MediaSessionAction action) {
-  switch (action) {
-    case media_session::mojom::MediaSessionAction::kPlay:
-      return MediaSessionUserAction::kPlay;
-    case media_session::mojom::MediaSessionAction::kPause:
-      return MediaSessionUserAction::kPause;
-    case media_session::mojom::MediaSessionAction::kPreviousTrack:
-      return MediaSessionUserAction::kPreviousTrack;
-    case media_session::mojom::MediaSessionAction::kNextTrack:
-      return MediaSessionUserAction::kNextTrack;
-    case media_session::mojom::MediaSessionAction::kSeekBackward:
-      return MediaSessionUserAction::kSeekBackward;
-    case media_session::mojom::MediaSessionAction::kSeekForward:
-      return MediaSessionUserAction::kSeekForward;
-    case media_session::mojom::MediaSessionAction::kSkipAd:
-      return MediaSessionUserAction::kSkipAd;
-    case media_session::mojom::MediaSessionAction::kStop:
-      return MediaSessionUserAction::kStop;
-    case media_session::mojom::MediaSessionAction::kSeekTo:
-      return MediaSessionUserAction::kSeekTo;
-    case media_session::mojom::MediaSessionAction::kScrubTo:
-      return MediaSessionUserAction::kScrubTo;
-    case media_session::mojom::MediaSessionAction::kEnterPictureInPicture:
-      return MediaSessionUserAction::kEnterPictureInPicture;
-    case media_session::mojom::MediaSessionAction::kExitPictureInPicture:
-      return MediaSessionUserAction::kExitPictureInPicture;
-    case media_session::mojom::MediaSessionAction::kSwitchAudioDevice:
-      return MediaSessionUserAction::kSwitchAudioDevice;
-    case media_session::mojom::MediaSessionAction::kToggleMicrophone:
-      return MediaSessionUserAction::kToggleMicrophone;
-    case media_session::mojom::MediaSessionAction::kToggleCamera:
-      return MediaSessionUserAction::kToggleCamera;
-    case media_session::mojom::MediaSessionAction::kHangUp:
-      return MediaSessionUserAction::kHangUp;
-    case media_session::mojom::MediaSessionAction::kRaise:
-      return MediaSessionUserAction::kRaise;
-    case media_session::mojom::MediaSessionAction::kSetMute:
-      return MediaSessionUserAction::kSetMute;
-    case media_session::mojom::MediaSessionAction::kPreviousSlide:
-      return MediaSessionUserAction::kPreviousSlide;
-    case media_session::mojom::MediaSessionAction::kNextSlide:
-      return MediaSessionUserAction::kNextSlide;
-  }
-  NOTREACHED();
-  return MediaSessionUserAction::kPlay;
 }
 
 // If the string is not empty then push it to the back of a vector.
@@ -435,12 +386,7 @@ void MediaSessionImpl::RenderFrameHostStateChanged(
       if (player.observer->render_frame_host() != host)
         continue;
       hidden_players_.erase(player);
-
-      // We directly call `AddPlayerInternal()` to avoid the
-      // `CanRequestSystemAudioFocus()` check, since we can add the players
-      // back regardless.
-      AddPlayerInternal(player.observer, player.player_id);
-
+      AddPlayer(player.observer, player.player_id);
       added_players = true;
     }
 
@@ -455,15 +401,6 @@ void MediaSessionImpl::RenderFrameHostStateChanged(
 
 bool MediaSessionImpl::AddPlayer(MediaSessionPlayerObserver* observer,
                                  int player_id) {
-  if (!CanRequestSystemAudioFocus()) {
-    return false;
-  }
-
-  return AddPlayerInternal(observer, player_id);
-}
-
-bool MediaSessionImpl::AddPlayerInternal(MediaSessionPlayerObserver* observer,
-                                         int player_id) {
   media::MediaContentType media_content_type = observer->GetMediaContentType();
 
   if (media_content_type == media::MediaContentType::OneShot)
@@ -676,15 +613,11 @@ void MediaSessionImpl::Resume(SuspendType suspend_type) {
       DidReceiveAction(media_session::mojom::MediaSessionAction::kPlay);
       return;
     }
-
-    MediaSessionUmaHelper::RecordMediaSessionUserAction(
-        MediaSessionUmaHelper::MediaSessionUserAction::kPlayDefault, focused_);
   }
 
   // When the resume requests comes from another source than system, audio focus
   // must be requested.
-  if (suspend_type != SuspendType::kSystem &&
-      CanRequestSystemAudioFocus(suspend_type)) {
+  if (suspend_type != SuspendType::kSystem) {
     // Request audio focus again in case we lost it because another app started
     // playing while the playback was paused. If the audio focus request is
     // delayed we will resume the player when the request completes.
@@ -713,9 +646,6 @@ void MediaSessionImpl::Suspend(SuspendType suspend_type) {
       DidReceiveAction(media_session::mojom::MediaSessionAction::kPause);
       return;
     }
-
-    MediaSessionUmaHelper::RecordMediaSessionUserAction(
-        MediaSessionUserAction::kPauseDefault, focused_);
   }
 
   OnSuspendInternal(suspend_type, State::SUSPENDED);
@@ -731,10 +661,6 @@ void MediaSessionImpl::Stop(SuspendType suspend_type) {
     // notify the site but continue stopping the media session.
     if (ShouldRouteAction(media_session::mojom::MediaSessionAction::kStop)) {
       DidReceiveAction(media_session::mojom::MediaSessionAction::kStop);
-    } else {
-      MediaSessionUmaHelper::RecordMediaSessionUserAction(
-          MediaSessionUmaHelper::MediaSessionUserAction::kStopDefault,
-          focused_);
     }
   }
 
@@ -918,7 +844,6 @@ void MediaSessionImpl::OnImageDownloadComplete(
 }
 
 void MediaSessionImpl::OnSystemAudioFocusRequested(bool result) {
-  uma_helper_.RecordRequestAudioFocusResult(result);
   if (result)
     StopDucking();
 }
@@ -1255,10 +1180,15 @@ void MediaSessionImpl::ScrubTo(base::TimeDelta seek_time) {
 }
 
 void MediaSessionImpl::EnterPictureInPicture() {
-  if (ShouldRouteAction(
+  if (base::FeatureList::IsEnabled(
+          blink::features::kMediaSessionEnterPictureInPicture) &&
+      ShouldRouteAction(
           media_session::mojom::MediaSessionAction::kEnterPictureInPicture)) {
     DidReceiveAction(
-        media_session::mojom::MediaSessionAction::kEnterPictureInPicture);
+        media_session::mojom::MediaSessionAction::kEnterPictureInPicture,
+        blink::mojom::MediaSessionActionDetails::NewPictureInPicture(
+            blink::mojom::MediaSessionPictureInPictureActionDetails::New(
+                /*automatic=*/false)));
     return;
   }
 
@@ -1521,9 +1451,6 @@ void MediaSessionImpl::DidReceiveAction(
 void MediaSessionImpl::DidReceiveAction(
     media_session::mojom::MediaSessionAction action,
     blink::mojom::MediaSessionActionDetailsPtr details) {
-  MediaSessionUmaHelper::RecordMediaSessionUserAction(
-      MediaSessionActionToUserAction(action), focused_);
-
   // Pause all players in non-routed frames if the action is PAUSE.
   //
   // This is the default PAUSE action handler per Media Session API spec. The
@@ -1919,38 +1846,6 @@ void MediaSessionImpl::ResetDurationUpdateGuard() {
   duration_update_allowance_ = kDurationUpdateMaxAllowance;
   is_throttling_ = false;
   guarding_player_id_.reset();
-}
-
-bool MediaSessionImpl::CanRequestSystemAudioFocus() const {
-  // If we already have audio focus, we're able to continue adding players.
-  if (audio_focus_state_ == State::ACTIVE) {
-    return true;
-  }
-
-  // If we don't allow background playback and the widget is hidden, then we
-  // should not request audio focus as playback will fail to start.
-  if (kIsBackgroundMediaSuspendEnabled) {
-    if (web_contents()->GetRenderWidgetHostView() &&
-        web_contents()->GetRenderWidgetHostView()->GetRenderWidgetHost()) {
-      return !static_cast<RenderWidgetHostImpl*>(web_contents()
-                                                     ->GetRenderWidgetHostView()
-                                                     ->GetRenderWidgetHost())
-                  ->is_hidden();
-    }
-  }
-
-  return true;
-}
-
-bool MediaSessionImpl::CanRequestSystemAudioFocus(
-    SuspendType suspend_type) const {
-  // When the resume request comes from UI, then we always allow it to resume
-  // playback.
-  if (suspend_type == SuspendType::kUI) {
-    return true;
-  }
-
-  return CanRequestSystemAudioFocus();
 }
 
 void MediaSessionImpl::SetShouldThrottleDurationUpdateForTest(

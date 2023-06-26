@@ -18,7 +18,6 @@ struct VectorIcon;
 }  // namespace gfx
 
 namespace views {
-class Label;
 class Slider;
 class View;
 }  // namespace views
@@ -73,29 +72,23 @@ class UnifiedSliderView : public views::View {
 
   IconButton* button() { return button_; }
   views::Slider* slider() { return slider_; }
-  views::Label* toast_label() { return toast_label_; }
-  views::ImageView* slider_icon() { return slider_icon_; }
+  IconButton* slider_button() { return slider_button_; }
 
   // Sets a slider value. If `by_user` is false, accessibility events will not
   // be triggered.
   void SetSliderValue(float value, bool by_user);
 
   // views::View:
-  void OnThemeChanged() override;
-
- protected:
-  void CreateToastLabel();
+  void OnEvent(ui::Event* event) override;
 
  private:
   raw_ptr<const gfx::VectorIcon, ExperimentalAsh> icon_;
-  int accessible_name_id_;
   views::Button::PressedCallback callback_;
 
   // Unowned. Owned by views hierarchy.
   raw_ptr<IconButton, ExperimentalAsh> button_ = nullptr;
   raw_ptr<views::Slider, ExperimentalAsh> slider_ = nullptr;
-  raw_ptr<views::Label, ExperimentalAsh> toast_label_ = nullptr;
-  raw_ptr<views::ImageView, ExperimentalAsh> slider_icon_ = nullptr;
+  raw_ptr<IconButton, ExperimentalAsh> slider_button_ = nullptr;
   raw_ptr<views::View, ExperimentalAsh> container_ = nullptr;
 };
 

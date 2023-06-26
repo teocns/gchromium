@@ -26,6 +26,7 @@ enum MenuSourceType;
 }  // namespace ui
 
 namespace views {
+class AnimationAbortHandle;
 class MenuRunner;
 class View;
 }  // namespace views
@@ -70,8 +71,8 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   TrayBackgroundView& operator=(const TrayBackgroundView&) = delete;
   ~TrayBackgroundView() override;
 
-  void AddObserver(Observer* observer);
-  void RemoveObserver(Observer* observer);
+  void AddTrayBackgroundViewObserver(Observer* observer);
+  void RemoveTrayBackgroundViewObserver(Observer* observer);
 
   // Overrides default button press handling in `PerformAction()`.
   void SetPressedCallback(
@@ -140,9 +141,6 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // user logs in.
   virtual void HandleLocaleChange() = 0;
 
-  // Called when the bubble is resized.
-  virtual void BubbleResized(const TrayBubbleView* bubble_view);
-
   // Updates this bubble about visibility change of *ANY* tray bubble
   // including itself.
   // `bubble_widget` is the bubble with visibility change. Please note that it
@@ -163,6 +161,10 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
 
   // Updates the background layer.
   virtual void UpdateBackground();
+
+  // For Jelly: updates the color of either the icon or the label of this view
+  // based on the active state specified by `is_active`.
+  virtual void UpdateTrayItemColor(bool is_active) = 0;
 
   // Gets the anchor for bubbles, which is tray_container().
   views::View* GetBubbleAnchor() const;
@@ -216,7 +218,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
 
   // Callbacks for Animations
   void OnAnimationAborted();
-  void OnAnimationEnded();
+  virtual void OnAnimationEnded();
 
   void SetIsActive(bool is_active);
   bool is_active() const { return is_active_; }
@@ -249,6 +251,15 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // returns a nullptr, in which case no context menu is shown.
   virtual std::unique_ptr<ui::SimpleMenuModel> CreateContextMenuModel();
 
+  // After hide animation is finished/aborted/removed, we will need to do an
+  // update to the view's visibility and the view's status area widget state.
+  virtual void OnVisibilityAnimationFinished(bool should_log_visible_pod_count,
+                                             bool aborted);
+
+  // Used to start and stop pulse animation on tray button.
+  void StartPulseAnimation();
+  void StopPulseAnimation();
+
   void SetContextMenuEnabled(bool should_enable_menu) {
     set_context_menu_controller(should_enable_menu ? this : nullptr);
   }
@@ -271,11 +282,6 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // Updates status area widget by calling `UpdateCollapseState()` and
   // `LogVisiblePodCountMetric()`.
   void UpdateStatusArea(bool should_log_visible_pod_count);
-
-  // After hide animation is finished/aborted/removed, we will need to do an
-  // update to the view's visibility and the view's status area widget state.
-  void OnVisibilityAnimationFinished(bool should_log_visible_pod_count,
-                                     bool aborted);
 
   // views::ContextMenuController:
   void ShowContextMenuForViewImpl(views::View* source,
@@ -310,6 +316,13 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // Checks if we should use custom visibility animations.
   bool ShouldUseCustomVisibilityAnimations() const;
 
+  // For Material Next: Updates the background color based on active state.
+  void UpdateBackgroundColor(bool active);
+
+  // Add and remove ripple_layer_ from parent.
+  void AddRippleLayer();
+  void RemoveRippleLayer();
+
   // The shelf containing the system tray for this view.
   raw_ptr<Shelf, ExperimentalAsh> shelf_;
 
@@ -318,6 +331,12 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
 
   // Convenience pointer to the contents view.
   raw_ptr<TrayContainer, ExperimentalAsh> tray_container_;
+
+  // A separate layer for ripple aimation.
+  std::unique_ptr<ui::Layer> ripple_layer_;
+  // The handle to abort ripple and pulse animation.
+  std::unique_ptr<views::AnimationAbortHandle>
+      ripple_and_pulse_animation_abort_handle_;
 
   // Determines if the view is active. This changes how  the ink drop ripples
   // behave.

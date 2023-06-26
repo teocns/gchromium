@@ -14,7 +14,7 @@
 #include "base/strings/string_piece.h"
 #include "base/types/expected.h"
 #include "base/values.h"
-#include "components/aggregation_service/aggregation_service.mojom.h"
+#include "components/aggregation_service/features.h"
 #include "components/aggregation_service/parsing_utils.h"
 #include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
@@ -24,6 +24,7 @@
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/parsing_utils.h"
 #include "components/attribution_reporting/source_registration_time_config.mojom.h"
+#include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration_error.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -31,11 +32,10 @@ namespace attribution_reporting {
 
 namespace {
 
-using ::aggregation_service::mojom::AggregationCoordinator;
 using ::attribution_reporting::mojom::TriggerRegistrationError;
 
-constexpr char kAggregationCoordinatorIdentifier[] =
-    "aggregation_coordinator_identifier";
+constexpr char kAggregationCoordinatorOrigin[] =
+    "aggregation_coordinator_origin";
 constexpr char kAggregatableDeduplicationKeys[] =
     "aggregatable_deduplication_keys";
 constexpr char kAggregatableTriggerData[] = "aggregatable_trigger_data";
@@ -47,13 +47,14 @@ constexpr char kAggregatableSourceRegistrationTime[] =
 constexpr char kInclude[] = "include";
 constexpr char kExclude[] = "exclude";
 
-base::expected<AggregationCoordinator, TriggerRegistrationError>
+base::expected<absl::optional<SuitableOrigin>, TriggerRegistrationError>
 ParseAggregationCoordinator(const base::Value* value) {
   // The default value is used for backward compatibility prior to this
   // attribute being added, but ideally this would invalidate the registration
   // if other aggregatable fields were present.
-  if (!value)
-    return AggregationCoordinator::kDefault;
+  if (!value) {
+    return absl::nullopt;
+  }
 
   const std::string* str = value->GetIfString();
   if (!str) {
@@ -61,14 +62,16 @@ ParseAggregationCoordinator(const base::Value* value) {
         TriggerRegistrationError::kAggregationCoordinatorWrongType);
   }
 
-  absl::optional<AggregationCoordinator> aggregation_coordinator =
+  absl::optional<url::Origin> aggregation_coordinator =
       aggregation_service::ParseAggregationCoordinator(*str);
   if (!aggregation_coordinator.has_value()) {
     return base::unexpected(
         TriggerRegistrationError::kAggregationCoordinatorUnknownValue);
   }
-
-  return *aggregation_coordinator;
+  auto aggregation_coordinator_origin =
+      SuitableOrigin::Create(*aggregation_coordinator);
+  DCHECK(aggregation_coordinator_origin.has_value());
+  return *aggregation_coordinator_origin;
 }
 
 template <typename T>
@@ -184,11 +187,18 @@ TriggerRegistration::Parse(base::Value::Dict registration) {
   if (!aggregatable_values.has_value()) {
     return base::unexpected(aggregatable_values.error());
   }
-  auto aggregation_coordinator = ParseAggregationCoordinator(
-      registration.Find(kAggregationCoordinatorIdentifier));
-  if (!aggregation_coordinator.has_value()) {
-    return base::unexpected(aggregation_coordinator.error());
+
+  absl::optional<SuitableOrigin> aggregation_coordinator;
+  if (base::FeatureList::IsEnabled(
+          aggregation_service::kAggregationServiceMultipleCloudProviders)) {
+    auto parsed_aggregation_coordinator = ParseAggregationCoordinator(
+        registration.Find(kAggregationCoordinatorOrigin));
+    if (!parsed_aggregation_coordinator.has_value()) {
+      return base::unexpected(parsed_aggregation_coordinator.error());
+    }
+    aggregation_coordinator = *parsed_aggregation_coordinator;
   }
+
   absl::optional<uint64_t> debug_key = ParseDebugKey(registration);
   bool debug_reporting = ParseDebugReporting(registration);
 
@@ -207,8 +217,8 @@ TriggerRegistration::Parse(base::Value::Dict registration) {
   return TriggerRegistration(
       std::move(*filters), debug_key, std::move(*aggregatable_dedup_keys),
       std::move(*event_triggers), std::move(*aggregatable_trigger_data),
-      std::move(*aggregatable_values), debug_reporting,
-      *aggregation_coordinator, source_registration_time_config);
+      std::move(*aggregatable_values), debug_reporting, aggregation_coordinator,
+      source_registration_time_config);
 }
 
 // static
@@ -229,7 +239,7 @@ TriggerRegistration::Parse(base::StringPiece json) {
   }
 
   if (!trigger.has_value()) {
-    base::UmaHistogramEnumeration("Conversions.TriggerRegistrationError5",
+    base::UmaHistogramEnumeration("Conversions.TriggerRegistrationError6",
                                   trigger.error());
   }
 
@@ -246,7 +256,7 @@ TriggerRegistration::TriggerRegistration(
     std::vector<AggregatableTriggerData> aggregatable_trigger_data,
     AggregatableValues aggregatable_values,
     bool debug_reporting,
-    aggregation_service::mojom::AggregationCoordinator aggregation_coordinator,
+    absl::optional<SuitableOrigin> aggregation_coordinator_origin,
     mojom::SourceRegistrationTimeConfig source_registration_time_config)
     : filters(std::move(filters)),
       debug_key(debug_key),
@@ -255,7 +265,7 @@ TriggerRegistration::TriggerRegistration(
       aggregatable_trigger_data(aggregatable_trigger_data),
       aggregatable_values(std::move(aggregatable_values)),
       debug_reporting(debug_reporting),
-      aggregation_coordinator(aggregation_coordinator),
+      aggregation_coordinator_origin(std::move(aggregation_coordinator_origin)),
       source_registration_time_config(source_registration_time_config) {}
 
 TriggerRegistration::~TriggerRegistration() = default;
@@ -289,9 +299,12 @@ base::Value::Dict TriggerRegistration::ToJson() const {
 
   SerializeDebugReporting(dict, debug_reporting);
 
-  dict.Set(kAggregationCoordinatorIdentifier,
-           aggregation_service::SerializeAggregationCoordinator(
-               aggregation_coordinator));
+  if (base::FeatureList::IsEnabled(
+          aggregation_service::kAggregationServiceMultipleCloudProviders) &&
+      aggregation_coordinator_origin.has_value()) {
+    dict.Set(kAggregationCoordinatorOrigin,
+             aggregation_coordinator_origin->Serialize());
+  }
 
   if (base::FeatureList::IsEnabled(
           kAttributionReportingNullAggregatableReports)) {

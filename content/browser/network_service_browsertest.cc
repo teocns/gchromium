@@ -19,10 +19,13 @@
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "content/browser/network/network_service_util_internal.h"
+#include "content/browser/network_service_instance_impl.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
+#include "content/public/browser/network_service_util.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -31,7 +34,6 @@
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/network_service_util.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -289,7 +291,8 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest,
       network::mojom::NetworkContextParams::New();
   context_params->cert_verifier_params = GetCertVerifierParams(
       cert_verifier::mojom::CertVerifierCreationParams::New());
-  context_params->http_cache_directory = GetCacheDirectory();
+  context_params->file_paths = network::mojom::NetworkContextFilePaths::New();
+  context_params->file_paths->http_cache_directory = GetCacheDirectory();
   CreateNetworkContextInNetworkService(
       network_context.BindNewPipeAndPassReceiver(), std::move(context_params));
 
@@ -370,13 +373,13 @@ class NetworkServiceConnectionTypeSyncedBrowserTest
     : public NetworkServiceBrowserTest {
  public:
   NetworkServiceConnectionTypeSyncedBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
 #if BUILDFLAG(IS_LINUX)
-        {net::features::kAddressTrackerLinuxIsProxied},
+    scoped_feature_list_.InitAndEnableFeature(
+        net::features::kAddressTrackerLinuxIsProxied);
 #else
-        {},
+    scoped_feature_list_.Init();
 #endif
-        {features::kNetworkServiceInProcess});
+    ForceOutOfProcessNetworkService();
   }
 
  private:
@@ -400,9 +403,10 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceConnectionTypeSyncedBrowserTest,
 
 class NetworkServiceOutOfProcessBrowserTest : public NetworkServiceBrowserTest {
  public:
-  NetworkServiceOutOfProcessBrowserTest() {
-    scoped_feature_list_.InitAndDisableFeature(
-        features::kNetworkServiceInProcess);
+  NetworkServiceOutOfProcessBrowserTest() { ForceOutOfProcessNetworkService(); }
+
+  void SetUpOnMainThread() override {
+    ASSERT_TRUE(IsOutOfProcessNetworkService());
   }
 
  private:
@@ -467,8 +471,7 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceOutOfProcessBrowserTest,
   EXPECT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/empty.html")));
 
-  ASSERT_TRUE(
-      content::ExecuteScript(shell()->web_contents(), "document.cookie"));
+  ASSERT_TRUE(content::ExecJs(shell()->web_contents(), "document.cookie"));
   // If the renderer is hung the test will hang.
 }
 
@@ -640,7 +643,8 @@ class NetworkServiceBrowserCacheResetTest : public NetworkServiceBrowserTest {
         cert_verifier::mojom::CertVerifierCreationParams::New());
     context_params->reset_http_cache_backend = reset_cache;
     context_params->http_cache_enabled = true;
-    context_params->http_cache_directory = GetNetworkContextCachePath();
+    context_params->file_paths->http_cache_directory =
+        GetNetworkContextCachePath();
 
     mojo::Remote<network::mojom::NetworkContext> network_context;
     content::CreateNetworkContextInNetworkService(
@@ -809,7 +813,7 @@ CreateNetworkContextForPaths(network::mojom::NetworkContextFilePathsPtr paths,
   // Not passing in a key for simplicity, so disable encryption.
   context_params->enable_encrypted_cookies = false;
   context_params->http_cache_enabled = true;
-  context_params->http_cache_directory = cache_path;
+  context_params->file_paths->http_cache_directory = cache_path;
   mojo::PendingRemote<network::mojom::NetworkContext> network_context;
   content::CreateNetworkContextInNetworkService(
       network_context.InitWithNewPipeAndPassReceiver(),
@@ -906,17 +910,16 @@ class MAYBE_NetworkServiceDataMigrationBrowserTestWithFailures
       public ::testing::WithParamInterface<std::tuple<bool, FailureType>> {
  public:
   MAYBE_NetworkServiceDataMigrationBrowserTestWithFailures() {
-    if (IsNetworkServiceRunningInProcess())
-      network_service_in_process_feature_.InitAndEnableFeature(
-          features::kNetworkServiceInProcess);
+    if (IsNetworkServiceRunningInProcess()) {
+      ForceInProcessNetworkService();
+    } else {
+      ForceOutOfProcessNetworkService();
+    }
   }
 
  protected:
   bool IsNetworkServiceRunningInProcess() { return std::get<0>(GetParam()); }
   FailureType GetFailureType() { return std::get<1>(GetParam()); }
-
- private:
-  base::test::ScopedFeatureList network_service_in_process_feature_;
 };
 
 // A function to verify that data files move during migration to sandboxed data
@@ -1515,12 +1518,7 @@ INSTANTIATE_TEST_SUITE_P(
 
 class NetworkServiceInProcessBrowserTest : public ContentBrowserTest {
  public:
-  NetworkServiceInProcessBrowserTest() {
-    std::vector<base::test::FeatureRef> features;
-    features.push_back(features::kNetworkServiceInProcess);
-    scoped_feature_list_.InitWithFeatures(
-        features, std::vector<base::test::FeatureRef>());
-  }
+  NetworkServiceInProcessBrowserTest() { ForceInProcessNetworkService(); }
 
   NetworkServiceInProcessBrowserTest(
       const NetworkServiceInProcessBrowserTest&) = delete;
@@ -1531,9 +1529,6 @@ class NetworkServiceInProcessBrowserTest : public ContentBrowserTest {
     host_resolver()->AddRule("*", "127.0.0.1");
     EXPECT_TRUE(embedded_test_server()->Start());
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Verifies that in-process network service works.
@@ -1667,6 +1662,39 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceWithUDPSocketLimit,
               ConnectUDPSocketSync(network_context, &socket));
   }
 }
+
+#if BUILDFLAG(IS_ANDROID)
+class EmptyNetworkServiceTest : public ContentBrowserTest {
+ public:
+  EmptyNetworkServiceTest() {
+    scoped_feature_list_.InitWithFeatures(
+        {network::features::kNetworkServiceEmptyOutOfProcess}, {});
+    ForceInProcessNetworkService();
+  }
+  EmptyNetworkServiceTest(const EmptyNetworkServiceTest&) = delete;
+  EmptyNetworkServiceTest& operator=(const EmptyNetworkServiceTest&) = delete;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(EmptyNetworkServiceTest, Base) {
+  // Check if EmptyNetworkService is available.
+  network::mojom::EmptyNetworkService* empty_network_service =
+      GetEmptyNetworkServiceForTesting();
+  DCHECK(empty_network_service);
+  const int32_t kExpected = 42;
+  int32_t value = 0;
+  base::RunLoop loop;
+  empty_network_service->Ping(kExpected,
+                              base::BindLambdaForTesting([&](int32_t val) {
+                                value = val;
+                                loop.Quit();
+                              }));
+  loop.Run();
+  EXPECT_EQ(kExpected, value);
+}
+#endif
 
 }  // namespace
 

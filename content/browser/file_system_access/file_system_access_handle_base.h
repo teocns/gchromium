@@ -90,7 +90,6 @@ class CONTENT_EXPORT FileSystemAccessHandleBase {
   // blink::mojom::FileSystemAccessFileHandle and DirectoryHandle interfaces.
   void DoRemove(const storage::FileSystemURL& url,
                 bool recurse,
-                FileSystemAccessWriteLockManager::WriteLockType lock_type,
                 base::OnceCallback<void(blink::mojom::FileSystemAccessErrorPtr)>
                     callback);
 
@@ -165,7 +164,7 @@ class CONTENT_EXPORT FileSystemAccessHandleBase {
   }
 
   // The FileSystemAccessManagerImpl that owns this instance.
-  const raw_ptr<FileSystemAccessManagerImpl> manager_;
+  const raw_ptr<FileSystemAccessManagerImpl, DanglingUntriaged> manager_;
   base::WeakPtr<WebContents> web_contents_
       GUARDED_BY_CONTEXT(sequence_checker_);
   const BindingContext context_;

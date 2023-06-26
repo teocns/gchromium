@@ -92,9 +92,7 @@ class FakeNavigationClient : public mojom::NavigationClient {
           controller_service_worker_info,
       blink::mojom::ServiceWorkerContainerInfoForClientPtr container_info,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
-          prefetch_loader_factory,
-      mojo::PendingRemote<network::mojom::URLLoaderFactory>
-          topics_loader_factory,
+          subresource_proxying_loader_factory,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           keep_alive_loader_factory,
       const blink::DocumentToken& document_token,
@@ -105,6 +103,7 @@ class FakeNavigationClient : public mojom::NavigationClient {
       mojo::PendingRemote<blink::mojom::ResourceCache> resource_cache,
       mojom::CookieManagerInfoPtr cookie_manager_info,
       mojom::StorageInfoPtr storage_info,
+      bool coop_forbids_document_to_be_cross_origin_isolated,
       CommitNavigationCallback callback) override {
     std::move(on_received_callback_).Run(std::move(container_info));
     std::move(callback).Run(MinimalDidCommitNavigationLoadParams(), nullptr);
@@ -268,14 +267,14 @@ void ServiceWorkerRemoteContainerEndpoint::BindForWindow(
       /*subresource_loader_factories=*/nullptr,
       /*subresource_overrides=*/absl::nullopt,
       /*controller_service_worker_info=*/nullptr, std::move(info),
-      /*prefetch_loader_factory=*/mojo::NullRemote(),
-      /*topics_loader_factory=*/mojo::NullRemote(),
+      /*subresource_proxying_loader_factory=*/mojo::NullRemote(),
       /*keep_alive_loader_factory=*/mojo::NullRemote(), blink::DocumentToken(),
       base::UnguessableToken::Create(),
       std::vector<blink::ParsedPermissionsPolicyDeclaration>(),
       CreateStubPolicyContainer(), /*code_cache_host=*/mojo::NullRemote(),
       /*resource_cache=*/mojo::NullRemote(), /*cookie_manager_info=*/nullptr,
       /*storage_info=*/nullptr,
+      /*coop_forbids_document_to_be_cross_origin_isolated=*/true,
       base::BindOnce(
           [](mojom::DidCommitProvisionalLoadParamsPtr validated_params,
              mojom::DidCommitProvisionalLoadInterfaceParamsPtr

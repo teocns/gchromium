@@ -385,7 +385,8 @@ void PolicyUITest::VerifyReportButton(bool visible) {
 #if !BUILDFLAG(IS_ANDROID)
 void PolicyUITest::VerifyExportingPolicies(const base::Value::Dict& expected) {
   // Set SelectFileDialog to use our factory.
-  ui::SelectFileDialog::SetFactory(new TestSelectFileDialogFactory());
+  ui::SelectFileDialog::SetFactory(
+      std::make_unique<TestSelectFileDialogFactory>());
 
   // Navigate to the about:policy page.
   ASSERT_TRUE(
@@ -394,7 +395,7 @@ void PolicyUITest::VerifyExportingPolicies(const base::Value::Dict& expected) {
   // Click on 'save policies' button.
   const std::string javascript =
       "document.getElementById('export-policies').click()";
-  EXPECT_TRUE(content::ExecuteScript(web_contents(), javascript));
+  EXPECT_TRUE(content::ExecJs(web_contents(), javascript));
 
   base::ThreadPoolInstance::Get()->FlushForTesting();
   // Open the created file.

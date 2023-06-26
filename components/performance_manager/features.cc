@@ -53,29 +53,39 @@ BASE_FEATURE(kHeuristicMemorySaver,
              "HeuristicMemorySaver",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::FeatureParam<int>
-    kHeuristicMemorySaverThresholdReachedHeartbeatSeconds{
-        &kHeuristicMemorySaver, "threshold_reached_heartbeat_seconds", 10};
-const base::FeatureParam<int>
-    kHeuristicMemorySaverThresholdNotReachedHeartbeatSeconds{
-        &kHeuristicMemorySaver, "threshold_not_reached_heartbeat_seconds", 60};
+// If 0, uses a default value from heuristic_memory_saver_policy.cc.
+const base::FeatureParam<base::TimeDelta>
+    kHeuristicMemorySaverThresholdReachedHeartbeatInterval{
+        &kHeuristicMemorySaver, "threshold_reached_heartbeat_interval",
+        base::TimeDelta()};
+const base::FeatureParam<base::TimeDelta>
+    kHeuristicMemorySaverThresholdNotReachedHeartbeatInterval{
+        &kHeuristicMemorySaver, "threshold_not_reached_heartbeat_interval",
+        base::TimeDelta()};
+const base::FeatureParam<base::TimeDelta>
+    kHeuristicMemorySaverMinimumTimeInBackground{&kHeuristicMemorySaver,
+                                                 "minimum_time_in_background",
+                                                 base::TimeDelta()};
 
+// If < 0, uses a default value from heuristic_memory_saver_policy.cc.
 const base::FeatureParam<int>
     kHeuristicMemorySaverAvailableMemoryThresholdPercent{
-        &kHeuristicMemorySaver, "threshold_percent", 5};
-
+        &kHeuristicMemorySaver, "threshold_percent", -1};
 const base::FeatureParam<int> kHeuristicMemorySaverAvailableMemoryThresholdMb{
-    &kHeuristicMemorySaver, "threshold_mb", 4096};
-
+    &kHeuristicMemorySaver, "threshold_mb", -1};
 const base::FeatureParam<int> kHeuristicMemorySaverPageCacheDiscountMac{
-    &kHeuristicMemorySaver, "mac_page_cache_available_percent", 50};
+    &kHeuristicMemorySaver, "mac_page_cache_available_percent", -1};
 
-const base::FeatureParam<int> kHeuristicMemorySaverMinimumMinutesInBackground{
-    &kHeuristicMemorySaver, "minimum_minutes_in_background", 120};
+BASE_FEATURE(kForceHeuristicMemorySaver,
+             "ForceHeuristicMemorySaver",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kHighEfficiencyMultistateMode,
              "HighEfficiencyMultistateMode",
              base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<bool> kHighEfficiencyDefaultHeuristicMode{
+    &kHighEfficiencyMultistateMode, "default_heuristic_mode", false};
+
 BASE_FEATURE(kDiscardedTabTreatment,
              "DiscardedTabTreatment",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -111,10 +121,20 @@ const base::FeatureParam<int> kHighEfficiencyChartPmf50PercentileBytes{
 const base::FeatureParam<int> kHighEfficiencyChartPmf75PercentileBytes{
     &kMemorySavingsReportingImprovements,
     "high_efficiency_chart_pmf_75_percentile_bytes", 197 * 1024 * 1024};
+const base::FeatureParam<int> kHighEfficiencyChartPmf99PercentileBytes{
+    &kMemorySavingsReportingImprovements,
+    "high_efficiency_chart_pmf_99_percentile_bytes", 800 * 1024 * 1024};
 
-const base::FeatureParam<int> kDiscardedTabTreatmenOption{
+const base::FeatureParam<double> kDiscardedTabTreatmentOpacity{
+    &kDiscardedTabTreatment, "discard_tab_treatment_opacity", 0.5};
+
+const base::FeatureParam<int> kDiscardedTabTreatmentOption{
     &kDiscardedTabTreatment, "discard_tab_treatment_option",
-    static_cast<int>(DiscardTabTreatmentOptions::kFadeFullsizedFavicon)};
+    static_cast<int>(DiscardTabTreatmentOptions::kFadeSmallFaviconWithRing)};
+
+const base::FeatureParam<int> kMemoryUsageInHovercardsHighThresholdBytes{
+    &kMemoryUsageInHovercards,
+    "memory_usage_in_hovercards_high_threshold_bytes", 800 * 1024 * 1024};
 
 #endif
 

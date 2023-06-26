@@ -2,15 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
+import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chromeos/chai_assert.js';
 
+import {MockVolumeManager} from '../../background/js/mock_volume_manager.js';
 import {createChild} from '../../common/js/dom_utils.js';
 import {FakeEntryImpl} from '../../common/js/files_app_entry_types.js';
 import {str, util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {FakeEntry} from '../../externs/files_app_entry_interfaces.js';
 import {PropStatus} from '../../externs/ts/state.js';
+import {VolumeInfo} from '../../externs/volume_info.js';
+import {constants} from '../../foreground/js/constants.js';
 import {clearSearch, updateSearch} from '../../state/actions/search.js';
+import {createFakeVolumeMetadata, setUpFileManagerOnWindow, setupStore} from '../../state/for_tests.js';
+import {convertVolumeInfoAndMetadataToVolume} from '../../state/reducers/volumes.js';
 import {getEmptyState, getStore} from '../../state/store.js';
 
 import {DirectoryModel} from './directory_model.js';
@@ -18,6 +23,7 @@ import {EmptyFolderController} from './empty_folder_controller.js';
 import {FileListModel} from './file_list_model.js';
 import {MockMetadataModel} from './metadata/mock_metadata.js';
 import {createFakeDirectoryModel} from './mock_directory_model.js';
+import {ProvidersModel} from './providers_model.js';
 
 /**
  * @type {!HTMLElement}
@@ -28,6 +34,11 @@ let element;
  * @type {!DirectoryModel}
  */
 let directoryModel;
+
+/**
+ * @type {!ProvidersModel}
+ */
+let providersModel;
 
 /**
  * @type {!FileListModel}
@@ -58,12 +69,13 @@ export function setUp() {
   fileListModel = new FileListModel(new MockMetadataModel({}));
   directoryModel.getFileList = () => fileListModel;
   directoryModel.isSearching = () => false;
+  providersModel = new ProvidersModel(new MockVolumeManager());
   recentEntry = new FakeEntryImpl(
       'Recent', VolumeManagerCommon.RootType.RECENT,
       chrome.fileManagerPrivate.SourceRestriction.ANY_SOURCE,
       chrome.fileManagerPrivate.FileCategory.ALL);
-  emptyFolderController =
-      new EmptyFolderController(element, directoryModel, recentEntry);
+  emptyFolderController = new EmptyFolderController(
+      element, directoryModel, providersModel, recentEntry);
 }
 
 /**
@@ -153,6 +165,40 @@ export function testHiddenForFiles() {
 }
 
 /**
+ * Tests that the empty folder element is hidden if the volume is ODFS
+ * and the scan finished with no error. Add ODFS to the store so that the
+ * |isInteractive| state of the volume can be read.
+ * @suppress {accessControls} access private method in test.
+ */
+export function testHiddenForODFS() {
+  // Add ODFS volume to the store.
+  setUpFileManagerOnWindow();
+  const initialState = getEmptyState();
+  const {volumeManager} = window.fileManager;
+  const odfsVolumeInfo = MockVolumeManager.createMockVolumeInfo(
+      VolumeManagerCommon.VolumeType.PROVIDED, 'odfs', 'odfs', 'odfs',
+      constants.ODFS_EXTENSION_ID);
+  volumeManager.volumeInfoList.add(odfsVolumeInfo);
+  const volume = convertVolumeInfoAndMetadataToVolume(
+      odfsVolumeInfo, createFakeVolumeMetadata(odfsVolumeInfo));
+  initialState.volumes[volume.volumeId] = volume;
+
+  setupStore(initialState);
+
+  // Set ODFS as the volume.
+  directoryModel.getCurrentVolumeInfo = function() {
+    return /** @type {!VolumeInfo} */ (odfsVolumeInfo);
+  };
+
+  // Complete the scan with no error.
+  emptyFolderController.onScanFinished_();
+
+  // Expect that the empty-folder element is hidden.
+  assertTrue(element.hidden);
+  assertEquals('', emptyFolderController.label_.innerText);
+}
+
+/**
  * Tests that the empty state image shows up when root type is Trash.
  * @suppress {accessControls} access private method in test.
  */
@@ -162,6 +208,46 @@ export function testShownForTrash() {
   assertFalse(element.hidden);
   const text = emptyFolderController.label_.innerText;
   assertTrue(text.includes(str('EMPTY_TRASH_FOLDER_TITLE')));
+}
+
+/**
+ * Tests that the reauthentication required image shows up when the volume is
+ * ODFS and the scan failed from a NO_MODIFICATION_ALLOWED_ERR (access denied).
+ * Add ODFS to the store so that the |isInteractive| state of the volume can be
+ * set and read.
+ * @suppress {accessControls} access private method in test.
+ */
+export function testShownForODFS() {
+  // Add ODFS volume to the store.
+  setUpFileManagerOnWindow();
+  const initialState = getEmptyState();
+  const {volumeManager} = window.fileManager;
+  const odfsVolumeInfo = MockVolumeManager.createMockVolumeInfo(
+      VolumeManagerCommon.VolumeType.PROVIDED, 'odfs', 'odfs', 'odfs',
+      constants.ODFS_EXTENSION_ID);
+  volumeManager.volumeInfoList.add(odfsVolumeInfo);
+  const volume = convertVolumeInfoAndMetadataToVolume(
+      odfsVolumeInfo, createFakeVolumeMetadata(odfsVolumeInfo));
+  initialState.volumes[volume.volumeId] = volume;
+
+  setupStore(initialState);
+
+  // Set ODFS as the volume.
+  directoryModel.getCurrentVolumeInfo = function() {
+    return /** @type {!VolumeInfo} */ (odfsVolumeInfo);
+  };
+
+  // Pass a NO_MODIFICATION_ALLOWED_ERR error (implies reauthentication
+  // required).
+  const event = new Event('scan-failed');
+  event.error = {name: util.FileError.NO_MODIFICATION_ALLOWED_ERR};
+  emptyFolderController.onScanFailed_(event);
+
+  // Expect that the empty-folder element is shown and the sign in link is
+  // present.
+  assertFalse(element.hidden);
+  const signInLink = emptyFolderController.label_.querySelector('.sign-in');
+  assertNotEquals(signInLink, null);
 }
 
 /**

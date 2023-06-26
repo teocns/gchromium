@@ -573,7 +573,7 @@ base::android::ScopedJavaLocalRef<jintArray> ContextManagerVulkan::Draw(
       auto sk_color_type = surface_format == VK_FORMAT_B8G8R8A8_UNORM
                                ? kBGRA_8888_SkColorType
                                : kRGBA_8888_SkColorType;
-      sk_surface = SkSurface::MakeFromBackendRenderTarget(
+      sk_surface = SkSurfaces::WrapBackendRenderTarget(
           gr_context_.get(), render_target, kTopLeft_GrSurfaceOrigin,
           sk_color_type, gfx::ColorSpace::CreateSRGB().ToSkColorSpace(),
           &surface_props);
@@ -627,7 +627,8 @@ base::android::ScopedJavaLocalRef<jintArray> ContextManagerVulkan::Draw(
       uint32_t queue_index = device_queue_->GetVulkanQueueIndex();
       GrBackendSurfaceMutableState state(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
                                          queue_index);
-      GrSemaphoresSubmitted submitted = sk_surface->flush(flush_info, &state);
+      GrSemaphoresSubmitted submitted =
+          gr_context_->flush(sk_surface, flush_info, &state);
       CHECK_EQ(GrSemaphoresSubmitted::kYes, submitted);
     }
     CHECK(gr_context_->submit(/*sync_cpu=*/false));

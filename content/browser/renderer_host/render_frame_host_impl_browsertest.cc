@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 
+#include <initializer_list>
 #include <memory>
 #include <set>
 #include <string>
@@ -106,6 +107,7 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/origin_trials/origin_trial_feature.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-test-utils.h"
@@ -325,7 +327,7 @@ using BlocklistedFeatures = blink::scheduler::WebSchedulerTrackedFeatures;
 // Helper function to create a vector which contains the mojom feature
 // information.
 BackForwardCacheBlockingDetails CreateBlockingDetails(
-    BlocklistedFeatures features) {
+    std::initializer_list<BlocklistedFeature> features) {
   BackForwardCacheBlockingDetails feature_vector;
   for (auto feature : features) {
     auto feature_info = BlockingDetails::New();
@@ -388,9 +390,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   // Future attempts to run script via GetAssociatedLocalFrame should succeed.
   // This timed out before the fix, since the message was dropped and no value
   // was retrieved.
-  base::Value result =
-      ExecuteScriptAndGetValue(web_contents->GetPrimaryMainFrame(), "'foo'");
-  EXPECT_EQ("foo", result.GetString());
+  EXPECT_EQ("foo", EvalJs(web_contents->GetPrimaryMainFrame(), "'foo'"));
 }
 
 // Test that when creating a new window, the main frame is correctly focused.
@@ -1118,9 +1118,10 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplWithTokensBrowserTest,
   OriginTrialsControllerDelegate* delegate = GetOriginTrialsDelegate();
 
   url::Origin trial_origin = url::Origin::Create(GURL(kOriginTrialUrl));
-  EXPECT_TRUE(delegate->IsTrialPersistedForOrigin(
+  EXPECT_TRUE(delegate->IsFeaturePersistedForOrigin(
       /*origin=*/trial_origin, /*partition_origin=*/trial_origin,
-      "FrobulatePersistent", validTime));
+      blink::OriginTrialFeature::kOriginTrialsSampleAPIPersistentFeature,
+      validTime));
 }
 
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplWithTokensBrowserTest,
@@ -1172,9 +1173,11 @@ IN_PROC_BROWSER_TEST_F(
   // The Trial should be enabled in the context where it was set.
   url::Origin main_origin = url::Origin::Create(GURL(kOriginTrialUrl));
   url::Origin trial_origin = url::Origin::Create(GURL(kThirdPartyScriptUrl));
-  EXPECT_TRUE(delegate->IsTrialPersistedForOrigin(
+  EXPECT_TRUE(delegate->IsFeaturePersistedForOrigin(
       /*origin=*/trial_origin, /*partition_origin=*/main_origin,
-      "FrobulatePersistentThirdPartyDeprecation", validTime));
+      blink::OriginTrialFeature::
+          kOriginTrialsSampleAPIPersistentThirdPartyDeprecationFeature,
+      validTime));
 }
 
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplWithTokensBrowserTest,
@@ -1261,7 +1264,7 @@ class RenderFrameHostImplBeforeUnloadBrowserTest
     std::string message;
     while (msg_queue->PopMessage(&message)) {
       base::TrimString(message, "\"", &message);
-      // Only count messages from beforeunload.  For example, an ExecuteScript
+      // Only count messages from beforeunload.  For example, an ExecJs
       // sends its own message to DOMMessageQueue, which we need to ignore.
       if (message == "ping")
         ++num_pings;
@@ -3704,16 +3707,16 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   RenderFrameHostImpl* main_frame = web_contents()->GetPrimaryMainFrame();
   // Simulate getting WebSocket in a feature vector from the renderer.
   main_frame->DidChangeBackForwardCacheDisablingFeatures(
-      CreateBlockingDetails(BlocklistedFeature::kWebSocket));
+      CreateBlockingDetails({BlocklistedFeature::kWebSocket}));
   ASSERT_EQ(main_frame->GetBackForwardCacheDisablingFeatures(),
-            BlocklistedFeatures(BlocklistedFeature::kWebSocket));
+            BlocklistedFeatures({BlocklistedFeature::kWebSocket}));
 
   // Simulate the browser side reporting WebRTC usage.
   main_frame->OnBackForwardCacheDisablingStickyFeatureUsed(
       static_cast<BlocklistedFeature>(BlocklistedFeature::kWebRTC));
   ASSERT_EQ(main_frame->GetBackForwardCacheDisablingFeatures(),
-            BlocklistedFeatures(BlocklistedFeature::kWebSocket,
-                                BlocklistedFeature::kWebRTC));
+            BlocklistedFeatures(
+                {BlocklistedFeature::kWebSocket, BlocklistedFeature::kWebRTC}));
 
   // Simulate a feature vector being updated from the renderer with some
   // features being activated and some being deactivated.
@@ -3724,8 +3727,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
        BlocklistedFeature::kMainResourceHasCacheControlNoCache}));
   ASSERT_EQ(main_frame->GetBackForwardCacheDisablingFeatures(),
             BlocklistedFeatures(
-                BlocklistedFeature::kWebRTC,
-                BlocklistedFeature::kMainResourceHasCacheControlNoCache));
+                {BlocklistedFeature::kWebRTC,
+                 BlocklistedFeature::kMainResourceHasCacheControlNoCache}));
 
   // Navigate away and expect that no values persist the navigation.
   // Note that we are still simulating the renderer call, otherwise features
@@ -6054,16 +6057,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   }
 }
 
-class RenderFrameHostImplSubframeReuseBrowserTest
-    : public RenderFrameHostImplBrowserTest {
- public:
-  RenderFrameHostImplSubframeReuseBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(features::kSubframeShutdownDelay);
-  }
-
- protected:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
+using RenderFrameHostImplSubframeReuseBrowserTest =
+    RenderFrameHostImplBrowserTest;
 
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplSubframeReuseBrowserTest,
                        SubframeShutdownDelay) {
@@ -6097,9 +6092,13 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplSubframeReuseBrowserTest,
 
   // The process hosting the subframe should have its shutdown delayed and be
   // tracked in the pending-delete tracker.
-  ASSERT_TRUE(static_cast<RenderProcessHostImpl*>(
-                  content::RenderProcessHost::FromID(subframe_process_id))
-                  ->IsProcessShutdownDelayedForTesting());
+  auto* subframe_process_host = static_cast<RenderProcessHostImpl*>(
+      content::RenderProcessHost::FromID(subframe_process_id));
+  if (RenderProcessHostImpl::ShouldDelayProcessShutdown()) {
+    ASSERT_TRUE(subframe_process_host->IsProcessShutdownDelayedForTesting());
+  } else {
+    ASSERT_EQ(nullptr, subframe_process_host);
+  }
 
   // Wait for |url_2| to fully load so that its subframe loads.
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
@@ -6108,13 +6107,16 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplSubframeReuseBrowserTest,
   // subframe, because they share the same site.
   RenderFrameHostImpl* new_rfh_b =
       root_frame_host()->child_at(0)->current_frame_host();
-  ASSERT_EQ(subframe_process_id, new_rfh_b->GetProcess()->GetID());
+  ASSERT_EQ(RenderProcessHostImpl::ShouldDelayProcessShutdown(),
+            subframe_process_id == new_rfh_b->GetProcess()->GetID());
 
   // The process should no longer be in the pending-delete tracker, as it has
   // been reused.
-  ASSERT_FALSE(static_cast<RenderProcessHostImpl*>(
-                   content::RenderProcessHost::FromID(subframe_process_id))
-                   ->IsProcessShutdownDelayedForTesting());
+  if (RenderProcessHostImpl::ShouldDelayProcessShutdown()) {
+    ASSERT_FALSE(static_cast<RenderProcessHostImpl*>(
+                     content::RenderProcessHost::FromID(subframe_process_id))
+                     ->IsProcessShutdownDelayedForTesting());
+  }
 }
 
 // Test that multiple subframe-shutdown delays from the same source can be in
@@ -6139,13 +6141,16 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplSubframeReuseBrowserTest,
   const SiteInfo site_info = rfh->GetSiteInstance()->GetSiteInfo();
   const base::TimeDelta delay = base::Seconds(5);
   process->DelayProcessShutdown(delay, base::TimeDelta(), site_info);
-  EXPECT_TRUE(process->IsProcessShutdownDelayedForTesting());
+  EXPECT_EQ(RenderProcessHostImpl::ShouldDelayProcessShutdown(),
+            process->IsProcessShutdownDelayedForTesting());
   process->DelayProcessShutdown(delay, base::TimeDelta(), site_info);
-  EXPECT_TRUE(process->IsProcessShutdownDelayedForTesting());
+  EXPECT_EQ(RenderProcessHostImpl::ShouldDelayProcessShutdown(),
+            process->IsProcessShutdownDelayedForTesting());
 
   // When one delay is cancelled, the other should remain in effect.
   process->CancelProcessShutdownDelay(site_info);
-  EXPECT_TRUE(process->IsProcessShutdownDelayedForTesting());
+  EXPECT_EQ(RenderProcessHostImpl::ShouldDelayProcessShutdown(),
+            process->IsProcessShutdownDelayedForTesting());
   process->CancelProcessShutdownDelay(site_info);
   EXPECT_FALSE(process->IsProcessShutdownDelayedForTesting());
 }
@@ -6832,7 +6837,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
 
   // The navigation should reuse the same RenderFrameHost, except when
   // RenderDocument is enabled.
-  if (ShouldCreateNewHostForAllFrames()) {
+  if (ShouldCreateNewHostForSameSiteSubframe()) {
     EXPECT_TRUE(child_frame_wrapper.WaitUntilRenderFrameDeleted());
   } else {
     EXPECT_EQ(ChildFrameAt(shell(), 0), child_frame_wrapper.get());
@@ -8070,19 +8075,18 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithBFCache,
 
   // 1) Navigate to A(B).
   EXPECT_TRUE(NavigateToURL(shell(), url_a));
-  RenderFrameHostImpl* rfh_a = web_contents()->GetPrimaryMainFrame();
-  RenderFrameHostImpl* rfh_b = rfh_a->child_at(0)->current_frame_host();
+  RenderFrameHostImplWrapper rfh_a(web_contents()->GetPrimaryMainFrame());
   FrameTreeNode* expected_parent_ftn = rfh_a->frame_tree_node();
-  FrameTreeNode* expected_child_ftn = rfh_b->frame_tree_node();
 
   // 2) Navigate OOPIF B to a page with a continuous Compositor-thread
   // animation.
-  auto* child_rfh =
-      ChildFrameAt(shell()->web_contents()->GetPrimaryMainFrame(), 0);
-  RenderFrameSubmissionObserver rfso_d(child_rfh);
   GURL url_d(embedded_test_server()->GetURL(
       "b.com", "/rwhv_compositing_animation.html"));
-  EXPECT_TRUE(NavigateToURLFromRenderer(child_rfh, url_d));
+  EXPECT_TRUE(NavigateToURLFromRenderer(
+      ChildFrameAt(shell()->web_contents()->GetPrimaryMainFrame(), 0), url_d));
+  RenderFrameHostImplWrapper rfh_b(rfh_a->child_at(0)->current_frame_host());
+  RenderFrameSubmissionObserver rfso_d(rfh_b.get());
+  FrameTreeNode* expected_child_ftn = rfh_b->frame_tree_node();
 
   // 3) Navigate to C.
   EXPECT_TRUE(NavigateToURL(shell(), url_c));
@@ -8094,8 +8098,9 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithBFCache,
   // So we wait until the first frame submitted by C has been produced and the
   // metadata processed on the Browser UI thread. From this point on we expect
   // that there are no new frames submitted by D.
-  RenderFrameHostImpl* rfh_c = web_contents()->GetPrimaryMainFrame();
-  RenderFrameSubmissionObserver rfso_c = RenderFrameSubmissionObserver(rfh_c);
+  RenderFrameHostImplWrapper rfh_c(web_contents()->GetPrimaryMainFrame());
+  RenderFrameSubmissionObserver rfso_c =
+      RenderFrameSubmissionObserver(rfh_c.get());
   rfso_c.WaitForAnyFrameSubmission();
   int post_nav_num_frames = rfso_d.render_frame_count();
 
@@ -8103,7 +8108,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithBFCache,
   EXPECT_TRUE(rfh_a->IsInBackForwardCache());
   EXPECT_TRUE(rfh_b->IsInBackForwardCache());
   EXPECT_FALSE(rfh_c->IsInBackForwardCache());
-  EXPECT_NE(rfh_a, rfh_c);
+  EXPECT_NE(rfh_a.get(), rfh_c.get());
   EXPECT_EQ(nullptr, rfh_a->owner_);
   EXPECT_EQ(expected_child_ftn, rfh_b->owner_);
   EXPECT_EQ(expected_parent_ftn, rfh_c->owner_);
@@ -8125,7 +8130,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTestWithBFCache,
 
   // 6) Ensure C is cached and A's owner is updated.
   EXPECT_TRUE(rfh_c->IsInBackForwardCache());
-  EXPECT_EQ(rfh_a, web_contents()->GetPrimaryMainFrame());
+  EXPECT_EQ(rfh_a.get(), web_contents()->GetPrimaryMainFrame());
   EXPECT_EQ(expected_parent_ftn, rfh_a->owner_);
   EXPECT_EQ(expected_child_ftn, rfh_b->owner_);
   EXPECT_EQ(nullptr, rfh_c->owner_);

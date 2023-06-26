@@ -25,6 +25,7 @@
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
+#include "chrome/browser/web_applications/web_contents/web_contents_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -73,7 +74,6 @@ WebAppCommandManager::WebAppCommandManager(Profile* profile,
                                            WebAppProvider* provider)
     : profile_(profile),
       provider_(provider),
-      url_loader_(std::make_unique<WebAppUrlLoader>()),
       lock_manager_(std::make_unique<WebAppLockManager>(*provider_)) {}
 WebAppCommandManager::~WebAppCommandManager() {
   // Make sure that unittests & browsertests correctly shut down the manager.
@@ -145,6 +145,14 @@ void WebAppCommandManager::StartCommandOrPrepareForLoad(
 #endif
   if (command->lock_description().IncludesSharedWebContents()) {
     CHECK(shared_web_contents_);
+    if (!url_loader_) {
+      // Because the web contents manager might be swapped out by tests (and
+      // this class can be called before the WebAppProvider is initialized),
+      // create the loader here lazily.
+      // TODO(b/280517254): This can be removed when `PrepareForLoad` no longer
+      // needs to be called.
+      url_loader_ = provider_->web_contents_manager().CreateUrlLoader();
+    }
     url_loader_->PrepareForLoad(
         // web_contents is created by `WebAppLockManager` when lock is granted,
         // this grabs the same web_contents.
@@ -210,35 +218,6 @@ void WebAppCommandManager::Shutdown() {
   commands_.clear();
 
   shared_web_contents_.reset();
-}
-
-void WebAppCommandManager::NotifySyncSourceRemoved(
-    const std::vector<AppId>& app_ids) {
-  if (is_in_shutdown_)
-    return;
-
-  // To prevent map modification-during-iteration, make a copy of relevant
-  // commands. The main complications that can occur are a command calling
-  // `CompleteAndDestruct` or `ScheduleCommand` inside of the
-  // `OnSyncSourceRemoved` call. Because all commands are
-  // `StartWithLock()`ed asynchronously, we will never have to notify any
-  // commands that are newly scheduled. So at most one command needs to be
-  // notified per queue, and that command can be destroyed before we notify it.
-  std::vector<base::WeakPtr<WebAppCommand>> commands_to_notify;
-  for (const AppId& app_id : app_ids) {
-    for (const auto& [id, command] : commands_) {
-      if (base::Contains(command->lock_description().app_ids(), app_id)) {
-        if (command->IsStarted()) {
-          commands_to_notify.push_back(command->AsWeakPtr());
-        }
-      }
-    }
-  }
-  for (const auto& command_ptr : commands_to_notify) {
-    if (!command_ptr)
-      continue;
-    command_ptr->OnSyncSourceRemoved();
-  }
 }
 
 base::Value WebAppCommandManager::ToDebugValue() {

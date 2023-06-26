@@ -14,6 +14,8 @@
 #include "ash/system/brightness/unified_brightness_slider_controller.h"
 #include "ash/system/night_light/night_light_controller_impl.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/wm/screen_pinning_controller.h"
+#include "ash/wm/window_state.h"
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -23,22 +25,6 @@
 #include "ui/gfx/vector_icon_types.h"
 
 namespace ash {
-
-namespace {
-
-// The maximum index of `kBrightnessLevelIcons`.
-const int kBrightnessLevels =
-    std::size(UnifiedBrightnessView::kBrightnessLevelIcons) - 1;
-
-// Get vector icon reference that corresponds to the given brightness level.
-// `level` is between 0.0 to 1.0.
-const gfx::VectorIcon& GetBrightnessIconForLevel(float level) {
-  int index = static_cast<int>(std::ceil(level * kBrightnessLevels));
-  DCHECK(index >= 0 && index <= kBrightnessLevels);
-  return *UnifiedBrightnessView::kBrightnessLevelIcons[index];
-}
-
-}  // namespace
 
 UnifiedBrightnessView::UnifiedBrightnessView(
     UnifiedBrightnessSliderController* controller,
@@ -91,11 +77,19 @@ UnifiedBrightnessView::UnifiedBrightnessView(
 
     night_light_button_->SetToggled(enabled);
 
-    auto* more_button = AddChildView(std::make_unique<IconButton>(
+    more_button_ = AddChildView(std::make_unique<IconButton>(
         std::move(detailed_button_callback.value()),
         IconButton::Type::kMediumFloating, &kQuickSettingsRightArrowIcon,
         IDS_ASH_STATUS_TRAY_NIGHT_LIGHT_SETTINGS_TOOLTIP));
-    more_button->SetIconColorId(cros_tokens::kCrosSysSecondary);
+    more_button_->SetIconColorId(cros_tokens::kCrosSysSecondary);
+
+    // In the case that there is a trusted pinned window (fullscreen lock mode)
+    // and the brightness slider popup is shown, do not allow the more_button to
+    // open quick settings.
+    auto* window = Shell::Get()->screen_pinning_controller()->pinned_window();
+    if (window && WindowState::Get(window)->IsTrustedPinned()) {
+      more_button_->SetEnabled(false);
+    }
   } else {
     button()->SetEnabled(false);
     // The button is set to disabled but wants to keep the color for an enabled
@@ -116,11 +110,18 @@ void UnifiedBrightnessView::OnDisplayBrightnessChanged(bool by_user) {
   float level = model_->display_brightness();
 
   if (features::IsQsRevampEnabled()) {
-    slider_icon()->SetImage(ui::ImageModel::FromVectorIcon(
-        GetBrightnessIconForLevel(level),
-        cros_tokens::kCrosSysSystemOnPrimaryContainer, kQsSliderIconSize));
+    slider_button()->SetVectorIcon(GetBrightnessIconForLevel(level));
+    slider_button()->SetIconColorId(
+        cros_tokens::kCrosSysSystemOnPrimaryContainer);
   }
   SetSliderValue(level, by_user);
+}
+
+const gfx::VectorIcon& UnifiedBrightnessView::GetBrightnessIconForLevel(
+    float level) {
+  int index = static_cast<int>(std::ceil(level * kBrightnessLevels));
+  CHECK(index >= 0 && index <= kBrightnessLevels);
+  return *kBrightnessLevelIcons[index];
 }
 
 void UnifiedBrightnessView::OnNightLightButtonPressed() {

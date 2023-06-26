@@ -60,6 +60,7 @@ class SystemTrayClientImpl : public ash::SystemTrayClient,
 
   // ash::SystemTrayClient:
   void ShowSettings(int64_t display_id) override;
+  void ShowAccountSettings() override;
   void ShowBluetoothSettings() override;
   void ShowBluetoothSettings(const std::string& device_id) override;
   void ShowBluetoothPairingDialog(
@@ -72,6 +73,7 @@ class SystemTrayClientImpl : public ash::SystemTrayClient,
   void ShowPowerSettings() override;
   void ShowPrivacyAndSecuritySettings() override;
   void ShowPrivacyHubSettings() override;
+  void ShowSpeakOnMuteDetectionSettings() override;
   void ShowSmartPrivacySettings() override;
   void ShowChromeSlow() override;
   void ShowIMESettings() override;
@@ -82,6 +84,7 @@ class SystemTrayClientImpl : public ash::SystemTrayClient,
   void ShowAboutChromeOSDetails() override;
   void ShowAccessibilityHelp() override;
   void ShowAccessibilitySettings() override;
+  void ShowColorCorrectionSettings() override;
   void ShowGestureEducationHelp() override;
   void ShowPaletteHelp() override;
   void ShowPaletteSettings() override;
@@ -93,6 +96,7 @@ class SystemTrayClientImpl : public ash::SystemTrayClient,
   void ShowThirdPartyVpnCreate(const std::string& extension_id) override;
   void ShowArcVpnCreate(const std::string& app_id) override;
   void ShowNetworkSettings(const std::string& network_id) override;
+  void ShowHotspotSubpage() override;
   void ShowMultiDeviceSetup() override;
   void ShowFirmwareUpdate() override;
   void SetLocaleAndExit(const std::string& locale_iso_code) override;

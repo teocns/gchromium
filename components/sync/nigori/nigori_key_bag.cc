@@ -5,6 +5,7 @@
 #include "components/sync/nigori/nigori_key_bag.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/logging.h"
 #include "base/notreached.h"
@@ -63,16 +64,12 @@ NigoriKeyBag::NigoriKeyBag(NigoriKeyBag&& other) = default;
 
 NigoriKeyBag::~NigoriKeyBag() = default;
 
-void NigoriKeyBag::CopyFrom(const NigoriKeyBag& other) {
-  nigori_map_.clear();
-  AddAllUnknownKeysFrom(other);
-}
-
 sync_pb::NigoriKeyBag NigoriKeyBag::ToProto() const {
   sync_pb::NigoriKeyBag output;
   for (const auto& [key_name, nigori] : nigori_map_) {
     *output.add_key() = NigoriToProto(*nigori, key_name);
   }
+
   return output;
 }
 

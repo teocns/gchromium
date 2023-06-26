@@ -87,8 +87,13 @@ void PopulateLoadTimeData(content::WebUI* web_ui,
       "HelpAppAppsDiscovery",
       base::FeatureList::IsEnabled(features::kHelpAppAppsDiscovery));
   source->AddBoolean(
+      "HelpAppAutoTriggerInstallDialog",
+      base::FeatureList::IsEnabled(features::kHelpAppAutoTriggerInstallDialog));
+  source->AddBoolean(
       "HelpAppSearchServiceIntegration",
       base::FeatureList::IsEnabled(features::kEnableLocalSearchService));
+  source->AddBoolean("HelpAppWelcomeTips",
+                     ash::features::AreHelpAppWelcomeTipsEnabled());
   source->AddBoolean("isCloudGamingDevice",
                      chromeos::features::IsCloudGamingDeviceEnabled());
   source->AddBoolean("jelly", chromeos::features::IsJellyEnabled());

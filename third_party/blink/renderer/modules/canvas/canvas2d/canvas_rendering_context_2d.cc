@@ -167,24 +167,6 @@ NoAllocDirectCallHost* CanvasRenderingContext2D::AsNoAllocDirectCallHost() {
 
 CanvasRenderingContext2D::~CanvasRenderingContext2D() = default;
 
-void CanvasRenderingContext2D::ValidateStateStackWithCanvas(
-    const cc::PaintCanvas* canvas) const {
-#if DCHECK_IS_ON()
-  if (canvas) {
-    // The canvas should always have an initial save frame, to support
-    // resetting the top level matrix and clip.
-    DCHECK_GT(canvas->getSaveCount(), 1);
-
-    if (context_lost_mode_ == kNotLostContext) {
-      DCHECK_EQ(static_cast<size_t>(canvas->getSaveCount()),
-                state_stack_.size() + 1);
-    }
-  }
-#endif
-  CHECK(state_stack_.front()
-            .Get());  // Temporary for investigating crbug.com/648510
-}
-
 bool CanvasRenderingContext2D::IsAccelerated() const {
   Canvas2DLayerBridge* layer_bridge = canvas()->GetCanvas2DLayerBridge();
   if (!layer_bridge)
@@ -193,9 +175,8 @@ bool CanvasRenderingContext2D::IsAccelerated() const {
 }
 
 bool CanvasRenderingContext2D::IsOriginTopLeft() const {
-  // Accelerated 2D contexts have the origin of coordinates on the bottom left,
-  // except if they are used for low latency mode (front buffer rendering).
-  return !IsAccelerated() || canvas()->LowLatencyEnabled();
+  // Use top-left origin since Skia Graphite won't support bottom-left origin.
+  return true;
 }
 
 bool CanvasRenderingContext2D::IsComposited() const {
@@ -513,7 +494,8 @@ void CanvasRenderingContext2D::setFont(const String& new_font) {
         CanvasOps::kSetFont, IdentifiabilityBenignStringToken(new_font));
   }
 
-  canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(canvas());
+  canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(
+      canvas(), DocumentUpdateReason::kCanvas);
 
   // The following early exit is dependent on the cache not being empty
   // because an empty cache may indicate that a style change has occured
@@ -743,8 +725,10 @@ static inline TextDirection ToTextDirection(
 
 String CanvasRenderingContext2D::direction() const {
   if (GetState().GetDirection() ==
-      CanvasRenderingContext2DState::kDirectionInherit)
-    canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(canvas());
+      CanvasRenderingContext2DState::kDirectionInherit) {
+    canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(
+        canvas(), DocumentUpdateReason::kCanvas);
+  }
   return ToTextDirection(GetState().GetDirection(), canvas()) ==
                  TextDirection::kRtl
              ? kRtlDirectionString
@@ -829,15 +813,15 @@ void CanvasRenderingContext2D::setFontKerning(
   if (!GetState().HasRealizedFont())
     setFont(font());
   FontDescription::Kerning kerning;
-  String font_kerning = font_kerning_string.LowerASCII();
-  if (font_kerning == kAutoKerningString)
+  if (font_kerning_string == kAutoKerningString) {
     kerning = FontDescription::kAutoKerning;
-  else if (font_kerning == kNoneKerningString)
+  } else if (font_kerning_string == kNoneKerningString) {
     kerning = FontDescription::kNoneKerning;
-  else if (font_kerning == kNormalKerningString)
+  } else if (font_kerning_string == kNormalKerningString) {
     kerning = FontDescription::kNormalKerning;
-  else
+  } else {
     return;
+  }
 
   if (GetState().GetFontKerning() == kerning)
     return;
@@ -891,23 +875,23 @@ void CanvasRenderingContext2D::setFontVariantCaps(
   if (!GetState().HasRealizedFont())
     setFont(font());
   FontDescription::FontVariantCaps variant_caps;
-  String variant_caps_lower = font_variant_caps_string.LowerASCII();
-  if (variant_caps_lower == kNormalVariantString)
+  if (font_variant_caps_string == kNormalVariantString) {
     variant_caps = FontDescription::kCapsNormal;
-  else if (variant_caps_lower == kSmallCapsVariantString)
+  } else if (font_variant_caps_string == kSmallCapsVariantString) {
     variant_caps = FontDescription::kSmallCaps;
-  else if (variant_caps_lower == kAllSmallCapsVariantString)
+  } else if (font_variant_caps_string == kAllSmallCapsVariantString) {
     variant_caps = FontDescription::kAllSmallCaps;
-  else if (variant_caps_lower == kPetiteVariantString)
+  } else if (font_variant_caps_string == kPetiteVariantString) {
     variant_caps = FontDescription::kPetiteCaps;
-  else if (variant_caps_lower == kAllPetiteVariantString)
+  } else if (font_variant_caps_string == kAllPetiteVariantString) {
     variant_caps = FontDescription::kAllPetiteCaps;
-  else if (variant_caps_lower == kUnicaseVariantString)
+  } else if (font_variant_caps_string == kUnicaseVariantString) {
     variant_caps = FontDescription::kUnicase;
-  else if (variant_caps_lower == kTitlingCapsVariantString)
+  } else if (font_variant_caps_string == kTitlingCapsVariantString) {
     variant_caps = FontDescription::kTitlingCaps;
-  else
+  } else {
     return;
+  }
 
   if (GetState().GetFontVariantCaps() == variant_caps)
     return;
@@ -949,7 +933,8 @@ TextMetrics* CanvasRenderingContext2D::measureText(const String& text) {
   if (!canvas()->GetDocument().GetFrame())
     return MakeGarbageCollected<TextMetrics>();
 
-  canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(canvas());
+  canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(
+      canvas(), DocumentUpdateReason::kCanvas);
 
   const Font& font = AccessFont();
 
@@ -1004,7 +989,8 @@ void CanvasRenderingContext2D::DrawTextInternal(
   // accessFont needs the style to be up to date, but updating style can cause
   // script to run, (e.g. due to autofocus) which can free the canvas (set size
   // to 0, for example), so update style before grabbing the PaintCanvas.
-  canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(canvas());
+  canvas()->GetDocument().UpdateStyleAndLayoutTreeForNode(
+      canvas(), DocumentUpdateReason::kCanvas);
 
   cc::PaintCanvas* c = GetOrCreatePaintCanvas();
   if (!c)
@@ -1040,8 +1026,7 @@ void CanvasRenderingContext2D::DrawTextInternal(
   bool bidi_override =
       computed_style ? IsOverride(computed_style->GetUnicodeBidi()) : false;
 
-  TextRun text_run(text, 0, 0, TextRun::kAllowTrailingExpansion, direction,
-                   bidi_override);
+  TextRun text_run(text, direction, bidi_override);
   text_run.SetNormalizeSpace(true);
   // Draw the item text at the correct point.
   gfx::PointF location(ClampTo<float>(x),
@@ -1088,13 +1073,24 @@ void CanvasRenderingContext2D::DrawTextInternal(
       [this, text = std::move(text), direction, bidi_override, location](
           cc::PaintCanvas* c, const cc::PaintFlags* flags)  // draw lambda
       {
-        TextRun text_run(text, 0, 0, TextRun::kAllowTrailingExpansion,
-                         direction, bidi_override);
+        TextRun text_run(text, direction, bidi_override);
         text_run.SetNormalizeSpace(true);
         TextRunPaintInfo text_run_paint_info(text_run);
+        // Font::DrawType::kGlyphsAndClusters is required for printing to PDF,
+        // otherwise the character to glyph mapping will not be reversible,
+        // which prevents text data from being extracted from PDF files or
+        // from the print preview. This is only needed in vector printing mode
+        // (i.e. when rendering inside the beforeprint event listener),
+        // because in all other cases the canvas is just a rectangle of pixels.
+        // Note: Test coverage for this is assured by manual (non-automated)
+        // web test printing/manual/canvas2d-vector-text.html
+        // That test should be run manually against CLs that touch this code.
+        Font::DrawType draw_type = canvas()->IsPrinting()
+                                       ? Font::DrawType::kGlyphsAndClusters
+                                       : Font::DrawType::kGlyphsOnly;
         this->AccessFont().DrawBidiText(c, text_run_paint_info, location,
                                         Font::kUseFallbackIfFontNotReady,
-                                        *flags);
+                                        *flags, draw_type);
       },
       [](const SkIRect& rect)  // overdraw test lambda
       { return false; },
@@ -1252,6 +1248,11 @@ void CanvasRenderingContext2D::UpdateElementAccessibility(const Path& path,
 // once always accelerate fully lands.
 void CanvasRenderingContext2D::DisableAcceleration() {
   canvas()->DisableAcceleration();
+}
+
+bool CanvasRenderingContext2D::ShouldDisableAccelerationBecauseOfReadback()
+    const {
+  return canvas()->ShouldDisableAccelerationBecauseOfReadback();
 }
 
 bool CanvasRenderingContext2D::IsCanvas2DBufferValid() const {

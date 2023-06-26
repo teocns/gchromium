@@ -13,9 +13,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "base/apple/bundle_locations.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/mac/bundle_locations.h"
 #include "base/mac/mac_util.h"
 #include "base/process/kill.h"
 #include "base/system/sys_info.h"
@@ -31,13 +31,18 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace content {
 
 namespace {
 
 void SetParametersForTest(sandbox::SandboxCompiler* compiler,
                           const base::FilePath& logging_path,
-                          const base::FilePath& executable_path) {
+                          const base::FilePath& executable_path,
+                          bool use_syscall_filter) {
   bool enable_logging = true;
   CHECK(compiler->SetBooleanParameter(sandbox::policy::kParamEnableLogging,
                                       enable_logging));
@@ -57,7 +62,7 @@ void SetParametersForTest(sandbox::SandboxCompiler* compiler,
                                base::NumberToString(os_version)));
 
   std::string bundle_path =
-      sandbox::policy::GetCanonicalPath(base::mac::MainBundlePath()).value();
+      sandbox::policy::GetCanonicalPath(base::apple::MainBundlePath()).value();
   CHECK(compiler->SetParameter(sandbox::policy::kParamBundlePath, bundle_path));
 
   CHECK(compiler->SetParameter(sandbox::policy::kParamBundleId,
@@ -72,7 +77,7 @@ void SetParametersForTest(sandbox::SandboxCompiler* compiler,
                                executable_path.value()));
 
   CHECK(compiler->SetBooleanParameter(sandbox::policy::kParamFilterSyscalls,
-                                      true));
+                                      use_syscall_filter));
 }
 
 }  // namespace
@@ -102,7 +107,11 @@ MULTIPROCESS_TEST_MAIN(SandboxProfileProcess) {
   const base::FilePath log_file = temp_path.Append("log-file");
   const base::FilePath exec_file("/bin/ls");
 
-  SetParametersForTest(&compiler, log_file, exec_file);
+  // TODO(crbug.com/1456568): re-enable syscall filter for this test.
+  // SandboxV2Test.SandboxProfileTest uses system() which uses a denied syscall,
+  // which should cause the test to fail.
+  SetParametersForTest(&compiler, log_file, exec_file,
+                       /*use_syscall_filter=*/false);
 
   std::string error;
   bool result = compiler.CompileAndApplyProfile(error);
@@ -139,7 +148,7 @@ MULTIPROCESS_TEST_MAIN(SandboxProfileProcess) {
   CHECK_NE(BOOTSTRAP_SUCCESS, status);
 
   // Read bundle contents.
-  base::FilePath bundle_path = base::mac::MainBundlePath();
+  base::FilePath bundle_path = base::apple::MainBundlePath();
   struct stat st;
   CHECK_NE(-1, stat(bundle_path.value().c_str(), &st));
 

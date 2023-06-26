@@ -25,8 +25,6 @@ BASE_DECLARE_FEATURE(kDestroySystemProfiles);
 
 BASE_DECLARE_FEATURE(kDevToolsTabTarget);
 
-BASE_DECLARE_FEATURE(kKeepToolbarTexture);
-
 BASE_DECLARE_FEATURE(kNukeProfileBeforeCreateMultiAsync);
 
 BASE_DECLARE_FEATURE(kPromoBrowserCommands);
@@ -61,12 +59,12 @@ BASE_DECLARE_FEATURE(kWebUsbDeviceDetection);
 
 #if BUILDFLAG(IS_ANDROID)
 BASE_DECLARE_FEATURE(kCertificateTransparencyAndroid);
+#else
+BASE_DECLARE_FEATURE(kCertificateTransparencyAskBeforeEnabling);
 #endif
 
 BASE_DECLARE_FEATURE(kLargeFaviconFromGoogle);
 extern const base::FeatureParam<int> kLargeFaviconFromGoogleSizeInDip;
-
-BASE_DECLARE_FEATURE(kObserverBasedPostProfileInit);
 
 BASE_DECLARE_FEATURE(kRestartNetworkServiceUnsandboxedForFailedLaunch);
 

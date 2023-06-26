@@ -50,7 +50,6 @@ namespace {
 using ErrorCode = DemoSetupController::DemoSetupError::ErrorCode;
 using RecoveryMethod = DemoSetupController::DemoSetupError::RecoveryMethod;
 
-constexpr char kDemoRequisition[] = "cros-demo-mode";
 constexpr char kDemoSetupDownloadDurationHistogram[] =
     "DemoMode.Setup.DownloadDuration";
 constexpr char kDemoSetupEnrollDurationHistogram[] =
@@ -248,14 +247,14 @@ DemoSetupController::DemoSetupError::CreateFromEnrollmentStatus(
 // static
 DemoSetupController::DemoSetupError
 DemoSetupController::DemoSetupError::CreateFromOtherEnrollmentError(
-    EnterpriseEnrollmentHelper::OtherError error) {
+    EnrollmentLauncher::OtherError error) {
   const std::string debug_message =
       base::StringPrintf("Other error: %d", error);
   switch (error) {
-    case EnterpriseEnrollmentHelper::OTHER_ERROR_DOMAIN_MISMATCH:
+    case EnrollmentLauncher::OTHER_ERROR_DOMAIN_MISMATCH:
       return DemoSetupError(ErrorCode::kAlreadyLocked,
                             RecoveryMethod::kPowerwash, debug_message);
-    case EnterpriseEnrollmentHelper::OTHER_ERROR_FATAL:
+    case EnrollmentLauncher::OTHER_ERROR_FATAL:
       return DemoSetupError(ErrorCode::kUnexpectedError,
                             RecoveryMethod::kUnknown, debug_message);
   }
@@ -391,7 +390,8 @@ DemoSetupController::DemoSetupError::GetLocalizedRecoveryMessage() const {
 
 std::string DemoSetupController::DemoSetupError::GetDebugDescription() const {
   return base::StringPrintf("DemoSetupError (code: %d, recovery: %d) : %s",
-                            error_code_, recovery_method_,
+                            static_cast<int>(error_code_),
+                            static_cast<int>(recovery_method_),
                             debug_message_.c_str());
 }
 
@@ -405,7 +405,7 @@ void DemoSetupController::RegisterLocalStatePrefs(
 // static
 void DemoSetupController::ClearDemoRequisition() {
   if (policy::EnrollmentRequisitionManager::GetDeviceRequisition() ==
-      kDemoRequisition) {
+      policy::EnrollmentRequisitionManager::kDemoRequisition) {
     policy::EnrollmentRequisitionManager::SetDeviceRequisition(std::string());
     // If device requisition is `kDemoRequisition`, it means the sub
     // organization was also set by the demo setup controller, so remove it as
@@ -509,7 +509,7 @@ void DemoSetupController::Enroll(
     const OnSetCurrentSetupStep& set_current_setup_step) {
   DCHECK_NE(demo_config_, DemoSession::DemoModeConfig::kNone)
       << "Demo config needs to be explicitly set before calling Enroll()";
-  DCHECK(!enrollment_helper_);
+  DCHECK(!enrollment_launcher_);
 
   set_current_setup_step_ = set_current_setup_step;
   on_setup_success_ = std::move(on_setup_success);
@@ -600,16 +600,17 @@ void DemoSetupController::OnDemoComponentsLoaded() {
   enroll_start_time_ = base::TimeTicks::Now();
 
   DCHECK(policy::EnrollmentRequisitionManager::GetDeviceRequisition().empty());
-  policy::EnrollmentRequisitionManager::SetDeviceRequisition(kDemoRequisition);
+  policy::EnrollmentRequisitionManager::SetDeviceRequisition(
+      policy::EnrollmentRequisitionManager::kDemoRequisition);
   policy::EnrollmentRequisitionManager::SetSubOrganization(
       GetSubOrganizationEmail());
   policy::EnrollmentConfig config;
   config.mode = policy::EnrollmentConfig::MODE_ATTESTATION;
   config.management_domain = policy::kDemoModeDomain;
 
-  enrollment_helper_ = EnterpriseEnrollmentHelper::Create(
+  enrollment_launcher_ = EnrollmentLauncher::Create(
       this, config, policy::kDemoModeDomain, policy::LicenseType::kEnterprise);
-  enrollment_helper_->EnrollUsingAttestation();
+  enrollment_launcher_->EnrollUsingAttestation();
 }
 
 void DemoSetupController::OnAuthError(const GoogleServiceAuthError& error) {
@@ -620,8 +621,7 @@ void DemoSetupController::OnEnrollmentError(policy::EnrollmentStatus status) {
   SetupFailed(DemoSetupError::CreateFromEnrollmentStatus(status));
 }
 
-void DemoSetupController::OnOtherError(
-    EnterpriseEnrollmentHelper::OtherError error) {
+void DemoSetupController::OnOtherError(EnrollmentLauncher::OtherError error) {
   SetupFailed(DemoSetupError::CreateFromOtherEnrollmentError(error));
 }
 
@@ -698,7 +698,7 @@ void DemoSetupController::Reset() {
   DCHECK_NE(demo_config_, DemoSession::DemoModeConfig::kNone);
 
   // `demo_config_` is not reset here, because it is needed for retrying setup.
-  enrollment_helper_.reset();
+  enrollment_launcher_.reset();
   ClearDemoRequisition();
 }
 

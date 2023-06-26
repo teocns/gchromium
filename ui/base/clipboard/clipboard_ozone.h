@@ -85,15 +85,16 @@ class ClipboardOzone : public Clipboard {
       const ObjectMap& objects,
       std::vector<Clipboard::PlatformRepresentation> platform_representations,
       std::unique_ptr<DataTransferEndpoint> data_src) override;
-  void WriteText(const std::string& text) override;
-  void WriteHTML(const std::string& markup,
-                 const std::string* source_url) override;
-  void WriteUnsanitizedHTML(const std::string& markup,
-                            const std::string* source_url) override;
-  void WriteSvg(const std::string& markup) override;
-  void WriteRTF(const std::string& rtf) override;
+  void WriteText(base::StringPiece text) override;
+  void WriteHTML(base::StringPiece markup,
+                 absl::optional<base::StringPiece> source_url) override;
+  void WriteUnsanitizedHTML(
+      base::StringPiece markup,
+      absl::optional<base::StringPiece> source_url) override;
+  void WriteSvg(base::StringPiece markup) override;
+  void WriteRTF(base::StringPiece rtf) override;
   void WriteFilenames(std::vector<ui::FileInfo> filenames) override;
-  void WriteBookmark(const std::string& title, const std::string& url) override;
+  void WriteBookmark(base::StringPiece title, base::StringPiece url) override;
   void WriteWebSmartPaste() override;
   void WriteBitmap(const SkBitmap& bitmap) override;
   void WriteData(const ClipboardFormatType& format,
@@ -109,8 +110,6 @@ class ClipboardOzone : public Clipboard {
   void SetSource(ClipboardBuffer buffer,
                  std::unique_ptr<DataTransferEndpoint> data_src);
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-
-  base::span<uint8_t> ReadPngInternal(const ClipboardBuffer buffer) const;
 
   class AsyncClipboardOzone;
 

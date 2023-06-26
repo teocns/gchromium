@@ -94,6 +94,10 @@ class CORE_EXPORT NGLineInfo {
   void SetBreakToken(const NGInlineBreakToken* break_token) {
     break_token_ = break_token;
   }
+  // True if this line ends a paragraph; i.e., ends a block or has a forced
+  // break.
+  bool IsEndParagraph() const { return !BreakToken() || HasForcedBreak(); }
+
   HeapVector<Member<const NGBlockBreakToken>>& PropagatedBreakTokens() {
     return propagated_break_tokens_;
   }
@@ -147,18 +151,19 @@ class CORE_EXPORT NGLineInfo {
   void SetHasOverflow(bool value = true) { has_overflow_ = value; }
 
   void SetBfcOffset(const NGBfcOffset& bfc_offset) { bfc_offset_ = bfc_offset; }
-  void SetAvailableWidth(LayoutUnit available_width) {
-    available_width_ = available_width;
-  }
   void SetWidth(LayoutUnit available_width, LayoutUnit width) {
     available_width_ = available_width;
     width_ = width;
   }
 
-  // Start text offset of this line.
+  // Start offset of this line.
   const NGInlineItemTextIndex& Start() const { return start_; }
   unsigned StartOffset() const { return start_.text_offset; }
   void SetStart(const NGInlineItemTextIndex& index) { start_ = index; }
+  // End offset of this line. This is the same as the start offset of the next
+  // line, or the end of block if this is the last line.
+  NGInlineItemTextIndex End() const;
+  unsigned EndTextOffset() const;
   // End text offset of this line, excluding out-of-flow objects such as
   // floating or positioned.
   unsigned InflowEndOffset() const;

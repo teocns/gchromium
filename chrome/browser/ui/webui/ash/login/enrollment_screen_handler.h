@@ -11,8 +11,8 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/values.h"
+#include "chrome/browser/ash/login/enrollment/enrollment_launcher.h"
 #include "chrome/browser/ash/login/enrollment/enrollment_screen_view.h"
-#include "chrome/browser/ash/login/enrollment/enterprise_enrollment_helper.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/ui/webui/ash/login/base_screen_handler.h"
 #include "net/cookies/canonical_cookie.h"
@@ -31,19 +31,6 @@ enum class ActiveDirectoryErrorState {
   BAD_USERNAME = 3,
   BAD_AUTH_PASSWORD = 4,
   BAD_UNLOCK_PASSWORD = 5,
-};
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class ActiveDirectoryDomainJoinType {
-  // Configuration is not set on the domain.
-  WITHOUT_CONFIGURATION = 0,
-  // Configuration is set but was not unlocked during domain join.
-  NOT_USING_CONFIGURATION = 1,
-  // Configuration is set and was unlocked during domain join.
-  USING_CONFIGURATION = 2,
-  // Number of elements in the enum. Should be last.
-  COUNT,
 };
 
 // WebUIMessageHandler implementation which handles events occurring on the
@@ -72,6 +59,7 @@ class EnrollmentScreenHandler : public BaseScreenHandler,
   void Hide() override;
   void ShowSigninScreen() override;
   void ReloadSigninScreen() override;
+  void ResetEnrollmentScreen() override;
   void ShowSkipConfirmationDialog() override;
   void ShowUserError(const std::string& email) override;
   void ShowEnrollmentDuringTrialNotAllowedError() override;
@@ -82,8 +70,7 @@ class EnrollmentScreenHandler : public BaseScreenHandler,
   void ShowEnrollmentTPMCheckingScreen() override;
   void ShowAuthError(const GoogleServiceAuthError& error) override;
   void ShowEnrollmentStatus(policy::EnrollmentStatus status) override;
-  void ShowOtherError(
-      EnterpriseEnrollmentHelper::OtherError error_code) override;
+  void ShowOtherError(EnrollmentLauncher::OtherError error_code) override;
   void Shutdown() override;
 
   // Implements BaseScreenHandler:
@@ -115,7 +102,7 @@ class EnrollmentScreenHandler : public BaseScreenHandler,
   void HandleOnLearnMore();
 
   // Shows a given enrollment step.
-  void ShowStep(const char* step);
+  void ShowStep(const std::string& step);
 
   // Display the given i18n resource as error message.
   void ShowError(int message_id, bool retry);
@@ -163,9 +150,6 @@ class EnrollmentScreenHandler : public BaseScreenHandler,
   FlowType flow_type_;
 
   GaiaButtonsType gaia_buttons_type_;
-
-  ActiveDirectoryDomainJoinType active_directory_join_type_ =
-      ActiveDirectoryDomainJoinType::COUNT;
 
   // True if screen was not shown yet.
   bool first_show_ = true;

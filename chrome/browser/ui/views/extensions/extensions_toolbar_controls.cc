@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
@@ -36,7 +37,8 @@ void ExtensionsToolbarControls::UpdateControls(
     const std::vector<std::unique_ptr<ToolbarActionViewController>>& actions,
     extensions::PermissionsManager::UserSiteSetting site_setting,
     content::WebContents* current_web_contents) {
-  UpdateExtensionsButton(is_restricted_url, site_setting);
+  UpdateExtensionsButton(actions, site_setting, current_web_contents,
+                         is_restricted_url);
   UpdateRequestAccessButton(actions, site_setting, current_web_contents);
 
   // Display background only when multiple buttons are visible. Since
@@ -54,16 +56,23 @@ void ExtensionsToolbarControls::UpdateControls(
 }
 
 void ExtensionsToolbarControls::UpdateExtensionsButton(
-    bool is_restricted_url,
-    extensions::PermissionsManager::UserSiteSetting site_setting) {
-  bool extensions_are_blocked =
-      is_restricted_url ||
-      site_setting ==
-          extensions::PermissionsManager::UserSiteSetting::kBlockAllExtensions;
+    const std::vector<std::unique_ptr<ToolbarActionViewController>>& actions,
+    extensions::PermissionsManager::UserSiteSetting site_setting,
+    content::WebContents* web_contents,
+    bool is_restricted_url) {
   ExtensionsToolbarButton::State extensions_button_state =
-      extensions_are_blocked
-          ? ExtensionsToolbarButton::State::kAllExtensionsBlocked
-          : ExtensionsToolbarButton::State::kDefault;
+      ExtensionsToolbarButton::State::kDefault;
+
+  if (is_restricted_url || site_setting ==
+                               extensions::PermissionsManager::UserSiteSetting::
+                                   kBlockAllExtensions) {
+    extensions_button_state =
+        ExtensionsToolbarButton::State::kAllExtensionsBlocked;
+  } else if (ExtensionActionViewController::AnyActionHasCurrentSiteAccess(
+                 actions, web_contents)) {
+    extensions_button_state =
+        ExtensionsToolbarButton::State::kAnyExtensionHasAccess;
+  }
 
   extensions_button_->UpdateState(extensions_button_state);
 }
@@ -74,12 +83,16 @@ void ExtensionsToolbarControls::UpdateRequestAccessButton(
     content::WebContents* web_contents) {
   // Extensions are included in the request access button only when the site
   // allows customizing site access by extension, and when the extension
-  // itself can show access requests in the toolbar.
+  // itself can show access requests in the toolbar and hasn't been dismissed.
   std::vector<extensions::ExtensionId> extensions;
   if (site_setting ==
       extensions::PermissionsManager::UserSiteSetting::kCustomizeByExtension) {
     for (const auto& action : actions) {
-      if (action->ShouldShowSiteAccessRequestInToolbar(web_contents)) {
+      bool dismissed_requests =
+          extensions::TabHelper::FromWebContents(web_contents)
+              ->HasExtensionDismissedRequests(action->GetId());
+      if (action->ShouldShowSiteAccessRequestInToolbar(web_contents) &&
+          !dismissed_requests) {
         extensions.push_back(action->GetId());
       }
     }

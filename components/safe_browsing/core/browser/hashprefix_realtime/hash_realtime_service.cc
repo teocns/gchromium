@@ -268,6 +268,7 @@ void HashRealTimeService::LogSearchCacheWithNoQueryParamsMetric(
 
 void HashRealTimeService::StartLookup(
     const GURL& url,
+    bool is_source_lookup_mechanism_experiment,
     HPRTLookupResponseCallback response_callback,
     scoped_refptr<base::SequencedTaskRunner> callback_task_runner) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -323,20 +324,22 @@ void HashRealTimeService::StartLookup(
                               hash_prefixes_to_request.size());
 
   // Send request.
-  if (base::FeatureList::IsEnabled(kHashRealTimeOverOhttp)) {
+  if (!is_source_lookup_mechanism_experiment ||
+      base::FeatureList::IsEnabled(kHashRealTimeOverOhttp)) {
     // OHTTP
     ohttp_key_service_->GetOhttpKey(base::BindOnce(
         &HashRealTimeService::OnGetOhttpKey, weak_factory_.GetWeakPtr(),
-        std::move(request), url, std::move(hash_prefixes_to_request),
-        std::move(cached_full_hashes), base::TimeTicks::Now(),
-        std::move(callback_task_runner), std::move(response_callback),
-        locally_cached_results_threat_type));
+        std::move(request), url, is_source_lookup_mechanism_experiment,
+        std::move(hash_prefixes_to_request), std::move(cached_full_hashes),
+        base::TimeTicks::Now(), std::move(callback_task_runner),
+        std::move(response_callback), locally_cached_results_threat_type));
   } else {
     // Direct fetch
+    DCHECK(is_source_lookup_mechanism_experiment);
     std::unique_ptr<network::SimpleURLLoader> url_loader =
         network::SimpleURLLoader::Create(
             GetDirectFetchResourceRequest(std::move(request)),
-            GetTrafficAnnotationTag());
+            GetTrafficAnnotationTagForDirectFetch());
     url_loader->SetTimeoutDuration(
         base::Seconds(kLookupTimeoutDurationInSeconds));
     url_loader->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
@@ -355,6 +358,7 @@ void HashRealTimeService::StartLookup(
 void HashRealTimeService::OnGetOhttpKey(
     std::unique_ptr<V5::SearchHashesRequest> request,
     const GURL& url,
+    bool is_source_lookup_mechanism_experiment,
     const std::vector<std::string>& hash_prefixes_in_request,
     std::vector<V5::FullHash> result_full_hashes,
     base::TimeTicks request_start_time,
@@ -376,9 +380,12 @@ void HashRealTimeService::OnGetOhttpKey(
   // Construct OHTTP request.
   network::mojom::ObliviousHttpRequestPtr ohttp_request =
       network::mojom::ObliviousHttpRequest::New();
-  ohttp_request->relay_url = GURL(kHashRealTimeOverOhttpRelayUrl.Get());
-  ohttp_request->traffic_annotation =
-      net::MutableNetworkTrafficAnnotationTag(GetTrafficAnnotationTag());
+  ohttp_request->relay_url =
+      is_source_lookup_mechanism_experiment
+          ? GURL(kHashRealTimeOverOhttpRelayUrl.Get())
+          : GURL(kHashPrefixRealTimeLookupsRelayUrl.Get());
+  ohttp_request->traffic_annotation = net::MutableNetworkTrafficAnnotationTag(
+      GetTrafficAnnotationTagForOhttp());
   ohttp_request->key_config = key.value();
   ohttp_request->resource_url = GURL(GetResourceUrl(std::move(request)));
   ohttp_request->method = net::HttpRequestHeaders::kGetMethod;
@@ -529,7 +536,12 @@ HashRealTimeService::ParseResponseAndUpdateBackoff(
   if (response.has_value()) {
     backoff_operator_->ReportSuccess();
   } else if (response.error() != OperationResult::kRetriableError) {
-    backoff_operator_->ReportError();
+    bool newly_in_backoff_mode = backoff_operator_->ReportError();
+    if (newly_in_backoff_mode) {
+      RecordHttpResponseOrErrorCode(
+          "SafeBrowsing.HPRT.Network.Result.WhenEnteringBackoff", net_error,
+          response_code);
+    }
   }
   return response;
 }
@@ -664,10 +676,10 @@ base::WeakPtr<HashRealTimeService> HashRealTimeService::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-net::NetworkTrafficAnnotationTag HashRealTimeService::GetTrafficAnnotationTag()
-    const {
+net::NetworkTrafficAnnotationTag
+HashRealTimeService::GetTrafficAnnotationTagForDirectFetch() const {
   return net::DefineNetworkTrafficAnnotation(
-      "safe_browsing_hashprefix_realtime_lookup",
+      "safe_browsing_hashprefix_realtime_lookup_direct",
       R"(
   semantics {
     sender: "Safe Browsing"
@@ -675,9 +687,7 @@ net::NetworkTrafficAnnotationTag HashRealTimeService::GetTrafficAnnotationTag()
       "When Safe Browsing can't detect that a URL is safe based on its "
       "local database, it sends partial hashes of the URL to Google to check "
       "whether to show a warning to the user. These partial hashes do not "
-      "expose the URL to Google. The partial hashes are sent to a proxy via "
-      "Oblivious HTTP first and then relayed to Google. The source of the "
-      "requests (e.g. IP address) is anonymized to Google."
+      "expose the URL to Google."
     trigger:
       "When a main frame URL fails to match the local hash-prefix "
       "database of known safe URLs and a valid result from a prior "
@@ -697,21 +707,90 @@ net::NetworkTrafficAnnotationTag HashRealTimeService::GetTrafficAnnotationTag()
     user_data {
       type: NONE
     }
-    last_reviewed: "2023-01-18"
+    last_reviewed: "2023-04-20"
   }
   policy {
-    cookies_allowed: YES
-    cookies_store: "Safe Browsing cookie store"
+    cookies_allowed: NO
     setting:
-      "Users can disable Safe Browsing by unchecking 'Protect you and "
-      "your device from dangerous sites' in Chromium settings under "
-      "Privacy. The feature is enabled by default."
+      "Users can disable Safe Browsing by checking 'No protection' in Chromium "
+      "settings under Security > Safe Browsing. The feature is enabled by "
+      "default."
+    chrome_policy {
+      SafeBrowsingProtectionLevel {
+        policy_options {mode: MANDATORY}
+        SafeBrowsingProtectionLevel: 0
+      }
+    }
     chrome_policy {
       SafeBrowsingEnabled {
         policy_options {mode: MANDATORY}
         SafeBrowsingEnabled: false
       }
     }
+    deprecated_policies: "SafeBrowsingEnabled"
+  })");
+}
+
+net::NetworkTrafficAnnotationTag
+HashRealTimeService::GetTrafficAnnotationTagForOhttp() const {
+  return net::DefineNetworkTrafficAnnotation(
+      "safe_browsing_hashprefix_realtime_lookup_ohttp",
+      R"(
+  semantics {
+    sender: "Safe Browsing"
+    description:
+      "When Safe Browsing can't detect that a URL is safe based on its "
+      "local database, it sends partial hashes of the URL to Google to check "
+      "whether to show a warning to the user. These partial hashes do not "
+      "expose the URL to Google. The partial hashes are sent to a proxy via "
+      "Oblivious HTTP first and then relayed to Google. The source of the "
+      "requests (e.g. IP address) is anonymized to Google."
+    trigger:
+      "When a main frame URL fails to match the local hash-prefix "
+      "database of known safe URLs and a valid result from a prior "
+      "lookup is not already cached, this will be sent."
+    data:
+        "The 32-bit hash prefixes of the URL that did not match the local "
+        " safelist. The URL itself is not sent."
+    destination: PROXIED_GOOGLE_OWNED_SERVICE
+    internal {
+      contacts {
+        email: "thefrog@chromium.org"
+      }
+      contacts {
+        email: "chrome-counter-abuse-alerts@google.com"
+      }
+    }
+    user_data {
+      type: NONE
+    }
+    last_reviewed: "2023-04-20"
+  }
+  policy {
+    cookies_allowed: NO
+    setting:
+      "Users can disable Safe Browsing by checking 'No protection' in Chromium "
+      "settings under Security > Safe Browsing. The feature is enabled by "
+      "default."
+    chrome_policy {
+      SafeBrowsingProtectionLevel {
+        policy_options {mode: MANDATORY}
+        SafeBrowsingProtectionLevel: 0
+      }
+    }
+    chrome_policy {
+      SafeBrowsingEnabled {
+        policy_options {mode: MANDATORY}
+        SafeBrowsingEnabled: false
+      }
+    }
+    chrome_policy {
+      SafeBrowsingProxiedRealTimeChecksAllowed {
+        policy_options {mode: MANDATORY}
+        SafeBrowsingProxiedRealTimeChecksAllowed: false
+      }
+    }
+    deprecated_policies: "SafeBrowsingEnabled"
   })");
 }
 

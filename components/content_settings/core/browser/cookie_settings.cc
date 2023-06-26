@@ -7,7 +7,9 @@
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/i18n/time_formatting.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -15,6 +17,7 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/content_settings/core/common/cookie_settings_base.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -42,7 +45,8 @@ CookieSettings::CookieSettings(
     : host_content_settings_map_(host_content_settings_map),
       is_incognito_(is_incognito),
       extension_scheme_(extension_scheme),
-      block_third_party_cookies_(false) {
+      block_third_party_cookies_(
+          net::cookie_util::IsForceThirdPartyCookieBlockingEnabled()) {
   content_settings_observation_.Observe(host_content_settings_map_.get());
   pref_change_registrar_.Init(prefs);
   pref_change_registrar_.Add(
@@ -88,8 +92,10 @@ void CookieSettings::SetCookieSetting(const GURL& primary_url,
 
 void CookieSettings::SetCookieSettingForUserBypass(
     const GURL& first_party_url) {
-  base::Time expiry_time = GetConstraintExpiration(kUserBypassEntriesTTL);
-  ContentSettingConstraints constraints = {expiry_time, SessionModel::Durable};
+  ContentSettingConstraints constraints;
+  constraints.set_lifetime(
+      content_settings::features::kUserBypassUIExceptionExpiration.Get());
+  constraints.set_session_model(SessionModel::Durable);
 
   host_content_settings_map_->SetContentSettingCustomScope(
       ContentSettingsPattern::Wildcard(),
@@ -105,15 +111,13 @@ void CookieSettings::SetCookieSettingForUserBypass(
 bool CookieSettings::IsStoragePartitioningBypassEnabled(
     const GURL& first_party_url) {
   SettingInfo info;
-  const base::Value value = host_content_settings_map_->GetWebsiteSetting(
+  ContentSetting setting = host_content_settings_map_->GetContentSetting(
       GURL(), first_party_url, ContentSettingsType::COOKIES, &info);
 
   bool is_default = info.primary_pattern.MatchesAllHosts() &&
                     info.secondary_pattern.MatchesAllHosts();
 
-  DCHECK(value.is_int());
-
-  return is_default ? false : IsAllowed(ValueToContentSetting(value));
+  return is_default ? false : IsAllowed(setting);
 }
 
 void CookieSettings::ResetCookieSetting(const GURL& primary_url) {
@@ -125,11 +129,13 @@ void CookieSettings::ResetCookieSetting(const GURL& primary_url) {
 // TODO(crbug.com/1386190): Update to take in CookieSettingOverrides.
 bool CookieSettings::IsThirdPartyAccessAllowed(
     const GURL& first_party_url,
-    content_settings::SettingSource* source) {
+    content_settings::SettingSource* source,
+    base::Time* expiration) {
   // Use GURL() as an opaque primary url to check if any site
   // could access cookies in a 3p context on |first_party_url|.
   return IsAllowed(GetCookieSetting(GURL(), first_party_url,
-                                    net::CookieSettingOverrides(), source));
+                                    net::CookieSettingOverrides(), source,
+                                    expiration));
 }
 
 void CookieSettings::SetThirdPartyCookieSetting(const GURL& first_party_url,
@@ -203,7 +209,8 @@ ContentSetting CookieSettings::GetCookieSettingInternal(
     const GURL& first_party_url,
     bool is_third_party_request,
     net::CookieSettingOverrides overrides,
-    content_settings::SettingSource* source) const {
+    content_settings::SettingSource* source,
+    base::Time* expiration) const {
   // Auto-allow in extensions or for WebUI embedding a secure origin.
   if (ShouldAlwaysAllowCookies(url, first_party_url)) {
     return CONTENT_SETTING_ALLOW;
@@ -211,10 +218,13 @@ ContentSetting CookieSettings::GetCookieSettingInternal(
 
   // First get any host-specific settings.
   SettingInfo info;
-  const base::Value value = host_content_settings_map_->GetWebsiteSetting(
+  ContentSetting setting = host_content_settings_map_->GetContentSetting(
       url, first_party_url, ContentSettingsType::COOKIES, &info);
   if (source) {
     *source = info.source;
+  }
+  if (expiration) {
+    *expiration = info.metadata.expiration();
   }
 
   // If no explicit exception has been made and third-party cookies are blocked
@@ -224,9 +234,6 @@ ContentSetting CookieSettings::GetCookieSettingInternal(
                      ShouldBlockThirdPartyCookies() &&
                      !first_party_url.SchemeIs(extension_scheme_);
 
-  // We should always have a value, at least from the default provider.
-  DCHECK(value.is_int());
-  ContentSetting setting = ValueToContentSetting(value);
   bool block = block_third && is_third_party_request;
 
   if (!block) {
@@ -303,6 +310,10 @@ bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() {
     return false;
   }
 #endif
+
+  if (net::cookie_util::IsForceThirdPartyCookieBlockingEnabled()) {
+    return true;
+  }
 
   CookieControlsMode mode = static_cast<CookieControlsMode>(
       pref_change_registrar_.prefs()->GetInteger(prefs::kCookieControlsMode));

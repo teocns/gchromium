@@ -9,22 +9,22 @@
 #import "base/files/file_path.h"
 #import "base/files/file_util.h"
 #import "base/files/scoped_temp_dir.h"
+#import "base/mac/foundation_util.h"
 #import "base/path_service.h"
 #import "base/run_loop.h"
-#import "base/strings/sys_string_conversions.h"
 #import "base/task/sequenced_task_runner.h"
 #import "base/task/single_thread_task_runner.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
-#import "ios/chrome/browser/paths/paths.h"
 #import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_ios_factory.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
-#import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#import "ios/chrome/browser/web_state_list/web_state_opener.h"
+#import "ios/chrome/browser/shared/model/paths/paths.h"
+#import "ios/chrome/browser/shared/model/web_state_list/test/fake_web_state_list_delegate.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
+#import "ios/chrome/browser/shared/model/web_state_list/web_state_opener.h"
 #import "ios/web/public/session/crw_session_storage.h"
 #import "ios/web/public/session/serializable_user_data_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
@@ -94,7 +94,7 @@ class SessionServiceTest : public PlatformTest {
     if (!base::PathExists(session_path))
       return nil;
 
-    return base::SysUTF8ToNSString(session_path.AsUTF8Unsafe());
+    return base::mac::FilePathToNSString(session_path);
   }
 
   SessionServiceIOS* session_service() { return session_service_; }
@@ -102,7 +102,7 @@ class SessionServiceTest : public PlatformTest {
   const base::FilePath& directory() const { return directory_; }
 
   NSString* directory_as_nsstring() const {
-    return base::SysUTF8ToNSString(directory().AsUTF8Unsafe());
+    return base::mac::FilePathToNSString(directory());
   }
 
  private:

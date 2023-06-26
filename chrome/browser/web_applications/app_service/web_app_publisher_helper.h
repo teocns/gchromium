@@ -23,7 +23,6 @@
 #include "chrome/browser/apps/app_service/app_icon/icon_key_util.h"
 #include "chrome/browser/apps/app_service/launch_result_type.h"
 #include "chrome/browser/apps/app_service/paused_apps.h"
-#include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
@@ -31,6 +30,7 @@
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_manager_observer.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#include "chrome/browser/web_applications/web_app_registrar_observer.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -49,10 +49,9 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/apps/app_service/app_notifications.h"
-#include "chrome/browser/apps/app_service/app_web_contents_data.h"
 #include "chrome/browser/apps/app_service/media_requests.h"
 #include "chrome/browser/badging/badge_manager_delegate.h"
-#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "content/public/browser/media_request_state.h"
@@ -69,7 +68,7 @@ namespace apps {
 struct ShareTarget;
 struct AppLaunchParams;
 enum class RunOnOsLoginMode;
-}
+}  // namespace apps
 
 namespace badging {
 class BadgeManager;
@@ -78,7 +77,7 @@ class BadgeManager;
 namespace base {
 class FilePath;
 class Time;
-}
+}  // namespace base
 
 namespace content {
 class WebContents;
@@ -105,12 +104,11 @@ void UninstallImpl(WebAppProvider* provider,
 RunOnOsLoginMode ConvertOsLoginModeToWebAppConstants(
     apps::RunOnOsLoginMode login_mode);
 
-class WebAppPublisherHelper : public AppRegistrarObserver,
+class WebAppPublisherHelper : public WebAppRegistrarObserver,
                               public WebAppInstallManagerObserver,
 #if BUILDFLAG(IS_CHROMEOS)
                               public NotificationDisplayService::Observer,
-                              public MediaCaptureDevicesDispatcher::Observer,
-                              public apps::AppWebContentsData::Client,
+                              public MediaStreamCaptureIndicator::Observer,
 #endif
                               public content_settings::Observer {
  public:
@@ -134,8 +132,7 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
 
   WebAppPublisherHelper(Profile* profile,
                         WebAppProvider* provider,
-                        Delegate* delegate,
-                        bool observe_media_requests);
+                        Delegate* delegate);
   WebAppPublisherHelper(const WebAppPublisherHelper&) = delete;
   WebAppPublisherHelper& operator=(const WebAppPublisherHelper&) = delete;
   ~WebAppPublisherHelper() override;
@@ -324,7 +321,7 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
       webapps::WebappUninstallSource uninstall_source) override;
   void OnWebAppInstallManagerDestroyed() override;
 
-  // AppRegistrarObserver:
+  // WebAppRegistrarObserver:
   void OnAppRegistrarDestroyed() override;
   void OnWebAppFileHandlerApprovalStateChanged(const AppId& app_id) override;
   void OnWebAppLastLaunchTimeChanged(
@@ -353,14 +350,11 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
-  // MediaCaptureDevicesDispatcher::Observer:
-  void OnRequestUpdate(int render_process_id,
-                       int render_frame_id,
-                       blink::mojom::MediaStreamType stream_type,
-                       content::MediaRequestState state) override;
-
-  // apps::AppWebContentsData::Client:
-  void OnWebContentsDestroyed(content::WebContents* contents) override;
+  // MediaStreamCaptureIndicator::Observer:
+  void OnIsCapturingVideoChanged(content::WebContents* web_contents,
+                                 bool is_capturing_video) override;
+  void OnIsCapturingAudioChanged(content::WebContents* web_contents,
+                                 bool is_capturing_audio) override;
 #endif
 
   // content_settings::Observer:
@@ -369,7 +363,7 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
       const ContentSettingsPattern& secondary_pattern,
       ContentSettingsTypeSet content_type_set) override;
 
-  void Init(bool observe_media_requests);
+  void Init();
 
   void ObserveWebAppSubsystems();
 
@@ -436,7 +430,7 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
 
   const raw_ptr<Delegate, DanglingUntriaged> delegate_;
 
-  base::ScopedObservation<WebAppRegistrar, AppRegistrarObserver>
+  base::ScopedObservation<WebAppRegistrar, WebAppRegistrarObserver>
       registrar_observation_{this};
 
   base::ScopedObservation<WebAppInstallManager, WebAppInstallManagerObserver>
@@ -460,9 +454,9 @@ class WebAppPublisherHelper : public AppRegistrarObserver,
 
   raw_ptr<badging::BadgeManager, DanglingUntriaged> badge_manager_ = nullptr;
 
-  base::ScopedObservation<MediaCaptureDevicesDispatcher,
-                          MediaCaptureDevicesDispatcher::Observer>
-      media_dispatcher_{this};
+  base::ScopedObservation<MediaStreamCaptureIndicator,
+                          MediaStreamCaptureIndicator::Observer>
+      media_indicator_observation_{this};
 
   apps::MediaRequests media_requests_;
 #endif

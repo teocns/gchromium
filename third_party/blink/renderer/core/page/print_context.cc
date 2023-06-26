@@ -74,39 +74,16 @@ void PrintContext::ComputePageRects(const gfx::SizeF& print_size) {
   }
 
   auto* view = frame_->GetDocument()->GetLayoutView();
-  const PhysicalRect& document_rect = view->DocumentRect();
-  gfx::SizeF page_size = frame_->ResizePageRectsKeepingRatio(
-      print_size, gfx::SizeF(document_rect.size));
-  ComputePageRectsWithPageSizeInternal(page_size);
-}
-
-void PrintContext::ComputePageRectsWithPageSize(
-    const gfx::SizeF& page_size_in_pixels) {
-  page_rects_.clear();
-  ComputePageRectsWithPageSizeInternal(page_size_in_pixels);
-}
-
-void PrintContext::ComputePageRectsWithPageSizeInternal(
-    const gfx::SizeF& page_size_in_pixels) {
-  if (!IsFrameValid())
-    return;
-
-  auto* view = frame_->GetDocument()->GetLayoutView();
-
   gfx::Rect snapped_doc_rect = ToPixelSnappedRect(view->DocumentRect());
-
-  // We scaled with floating point arithmetic and need to ensure results like
-  // 13329.99 are treated as 13330 so that we don't mistakenly assign an extra
-  // page for the stray pixel.
-  int page_width = page_size_in_pixels.width() + LayoutUnit::Epsilon();
-  int page_height = page_size_in_pixels.height() + LayoutUnit::Epsilon();
+  LogicalSize page_size =
+      view->PageSize().ConvertToLogical(view->StyleRef().GetWritingMode());
 
   bool is_horizontal = view->StyleRef().IsHorizontalWritingMode();
 
   int doc_logical_height =
       is_horizontal ? snapped_doc_rect.height() : snapped_doc_rect.width();
-  int page_logical_height = is_horizontal ? page_height : page_width;
-  int page_logical_width = is_horizontal ? page_width : page_height;
+  int page_logical_height = page_size.block_size.ToInt();
+  int page_logical_width = page_size.inline_size.ToInt();
 
   int inline_direction_start = snapped_doc_rect.x();
   int inline_direction_end = snapped_doc_rect.right();
@@ -143,29 +120,29 @@ void PrintContext::ComputePageRectsWithPageSizeInternal(
   }
 }
 
-void PrintContext::BeginPrintMode(float width, float height) {
-  DCHECK_GT(width, 0);
-  DCHECK_GT(height, 0);
+void PrintContext::BeginPrintMode(gfx::SizeF page_size) {
+  DCHECK_GT(page_size.width(), 0);
+  DCHECK_GT(page_size.height(), 0);
 
   // This function can be called multiple times to adjust printing parameters
   // without going back to screen mode.
   is_printing_ = true;
 
-  gfx::SizeF original_page_size(width, height);
-  gfx::SizeF min_layout_size = frame_->ResizePageRectsKeepingRatio(
-      original_page_size, gfx::SizeF(width * kPrintingMinimumShrinkFactor,
-                                     height * kPrintingMinimumShrinkFactor));
-
   const Settings* settings = frame_->GetSettings();
   DCHECK(settings);
+  // TODO(crbug.com/1296099): It would be better if the actual shrink factor was
+  // stored in settings, rather than something that has to be divided by
+  // 1.3333...
+  static constexpr float kPrintingMinimumShrinkFactor = 1.33333333f;
   float printingMaximumShrinkFactor =
       settings->GetPrintingMaximumShrinkFactor();
 
   // This changes layout, so callers need to make sure that they don't paint to
   // screen while in printing mode.
   frame_->StartPrinting(
-      min_layout_size, original_page_size,
-      printingMaximumShrinkFactor / kPrintingMinimumShrinkFactor);
+      page_size, printingMaximumShrinkFactor / kPrintingMinimumShrinkFactor);
+
+  ComputePageRects(page_size);
 }
 
 void PrintContext::EndPrintMode() {
@@ -189,20 +166,13 @@ int PrintContext::PageNumberForElement(Element* element,
   element->GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kPrinting);
 
   LocalFrame* frame = element->GetDocument().GetFrame();
-  gfx::RectF page_rect(page_size_in_pixels);
   ScopedPrintContext print_context(frame);
-  print_context->BeginPrintMode(page_rect.width(), page_rect.height());
+  print_context->BeginPrintMode(page_size_in_pixels);
 
   LayoutBoxModelObject* box =
       EnclosingBoxModelObject(element->GetLayoutObject());
   if (!box)
     return -1;
-
-  gfx::SizeF scaled_page_size = page_size_in_pixels;
-  scaled_page_size.Scale(
-      frame->View()->LayoutViewport()->ContentsSize().width() /
-      page_rect.width());
-  print_context->ComputePageRectsWithPageSize(scaled_page_size);
 
   int top = box->OffsetTop(box->OffsetParent()).ToInt();
   int left = box->OffsetLeft(box->OffsetParent()).ToInt();
@@ -264,7 +234,7 @@ String PrintContext::PageProperty(LocalFrame* frame,
   // Any non-zero size is OK here. We don't care about actual layout. We just
   // want to collect @page rules and figure out what declarations apply on a
   // given page (that may or may not exist).
-  print_context->BeginPrintMode(800, 1000);
+  print_context->BeginPrintMode(gfx::SizeF(800, 1000));
   scoped_refptr<const ComputedStyle> style =
       document->StyleForPage(page_number);
 
@@ -323,17 +293,8 @@ int PrintContext::NumberOfPages(LocalFrame* frame,
                                 const gfx::SizeF& page_size_in_pixels) {
   frame->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kPrinting);
 
-  gfx::RectF page_rect(page_size_in_pixels);
   ScopedPrintContext print_context(frame);
-  print_context->BeginPrintMode(page_rect.width(), page_rect.height());
-  // Account for shrink-to-fit.
-  gfx::SizeF scaled_page_size = page_size_in_pixels;
-  const LayoutView* layout_view = frame->View()->GetLayoutView();
-  bool is_horizontal = layout_view->StyleRef().IsHorizontalWritingMode();
-  scaled_page_size.Scale(
-      layout_view->PageLogicalHeight() /
-      (is_horizontal ? page_rect.height() : page_rect.width()));
-  print_context->ComputePageRectsWithPageSize(scaled_page_size);
+  print_context->BeginPrintMode(page_size_in_pixels);
   return print_context->PageCount();
 }
 

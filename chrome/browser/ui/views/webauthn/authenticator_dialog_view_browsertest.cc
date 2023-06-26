@@ -52,11 +52,6 @@ class TestSheetModel : public AuthenticatorRequestSheetModel {
   bool IsAcceptButtonEnabled() const override { return true; }
   std::u16string GetAcceptButtonLabel() const override { return u"Test OK"; }
 
-  const gfx::VectorIcon& GetStepIllustration(
-      ImageColorScheme color_scheme) const override {
-    return gfx::kNoneIcon;
-  }
-
   std::u16string GetStepTitle() const override { return u"Test Title"; }
 
   std::u16string GetStepDescription() const override {
@@ -139,8 +134,9 @@ class AuthenticatorDialogViewTest : public DialogBrowserTest {
           AuthenticatorTransport::kHybrid};
 
       std::array<uint8_t, device::kP256X962Length> public_key = {0};
-      AuthenticatorRequestDialogModel::PairedPhone phone("Phone", 0,
-                                                         public_key);
+      AuthenticatorRequestDialogModel::PairedPhone phone(
+          AuthenticatorRequestDialogModel::PairedPhone::PairingSource::kQR,
+          "Phone", 0, public_key);
       dialog_model_->set_cable_transport_info(
           /*extension_is_v2=*/absl::nullopt,
           /*paired_phones=*/{phone},

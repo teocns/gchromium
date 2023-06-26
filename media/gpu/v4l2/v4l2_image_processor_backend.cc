@@ -54,8 +54,7 @@ void FillV4L2BufferByGpuMemoryBufferHandle(
     const gfx::GpuMemoryBufferHandle& gmb_handle,
     V4L2WritableBufferRef* buffer) {
   DCHECK_EQ(buffer->Memory(), V4L2_MEMORY_DMABUF);
-  const size_t num_planes =
-      V4L2Device::GetNumPlanesOfV4L2PixFmt(fourcc.ToV4L2PixFmt());
+  const size_t num_planes = GetNumPlanesOfV4L2PixFmt(fourcc.ToV4L2PixFmt());
   const std::vector<gfx::NativePixmapPlane>& planes =
       gmb_handle.native_pixmap_handle.planes;
 
@@ -477,29 +476,20 @@ void V4L2ImageProcessorBackend::Initialize(InitCB init_cb) {
 
 // static
 bool V4L2ImageProcessorBackend::IsSupported() {
-  scoped_refptr<V4L2Device> device = V4L2Device::Create();
-  if (!device)
-    return false;
-
+  auto device = base::MakeRefCounted<V4L2Device>();
   return device->IsImageProcessingSupported();
 }
 
 // static
 std::vector<uint32_t> V4L2ImageProcessorBackend::GetSupportedInputFormats() {
-  scoped_refptr<V4L2Device> device = V4L2Device::Create();
-  if (!device)
-    return std::vector<uint32_t>();
-
+  auto device = base::MakeRefCounted<V4L2Device>();
   return device->GetSupportedImageProcessorPixelformats(
       V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 }
 
 // static
 std::vector<uint32_t> V4L2ImageProcessorBackend::GetSupportedOutputFormats() {
-  scoped_refptr<V4L2Device> device = V4L2Device::Create();
-  if (!device)
-    return std::vector<uint32_t>();
-
+  auto device = base::MakeRefCounted<V4L2Device>();
   return device->GetSupportedImageProcessorPixelformats(
       V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 }
@@ -514,10 +504,10 @@ bool V4L2ImageProcessorBackend::TryOutputFormat(uint32_t input_pixelformat,
             << " input_size=" << input_size.ToString()
             << " output_format=" << FourccToString(output_pixelformat)
             << " output_size=" << output_size->ToString();
-  scoped_refptr<V4L2Device> device = V4L2Device::Create();
-  if (!device ||
-      !device->Open(V4L2Device::Type::kImageProcessor, input_pixelformat))
+  auto device = base::MakeRefCounted<V4L2Device>();
+  if (!device->Open(V4L2Device::Type::kImageProcessor, input_pixelformat)) {
     return false;
+  }
 
   // Set input format.
   struct v4l2_format format;
@@ -556,10 +546,7 @@ void V4L2ImageProcessorBackend::ProcessLegacy(scoped_refptr<VideoFrame> frame,
   DVLOGF(4) << "ts=" << frame->timestamp().InMilliseconds();
   DCHECK_CALLED_ON_VALID_SEQUENCE(backend_sequence_checker_);
 
-  if (output_memory_type_ != V4L2_MEMORY_MMAP) {
-    NOTREACHED();
-    return;
-  }
+  CHECK_EQ(output_memory_type_, V4L2_MEMORY_MMAP);
 
   auto job_record = std::make_unique<JobRecord>();
   job_record->input_frame = frame;
@@ -905,8 +892,7 @@ void V4L2ImageProcessorBackend::Dequeue() {
         break;
 
       default:
-        NOTREACHED();
-        return;
+        NOTREACHED_NORETURN();
     }
 
     const auto timestamp = job_record->input_frame->timestamp();
@@ -946,8 +932,8 @@ bool V4L2ImageProcessorBackend::EnqueueInputRecord(
 
   switch (input_memory_type_) {
     case V4L2_MEMORY_USERPTR: {
-      const size_t num_planes = V4L2Device::GetNumPlanesOfV4L2PixFmt(
-          input_config_.fourcc.ToV4L2PixFmt());
+      const size_t num_planes =
+          GetNumPlanesOfV4L2PixFmt(input_config_.fourcc.ToV4L2PixFmt());
       std::vector<void*> user_ptrs(num_planes);
       for (size_t i = 0; i < num_planes; ++i) {
         int bytes_used =
@@ -983,8 +969,7 @@ bool V4L2ImageProcessorBackend::EnqueueInputRecord(
       break;
     }
     default:
-      NOTREACHED();
-      return false;
+      NOTREACHED_NORETURN();
   }
   DVLOGF(4) << "enqueued frame ts="
             << job_record->input_frame->timestamp().InMilliseconds()
@@ -1022,8 +1007,7 @@ bool V4L2ImageProcessorBackend::EnqueueOutputRecord(
           output_handle->native_pixmap_handle.planes);
     }
     default:
-      NOTREACHED();
-      return false;
+      NOTREACHED_NORETURN();
   }
 }
 

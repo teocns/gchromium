@@ -156,7 +156,7 @@ TEST_F(LocalFrameViewTest, UpdateLifecyclePhasesForPrintingDetachedFrame) {
   SetBodyInnerHTML("<iframe style='display: none'></iframe>");
   SetChildFrameHTML("A");
 
-  ChildFrame().StartPrinting(gfx::SizeF(200, 200), gfx::SizeF(200, 200), 1);
+  ChildFrame().StartPrinting(gfx::SizeF(200, 200), 1);
   ChildDocument().View()->UpdateLifecyclePhasesForPrinting();
 
   // The following checks that the detached frame has been walked for PrePaint.
@@ -172,7 +172,7 @@ TEST_F(LocalFrameViewTest, PrintFrameUpdateAllLifecyclePhases) {
   SetBodyInnerHTML("<iframe></iframe>");
   SetChildFrameHTML("A");
 
-  ChildFrame().StartPrinting(gfx::SizeF(200, 200), gfx::SizeF(200, 200), 1);
+  ChildFrame().StartPrinting(gfx::SizeF(200, 200), 1);
   ChildDocument().View()->UpdateLifecyclePhasesForPrinting();
 
   EXPECT_EQ(DocumentLifecycle::kPrePaintClean,
@@ -213,7 +213,8 @@ TEST_F(LocalFrameViewTest,
   SetBodyInnerHTML(R"HTML(
     <style>
       .fixed-background {
-        background: linear-gradient(blue, red) fixed;
+        background: linear-gradient(blue, red) fixed,
+                    linear-gradient(white, black) local;
       }
     </style>
     <div id="div" style="width: 5000px; height: 5000px"></div>

@@ -27,11 +27,8 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) ClipboardMac : public Clipboard {
   ClipboardMac& operator=(const ClipboardMac&) = delete;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(ClipboardMacTest, ReadImageRetina);
-  FRIEND_TEST_ALL_PREFIXES(ClipboardMacTest, ReadImageNonRetina);
-  FRIEND_TEST_ALL_PREFIXES(ClipboardMacTest, EmptyImage);
-  FRIEND_TEST_ALL_PREFIXES(ClipboardMacTest, PDFImage);
   friend class Clipboard;
+  friend class ClipboardMacTest;
 
   ClipboardMac();
   ~ClipboardMac() override;
@@ -92,22 +89,25 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) ClipboardMac : public Clipboard {
       const ObjectMap& objects,
       std::vector<Clipboard::PlatformRepresentation> platform_representations,
       std::unique_ptr<DataTransferEndpoint> data_src) override;
-  void WriteText(const std::string& text) override;
-  void WriteHTML(const std::string& markup,
-                 const std::string* source_url) override;
-  void WriteUnsanitizedHTML(const std::string& markup,
-                            const std::string* source_url) override;
-  void WriteSvg(const std::string& markup) override;
-  void WriteRTF(const std::string& rtf) override;
+  void WriteText(base::StringPiece text) override;
+  void WriteHTML(base::StringPiece markup,
+                 absl::optional<base::StringPiece> source_url) override;
+  void WriteUnsanitizedHTML(
+      base::StringPiece markup,
+      absl::optional<base::StringPiece> source_url) override;
+  void WriteSvg(base::StringPiece markup) override;
+  void WriteRTF(base::StringPiece rtf) override;
   void WriteFilenames(std::vector<ui::FileInfo> filenames) override;
-  void WriteBookmark(const std::string& title, const std::string& url) override;
+  void WriteBookmark(base::StringPiece title, base::StringPiece url) override;
   void WriteWebSmartPaste() override;
   void WriteBitmap(const SkBitmap& bitmap) override;
   void WriteData(const ClipboardFormatType& format,
                  base::span<const uint8_t> data) override;
 
-  std::vector<uint8_t> ReadPngInternal(ClipboardBuffer buffer,
-                                       NSPasteboard* pasteboard) const;
+  void WriteBitmapInternal(const SkBitmap& bitmap, NSPasteboard* pasteboard);
+  void ReadPngInternal(ClipboardBuffer buffer,
+                       NSPasteboard* pasteboard,
+                       ReadPngCallback callback) const;
 
   // Mapping of OS-provided sequence number to a unique token.
   mutable struct {

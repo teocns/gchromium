@@ -21,6 +21,7 @@ if (current_toolchain == default_toolchain) {
 assert(is_android)
 
 default_android_sdk_dep = "//third_party/android_sdk:android_sdk_java"
+_kotlin_stdlib_dep = "//third_party/kotlin_stdlib:kotlin_stdlib_java"
 _jacoco_dep = "//third_party/jacoco:jacocoagent_java"
 _jacoco_host_jar =
     "$root_build_dir/lib.java/third_party/jacoco/jacocoagent_java.jar"
@@ -1397,7 +1398,7 @@ if (enable_java_templates) {
   #
   template("java_binary_script") {
     action_with_pydeps(target_name) {
-      forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "deps" ])
+      forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
 
       _main_class = invoker.main_class
       _build_config = invoker.build_config
@@ -1422,6 +1423,10 @@ if (enable_java_templates) {
         "--max-heap-size=$_max_heap_size",
       ]
       data = []
+      deps = [ "//third_party/jdk:java_data" ]
+      if (defined(invoker.deps)) {
+        deps += invoker.deps
+      }
 
       if (use_jacoco_coverage) {
         args += [
@@ -1442,12 +1447,6 @@ if (enable_java_templates) {
       }
       if (defined(invoker.wrapper_script_args)) {
         args += [ "--" ] + invoker.wrapper_script_args
-      }
-      if (defined(invoker.use_jdk_11) && invoker.use_jdk_11) {
-        args += [ "--use-jdk-11" ]
-        deps += [ "//third_party/jdk11:java_data" ]
-      } else {
-        deps += [ "//third_party/jdk:java_data" ]
       }
     }
   }
@@ -1900,6 +1899,8 @@ if (enable_java_templates) {
         rebase_path(invoker.input_jar, root_build_dir),
         "--stamp",
         rebase_path(outputs[0], root_build_dir),
+        "--chromium-output-dir",
+        rebase_path(root_build_dir, root_build_dir),
         "--direct-classpath-jars=@FileArg($_rebased_build_config:javac:classpath)",
         "--full-classpath-jars=@FileArg($_rebased_build_config:deps_info:javac_full_classpath)",
         "--full-classpath-gn-targets=@FileArg($_rebased_build_config:deps_info:javac_full_classpath_targets)",
@@ -2148,10 +2149,7 @@ if (enable_java_templates) {
   template("compile_resources") {
     forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
 
-    _deps = invoker.deps + [
-              invoker.android_sdk_dep,
-              invoker.build_config_dep,
-            ]
+    _deps = invoker.deps + [ invoker.build_config_dep ]
     if (defined(invoker.android_manifest_dep)) {
       _deps += [ invoker.android_manifest_dep ]
     }
@@ -2166,12 +2164,14 @@ if (enable_java_templates) {
     _inputs = [
       invoker.build_config,
       android_sdk_tools_bundle_aapt2,
+      android_sdk_jar,
     ]
 
     _rebased_build_config = rebase_path(invoker.build_config, root_build_dir)
 
+    _rebased_android_sdk_jar = rebase_path(android_sdk_jar, root_build_dir)
     _args = [
-      "--include-resources=@FileArg($_rebased_build_config:android:sdk_jars)",
+      "--include-resources=$_rebased_android_sdk_jar",
       "--aapt2-path",
       rebase_path(android_sdk_tools_bundle_aapt2, root_build_dir),
       "--dependencies-res-zips=@FileArg($_rebased_build_config:deps_info:dependency_zips)",
@@ -3818,6 +3818,8 @@ if (enable_java_templates) {
         _kotlinc_jar_path = "$target_out_dir/$_output_name.kotlinc.jar"
         _kotlin_interface_jar_path =
             "$target_out_dir/$_output_name.kt-jvm-abi.jar"
+        assert(filter_include(_lib_deps, [ _kotlin_stdlib_dep ]) != [],
+               "${_main_target_name} is missing dep: $_kotlin_stdlib_dep")
         compile_kt(_compile_kt_target_name) {
           deps = _header_classpath_deps
           output_jar_path = _kotlinc_jar_path
@@ -4159,10 +4161,6 @@ if (enable_java_templates) {
           # new SDK classes, so providing our normal SDK will allow these
           # classes to resolve. For an example, see crbug.com/1350963.
           extra_classpath_jars = [ android_sdk_jar ]
-
-          # Mockito bug with JDK17 requires us to use JDK11 until we find a fix
-          # for crbug.com/1409661.
-          use_jdk_11 = true
         }
       }
     }

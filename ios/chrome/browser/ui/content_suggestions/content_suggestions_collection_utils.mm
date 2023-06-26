@@ -104,6 +104,8 @@ CGFloat DoodleTopMargin(CGFloat top_inset,
       top_inset +
       AlignValueToPixel(kDoodleScaledTopMarginOther *
                         ui_util::SystemSuggestedFontSizeMultiplier());
+  // If Magic Stack is not enabled, this value is zero (e.g. no-op).
+  top_margin -= ReducedNTPTopMarginSpaceForMagicStack();
   if (ShouldShrinkLogoForStartSurface() && !IsCompactHeight(trait_collection)) {
     top_margin += kShrunkDoodleTopMarginOther;
   } else {
@@ -244,6 +246,15 @@ UIView* NearestAncestor(UIView* view, Class of_class) {
     return view;
   }
   return NearestAncestor([view superview], of_class);
+}
+
+BOOL ShouldShowWiderMagicStackLayer(UITraitCollection* traitCollection,
+                                    UIWindow* window) {
+  // Some iphone devices in landscape mode are still small enough to have a
+  // Compact  UIUserInterfaceSizeClass.
+  return traitCollection.horizontalSizeClass ==
+             UIUserInterfaceSizeClassRegular ||
+         IsLandscape(window);
 }
 
 }  // namespace content_suggestions

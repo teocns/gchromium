@@ -6,6 +6,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/webid/federated_identity_auto_reauthn_permission_context_factory.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -24,18 +25,23 @@ class FederatedIdentityAutoReauthnPermissionContextTest : public testing::Test {
       FederatedIdentityAutoReauthnPermissionContextTest&) = delete;
 
   void SetUp() override {
+    profile_ = TestingProfile::Builder()
+                   .AddTestingFactory(SyncServiceFactory::GetInstance(),
+                                      SyncServiceFactory::GetDefaultFactory())
+                   .Build();
     context_ =
         FederatedIdentityAutoReauthnPermissionContextFactory::GetForProfile(
-            &profile_);
+            profile());
     host_content_settings_map_ =
-        HostContentSettingsMapFactory::GetForProfile(&profile_);
+        HostContentSettingsMapFactory::GetForProfile(profile());
   }
 
-  Profile* profile() { return &profile_; }
+  Profile* profile() { return profile_.get(); }
 
  protected:
-  raw_ptr<FederatedIdentityAutoReauthnPermissionContext> context_;
-  raw_ptr<HostContentSettingsMap> host_content_settings_map_;
+  raw_ptr<FederatedIdentityAutoReauthnPermissionContext, DanglingUntriaged>
+      context_;
+  raw_ptr<HostContentSettingsMap, DanglingUntriaged> host_content_settings_map_;
 
   ContentSetting GetContentSetting(const GURL& rp_url) {
     return host_content_settings_map_->GetContentSetting(
@@ -50,26 +56,26 @@ class FederatedIdentityAutoReauthnPermissionContextTest : public testing::Test {
  private:
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  TestingProfile profile_;
+  std::unique_ptr<TestingProfile> profile_;
 };
 
 // Test that FedCM auto re-authn is opt-in by default.
 TEST_F(FederatedIdentityAutoReauthnPermissionContextTest,
        AutoReauthnEnabledByDefault) {
   GURL rp_url("https://rp.com");
-  EXPECT_TRUE(context_->HasAutoReauthnContentSetting());
+  EXPECT_TRUE(context_->IsAutoReauthnSettingEnabled());
   EXPECT_FALSE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
 }
 
 // Test that
-// FederatedIdentityAutoReauthnPermissionContext::RecordDisplayAndEmbargo()
+// FederatedIdentityAutoReauthnPermissionContext::RecordEmbargoForAutoReauthn()
 // blocks the permission if it is enabled.
 TEST_F(FederatedIdentityAutoReauthnPermissionContextTest, EnabledEmbargo) {
   GURL rp_url("https://rp.com");
   EXPECT_FALSE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
 
   // Embargoing `rp_url` should block the content setting for `rp_url`.
-  context_->RecordDisplayAndEmbargo(url::Origin::Create(rp_url));
+  context_->RecordEmbargoForAutoReauthn(url::Origin::Create(rp_url));
   EXPECT_TRUE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
 }
 
@@ -81,7 +87,7 @@ TEST_F(FederatedIdentityAutoReauthnPermissionContextTest, EmbargoAutoReset) {
   EXPECT_FALSE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
 
   // Auto re-authn flow triggers embargo.
-  context_->RecordDisplayAndEmbargo(url::Origin::Create(rp_url));
+  context_->RecordEmbargoForAutoReauthn(url::Origin::Create(rp_url));
   EXPECT_TRUE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
 
   // Auto re-authn is still in embargo state after 9 mins.
@@ -104,7 +110,7 @@ TEST_F(FederatedIdentityAutoReauthnPermissionContextTest,
   EXPECT_FALSE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
 
   // Auto re-authn flow triggers embargo.
-  context_->RecordDisplayAndEmbargo(url::Origin::Create(rp_url));
+  context_->RecordEmbargoForAutoReauthn(url::Origin::Create(rp_url));
   EXPECT_TRUE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
 
   // User signing out sets the `RequiresUserMediation` bit.
@@ -122,28 +128,14 @@ TEST_F(FederatedIdentityAutoReauthnPermissionContextTest,
   EXPECT_EQ(CONTENT_SETTING_BLOCK, GetContentSetting(rp_url));
 }
 
-// Test that successful re-authn resets `RequiresUserMediation` bit but not
-// embargo bit.
-TEST_F(FederatedIdentityAutoReauthnPermissionContextTest,
-       SuccessfulReAuthnDoesNotResetEmbargo) {
+// Test that auto re-authn embargo can be reset.
+TEST_F(FederatedIdentityAutoReauthnPermissionContextTest, ResetEmbargo) {
   GURL rp_url("https://rp.com");
-  host_content_settings_map_->SetDefaultContentSetting(
-      ContentSettingsType::FEDERATED_IDENTITY_AUTO_REAUTHN_PERMISSION,
-      CONTENT_SETTING_ALLOW);
-  EXPECT_EQ(CONTENT_SETTING_ALLOW, GetContentSetting(rp_url));
 
   // Auto re-authn flow triggers embargo.
-  context_->RecordDisplayAndEmbargo(url::Origin::Create(rp_url));
+  context_->RecordEmbargoForAutoReauthn(url::Origin::Create(rp_url));
   EXPECT_TRUE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
 
-  // User signing out sets the `RequiresUserMediation` bit.
-  context_->SetRequiresUserMediation(rp_url, true);
-  EXPECT_EQ(CONTENT_SETTING_BLOCK, GetContentSetting(rp_url));
-
-  // User signing back in resets the `RequiresUserMediation` bit.
-  context_->SetRequiresUserMediation(rp_url, false);
-  EXPECT_EQ(CONTENT_SETTING_ALLOW, GetContentSetting(rp_url));
-
-  // Auto re-authn is still in embargo state.
-  EXPECT_TRUE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
+  context_->RemoveEmbargoForAutoReauthn(url::Origin::Create(rp_url));
+  EXPECT_FALSE(context_->IsAutoReauthnEmbargoed(url::Origin::Create(rp_url)));
 }

@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="iw">
+<translation id="100506692671054486">אין פקודה קודמת</translation>
 <translation id="1009046985747440431">‏ניתן לעבור בין האפשרויות על ידי הקשה על החיצים למעלה או למטה, ולהפעיל אפשרות על ידי הקשה על Enter</translation>
 <translation id="1011903154582639569">כדי להקליד, מקישים על המקש הרצוי ומרפים ממנו</translation>
 <translation id="1012173283529841972">פריט רשימה</translation>
@@ -685,7 +686,7 @@
 <translation id="5561345396546889625">הרשימה הבאה</translation>
 <translation id="5562645715554321347">hdnggrp</translation>
 <translation id="5574412348552378458">‏מצב למידה של ChromeVox</translation>
-<translation id="5582839680698949063">תפריט ראשי</translation>
+<translation id="5582839680698949063">התפריט הראשי</translation>
 <translation id="5585044216466955529">עריכת טקסט, רשומת אימייל</translation>
 <translation id="5597170376237141345">תיבת הסימון הבאה</translation>
 <translation id="5598905979683743333"><ph name="NAME" />, לחצן הבחירה לא נבחר</translation>

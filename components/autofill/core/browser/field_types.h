@@ -361,7 +361,19 @@ enum ServerFieldType {
   // One-time code used for verifying user identity.
   ONE_TIME_CODE = 129,
 
-  // Reserved for a server-side-only use: 130-153
+  // A well-known object or feature of the landscape that can easily be
+  // recognized to understand where the building is situated.
+  ADDRESS_HOME_LANDMARK = 136,
+
+  // Administrative area level 2. A sub-division of a state, e.g. a Municipio in
+  // Brazil or Mexico.
+  ADDRESS_HOME_ADMIN_LEVEL2 = 141,
+
+  // The type indicates that the address is at the intersection between two
+  // streets. This is a common way of writing addresses in Mexico.
+  ADDRESS_HOME_BETWEEN_STREETS = 143,
+
+  // Reserved for a server-side-only use: 130-153. Except 136 , 141 and 143.
 
   // No new types can be added without a corresponding change to the Autofill
   // server.
