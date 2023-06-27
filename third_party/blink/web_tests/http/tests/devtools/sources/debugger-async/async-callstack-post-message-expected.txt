@@ -1,0 +1,78 @@
+Tests asynchronous call stacks for window.postMessage.
+
+Set timer for test function.
+Captured call stacks in no particular order:
+Call stack:
+    0) onMessageReceivedInFrame (post-message-listener.html:7)
+    [postMessage]
+    0) postMessageToFrame (async-callstack-post-message.js:45)
+    1) onMessageReceivedInParent (async-callstack-post-message.js:33)
+    [postMessage]
+    0) postMessageToParent (post-message-listener.html:13)
+    1) onMessageReceivedInFrame (post-message-listener.html:8)
+    [postMessage]
+    0) postMessageToFrame (async-callstack-post-message.js:45)
+    1) timeout (async-callstack-post-message.js:26)
+    [setTimeout]
+    0) testFunction (async-callstack-post-message.js:19)
+    [setTimeout]
+    0) scheduleTestFunction <omitted>
+    <... skipped remaining frames ...>
+
+Call stack:
+    0) onMessageReceivedInFrame (post-message-listener.html:7)
+    [postMessage]
+    0) postMessageToFrame (async-callstack-post-message.js:45)
+    1) timeout (async-callstack-post-message.js:26)
+    [setTimeout]
+    0) testFunction (async-callstack-post-message.js:19)
+    [setTimeout]
+    0) scheduleTestFunction <omitted>
+    <... skipped remaining frames ...>
+
+Call stack:
+    0) onMessageReceivedInParent (async-callstack-post-message.js:31)
+    [postMessage]
+    0) postMessageToParent (post-message-listener.html:13)
+    1) onMessageReceivedInFrame (post-message-listener.html:8)
+    [postMessage]
+    0) postMessageToFrame (async-callstack-post-message.js:45)
+    1) onMessageReceivedInParent (async-callstack-post-message.js:33)
+    [postMessage]
+    0) postMessageToParent (post-message-listener.html:13)
+    1) onMessageReceivedInFrame (post-message-listener.html:8)
+    [postMessage]
+    0) postMessageToFrame (async-callstack-post-message.js:45)
+    1) timeout (async-callstack-post-message.js:26)
+    [setTimeout]
+    0) testFunction (async-callstack-post-message.js:19)
+    [setTimeout]
+    0) scheduleTestFunction <omitted>
+    <... skipped remaining frames ...>
+
+Call stack:
+    0) onMessageReceivedInParent (async-callstack-post-message.js:31)
+    [postMessage]
+    0) postMessageToParent (post-message-listener.html:13)
+    1) onMessageReceivedInFrame (post-message-listener.html:8)
+    [postMessage]
+    0) postMessageToFrame (async-callstack-post-message.js:45)
+    1) timeout (async-callstack-post-message.js:26)
+    [setTimeout]
+    0) testFunction (async-callstack-post-message.js:19)
+    [setTimeout]
+    0) scheduleTestFunction <omitted>
+    <... skipped remaining frames ...>
+
+Call stack:
+    0) onMessageReceivedInParent (async-callstack-post-message.js:31)
+    [postMessage]
+    0) postMessageToSelf (async-callstack-post-message.js:38)
+    1) timeout (async-callstack-post-message.js:25)
+    [setTimeout]
+    0) testFunction (async-callstack-post-message.js:19)
+    [setTimeout]
+    0) scheduleTestFunction <omitted>
+    <... skipped remaining frames ...>
+
+

@@ -1,0 +1,55 @@
+Tests WebInspector.RemoveObject.setPropertyValue implementation.
+
+
+Running: testSetUp
+
+Running: testSetPrimitive
+
+Running: testSetHandle
+
+Running: testSetUndefined
+
+Running: testSetZero
+
+Running: testSetNull
+
+Running: testSetEmptyString
+
+Running: testSetException
+exception
+
+Running: testSetNonFiniteNumbers
+
+Running: testNegativeZero
+
+Running: testReleaseObjectIsCalled
+runtime-setPropertyValue.js:17 ===== Initial =====
+runtime-setPropertyValue.js:18 {"foo":1}
+runtime-setPropertyValue.js:19 
+runtime-setPropertyValue.js:17 ===== Set primitive =====
+runtime-setPropertyValue.js:18 {"foo":2}
+runtime-setPropertyValue.js:19 
+runtime-setPropertyValue.js:17 ===== Set handle =====
+runtime-setPropertyValue.js:18 {"foo":{"bar":2}}
+runtime-setPropertyValue.js:19 
+runtime-setPropertyValue.js:17 ===== Set undefined =====
+runtime-setPropertyValue.js:18 {}
+runtime-setPropertyValue.js:19 
+runtime-setPropertyValue.js:17 ===== Set zero =====
+runtime-setPropertyValue.js:18 {"foo":0}
+runtime-setPropertyValue.js:19 
+runtime-setPropertyValue.js:17 ===== Set null =====
+runtime-setPropertyValue.js:18 {"foo":null}
+runtime-setPropertyValue.js:19 
+runtime-setPropertyValue.js:17 ===== Set empty string =====
+runtime-setPropertyValue.js:18 {"foo":""}
+runtime-setPropertyValue.js:19 
+runtime-setPropertyValue.js:17 ===== Set exception =====
+runtime-setPropertyValue.js:18 {"foo":""}
+runtime-setPropertyValue.js:19 
+runtime-setPropertyValue.js:17 ===== Set non-finite numbers =====
+runtime-setPropertyValue.js:18 {"foo":"NaN","foo1":"Infinity","foo2":"-Infinity"}
+runtime-setPropertyValue.js:19 
+runtime-setPropertyValue.js:31 ===== Checking negative zero =====
+runtime-setPropertyValue.js:32 1/-0 = -Infinity
+

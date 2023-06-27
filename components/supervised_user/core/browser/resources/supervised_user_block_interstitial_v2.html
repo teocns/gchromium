@@ -1,0 +1,122 @@
+<!doctype html>
+<html dir="$i18n{textdirection}" lang="$i18n{language}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport"
+    content="initial-scale=1, minimum-scale=1, width=device-width, interactive-widget=resizes-content">
+    <!-- TODO(crbug.com/1400469): Once fixed, "interactive-widget=resizes-content" can be removed. -->
+<title>$i18n{blockPageTitle}</title>
+<link href="https://fonts.googleapis.com/css?family=Google+Sans" rel="stylesheet">
+<link rel="stylesheet" href="../../../../../components/security_interstitials/core/common/resources/interstitial_core.css">
+<link rel="stylesheet" href="supervised_user_block_interstitial_v2.css">
+<script src="supervised_user_block_interstitial_v2.js"></script>
+</head>
+<body class="supervised-user-block">
+<div class="frame-blocked" id="frame-blocked" tabindex="-1">
+  <div class="message-container">
+    <div class="banner" id="banner">
+       <!-- Keep in sync with "cr20:kite" icon used in webui found at
+       ui/webui/resources/cr_elements/icons.html -->
+          <svg id="family-link-kite-icon" xmlns="http://www.w3.org/2000/svg"
+          width="20px" height="20px">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M4.6327
+            8.00094L10.3199 2L16 8.00094L10.1848 16.8673C10.0995 16.9873 10.0071
+            17.1074 9.90047 17.2199C9.42417 17.7225 8.79147 18 8.11611
+            18C7.44076 18 6.80806 17.7225 6.33175 17.2199C5.85545 16.7173
+            5.59242 16.0497 5.59242 15.3371C5.59242 14.977 5.46445 14.647
+            5.22275 14.3919C4.98104 14.1369 4.66825 14.0019 4.32701
+            14.0019H4V12.6667H4.32701C5.00237 12.6667 5.63507 12.9442 6.11137
+            13.4468C6.58768 13.9494 6.85071 14.617 6.85071 15.3296C6.85071
+            15.6896 6.97867 16.0197 7.22038 16.2747C7.46209 16.5298 7.77488
+            16.6648 8.11611 16.6648C8.45735 16.6648 8.77014 16.5223 9.01185
+            16.2747C9.02396 16.2601 9.03607 16.246 9.04808 16.2319C9.08541
+            16.1883 9.12176 16.1458 9.15403 16.0947L9.55213 15.4946L4.6327
+            8.00094ZM10.3199 13.9371L6.53802 8.17116L10.3199 4.1814L14.0963
+            8.17103L10.3199 13.9371Z">
+          </svg>
+      <div id="banner-message">
+        <p class="banner-header">$i18n{bannerTitle}</p>
+        <p class="banner-content"> $i18n{bannerMessage}</p>
+      </div>
+    </div>
+    <picture id="error-page-illustration">
+      <source
+        srcset="error_page_illustration_dark_theme.svg"
+        media="(prefers-color-scheme: dark)"
+        alt="">
+      <img class="illustration"
+        src="error_page_illustration_light_theme.svg"
+        alt="">
+    </picture>
+    <picture id="waiting-for-approval-illustration" hidden>
+      <source
+        srcset="waiting_for_approval_dark_theme.svg"
+        media="(prefers-color-scheme: dark)"
+        alt="">
+      <img class="illustration"
+        src="waiting_for_approval_light_theme.svg"
+        alt="">
+    </picture>
+    <div id="main-message">
+      <h1 id="block-page-header" tabindex="-1">$i18n{blockPageHeader}</h1>
+      <p id="block-page-message" tabindex="-1">$i18n{blockPageMessage}</p>
+      <h1 id="request-failed-message" role="alert" hidden>$i18n{requestFailedMessage}</h1>
+      <h1 id="request-sent-message" role="alert" hidden>$i18n{requestSentMessage}</h1>
+      <p id="request-sent-description" hidden>$i18n{requestSentDescription}</p>
+    </div>
+    <div id="block-reason-container">
+      <p id="block-reason-show-details-link" tabindex="-1">$i18n{showDetailsLink}</p>
+      <p id="block-reason-hide-details-link" tabindex="-1">$i18n{hideDetailsLink}</p>
+      <div id="block-reason">
+        <div>
+          <h2 id="block-reason-header">$i18n{siteBlockHeader}</h2>
+          <p id="block-reason-message">$i18n{blockReasonMessage}</p>
+        </div>
+      </div>
+    </div>
+    <div id="custodians-information" hidden>
+      <div id="custodian-information" class="custodian-information">
+        <img id="custodian-avatar-img" class="avatar-img" alt="">
+        <div id="custodian-contact" class="custodian-contact">
+          <div id="custodian-name" tabindex="-1" class="custodian-name"></div>
+          <div id="custodian-email" tabindex="-1" class="custodian-email"></div>
+        </div>
+      </div>
+      <div id="second-custodian-information" class="custodian-information" hidden>
+        <img id="second-custodian-avatar-img" class="avatar-img" hidden alt="">
+        <div id="second-custodian-contact" class="custodian-contact">
+          <div id="second-custodian-name" tabindex="-1" class="custodian-name"></div>
+          <div id="second-custodian-email"  tabindex="-1" class="custodian-email"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="button-container">
+    <button id="back-button" class="go-back-button" hidden>
+      $i18n{backButton}
+    </button>
+    <button id="local-approvals-button" class="local-approvals-button" hidden>
+      $i18n{localApprovalsButton}
+    </button>
+    <button id="local-approvals-remote-request-sent-button" class="local-approvals-button" hidden>
+      $i18n{localApprovalsRemoteRequestSentButton}
+    </button>
+    <button id="remote-approvals-button" class="remote-approvals-button" hidden>
+      $i18n{remoteApprovalsButton}
+    </button>
+    <div id="details-button-container">
+      <button id="show-details-link" class="details-button small-link" hidden>
+        $i18n{showDetailsLink}
+      </button>
+      <button id="hide-details-link" class="details-button small-link" hidden>
+        $i18n{hideDetailsLink}
+      </button>
+    </div>
+  </div>
+  <div id="details" hidden>
+    <p id="details-header" role="alert" >$i18n{blockReasonHeader}</p>
+    <p id="feedback">$i18nRaw{feedbackLink}</p>
+  </div>
+</div>
+</body>
+</html>

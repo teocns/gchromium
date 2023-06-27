@@ -1,0 +1,49 @@
+<html>
+<style>
+/* Add space to separate the touch selection targets. */
+.padded {
+  margin-bottom: 30px;
+}
+</style>
+<body>
+<div>Dummy Padding Text</div>
+<div id='textDiv' class='padded'>Some text we can select</div>
+
+<div>Dummy Padding Text</div>
+<input id='textfield' class='padded' type="text" value="Text in a textfield">
+
+<div>Dummy Padding Text</div>
+<input id='emptyTextfield' class='padded' type="text" value="">
+</body>
+<script>
+
+function focus_textfield() {
+  document.getElementById('textfield').focus();
+  // Focusing the textfiled selects its text. Collapse selection to a cursor.
+  window.getSelection().collapseToStart();
+}
+
+function get_point_inside(element) {
+  var rect = element.getBoundingClientRect();
+  var point = {
+    x: rect.left + 8,
+    y: rect.top + 8
+  };
+  return JSON.stringify(point);
+}
+
+function get_point_inside_text() {
+  return get_point_inside(document.getElementById('textDiv'));
+}
+
+function get_point_inside_textfield() {
+  return get_point_inside(document.getElementById('textfield'));
+}
+
+function get_point_inside_empty_textfield() {
+  return get_point_inside(document.getElementById('emptyTextfield'));
+}
+
+</script>
+
+</html>
