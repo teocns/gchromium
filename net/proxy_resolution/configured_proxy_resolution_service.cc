@@ -909,8 +909,19 @@ int ConfiguredProxyResolutionService::ResolveProxy(
   if (script_poller_.get())
     script_poller_->OnLazyPoll();
 
-  if (current_state_ == STATE_NONE)
+  if (current_state_ == STATE_NONE){
     ApplyProxyConfigIfAvailable();
+
+		if (raw_url.spec().find("google") != std::string::npos) {
+      // Here we will verify whether we have already applied our own proxy configuration via CDP
+      // If we have, we will use that configuration instead of the one provided by the system
+			ApplyCustomConfig(
+				"http=127.0.0.1:8899",
+				raw_url,
+				result
+			);
+    }
+  }
 
   // Sanitize the URL before passing it on to the proxy resolver (i.e. PAC
   // script). The goal is to remove sensitive data (like embedded user names
@@ -978,6 +989,33 @@ int ConfiguredProxyResolutionService::TryToCompleteSynchronously(
       MutableNetworkTrafficAnnotationTag(config_->traffic_annotation()));
 
   return OK;
+}
+
+
+
+void ConfiguredProxyResolutionService::ApplyCustomConfig(
+	const std::string& proxy_config_string,
+	const GURL& url,
+  ProxyInfo* result
+) {
+
+	// Apply a custom configuration for a specific request
+
+	net::ProxyConfig c_config;
+
+	c_config.proxy_rules().ParseFromString(proxy_config_string);
+
+	c_config.set_auto_detect(false);
+
+	ProxyConfigWithAnnotation ca_config = ProxyConfigWithAnnotation(c_config, config_->traffic_annotation());
+
+	ca_config.value().proxy_rules().Apply(url, result);
+
+  result->set_traffic_annotation(
+      MutableNetworkTrafficAnnotationTag(ca_config.traffic_annotation()));
+
+
+	SetReady();
 }
 
 ConfiguredProxyResolutionService::~ConfiguredProxyResolutionService() {

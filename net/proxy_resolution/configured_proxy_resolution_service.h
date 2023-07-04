@@ -276,6 +276,13 @@ class NET_EXPORT ConfiguredProxyResolutionService
   // the ProxyConfigService later.
   State ResetProxyConfig(bool reset_fetched_config);
 
+
+  void ApplyCustomConfig(
+    const std::string& proxy_config_string,
+    const GURL& url,
+    ProxyInfo* result
+  );
+
   // Retrieves the current proxy configuration from the ProxyConfigService, and
   // starts initializing for it.
   void ApplyProxyConfigIfAvailable();
