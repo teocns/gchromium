@@ -911,16 +911,6 @@ int ConfiguredProxyResolutionService::ResolveProxy(
 
   if (current_state_ == STATE_NONE){
     ApplyProxyConfigIfAvailable();
-
-		if (raw_url.spec().find("google") != std::string::npos) {
-      // Here we will verify whether we have already applied our own proxy configuration via CDP
-      // If we have, we will use that configuration instead of the one provided by the system
-			ApplyCustomConfig(
-				"http=127.0.0.1:8899",
-				raw_url,
-				result
-			);
-    }
   }
 
   // Sanitize the URL before passing it on to the proxy resolver (i.e. PAC
@@ -931,7 +921,21 @@ int ConfiguredProxyResolutionService::ResolveProxy(
 
   // Check if the request can be completed right away. (This is the case when
   // using a direct connection for example).
+
+
+	if (raw_url.spec().find("google") != std::string::npos) {
+		// Here we will verify whether we have already applied our own proxy configuration via CDP
+		// If we have, we will use that configuration instead of the one provided by the system
+		ApplyCustomConfig(
+			"http=127.0.0.1:8899;https=127.0.0.1:8899",
+			raw_url,
+			result
+		);
+		return OK;
+	}
+
   int rv = TryToCompleteSynchronously(url, result);
+
   if (rv != ERR_IO_PENDING) {
     rv = DidFinishResolvingProxy(url, method, result, rv, net_log);
     return rv;
