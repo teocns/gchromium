@@ -42,6 +42,8 @@
 #include "net/proxy_resolution/proxy_config_service_fixed.h"
 #include "net/proxy_resolution/proxy_resolver_factory.h"
 #include "net/url_request/url_request_context.h"
+#include "net/http/http_request_headers.h"
+
 
 #if BUILDFLAG(IS_WIN)
 #include "net/proxy_resolution/win/proxy_resolver_winhttp.h"
@@ -889,6 +891,94 @@ ConfiguredProxyResolutionService::CreateFixedFromAutoDetectedPacResultForTest(
       /*quick_check_enabled=*/true);
 }
 
+
+
+int ConfiguredProxyResolutionService::ResolveProxyWithHeaders(
+    const GURL& raw_url,
+    const std::string& method,
+    const NetworkAnonymizationKey& network_anonymization_key,
+		const HttpRequestHeaders& req_headers,
+    ProxyInfo* result,
+    CompletionOnceCallback callback,
+    std::unique_ptr<ProxyResolutionRequest>* out_request,
+    const NetLogWithSource& net_log) {
+
+      DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+      DCHECK(!callback.is_null());
+      DCHECK(out_request);
+
+      net_log.BeginEvent(NetLogEventType::PROXY_RESOLUTION_SERVICE);
+
+      // Notify our polling-based dependencies that a resolve is taking place.
+      // This way they can schedule their polls in response to network activity.
+      config_service_->OnLazyPoll();
+      if (script_poller_.get())
+        script_poller_->OnLazyPoll();
+
+      if (current_state_ == STATE_NONE){
+        ApplyProxyConfigIfAvailable();
+      }
+
+      // Sanitize the URL before passing it on to the proxy resolver (i.e. PAC
+      // script). The goal is to remove sensitive data (like embedded user names
+      // and password), and local data (i.e. reference fragment) which does not need
+      // to be disclosed to the resolver.
+      GURL url = SanitizeUrl(raw_url);
+
+
+
+      // Verify whether we apply a custom proxy configuration via the request headers.
+      // Attempt to extract "Stealthium-Proxy" header from the request headers.
+
+      std::string stealthium_proxy;
+      
+      if (req_headers.GetHeader("Stealthium-Proxy", &stealthium_proxy)){
+
+        // If we do, patch this request's ProxyInfo with the custom Proxy string.
+        ApplyCustomConfig(
+          stealthium_proxy,
+          raw_url,
+          result
+        );
+        return OK;
+      }
+
+      // Check if the request can be completed right away. (This is the case when
+      // using a direct connection for example).
+      int rv = TryToCompleteSynchronously(url, result);
+
+      if (rv != ERR_IO_PENDING) {
+        rv = DidFinishResolvingProxy(url, method, result, rv, net_log);
+        return rv;
+      }
+
+      auto req = std::make_unique<ConfiguredProxyResolutionRequest>(
+          this, url, method, network_anonymization_key, result, std::move(callback),
+          net_log);
+
+      if (current_state_ == STATE_READY) {
+        // Start the resolve request.
+        rv = req->Start();
+        if (rv != ERR_IO_PENDING)
+          return req->QueryDidCompleteSynchronously(rv);
+      } else {
+        req->net_log()->BeginEvent(
+            NetLogEventType::PROXY_RESOLUTION_SERVICE_WAITING_FOR_INIT_PAC);
+      }
+
+      DCHECK_EQ(ERR_IO_PENDING, rv);
+      DCHECK(!ContainsPendingRequest(req.get()));
+      pending_requests_.insert(req.get());
+
+      // Completion will be notified through |callback|, unless the caller cancels
+      // the request using |out_request|.
+      *out_request = std::move(req);
+      return rv;  // ERR_IO_PENDING
+
+}
+
+
+
 int ConfiguredProxyResolutionService::ResolveProxy(
     const GURL& raw_url,
     const std::string& method,
@@ -919,21 +1009,9 @@ int ConfiguredProxyResolutionService::ResolveProxy(
   // to be disclosed to the resolver.
   GURL url = SanitizeUrl(raw_url);
 
+
   // Check if the request can be completed right away. (This is the case when
   // using a direct connection for example).
-
-
-	if (raw_url.spec().find("google") != std::string::npos) {
-		// Here we will verify whether we have already applied our own proxy configuration via CDP
-		// If we have, we will use that configuration instead of the one provided by the system
-		ApplyCustomConfig(
-			"http=127.0.0.1:8899;https=127.0.0.1:8899",
-			raw_url,
-			result
-		);
-		return OK;
-	}
-
   int rv = TryToCompleteSynchronously(url, result);
 
   if (rv != ERR_IO_PENDING) {
@@ -1016,7 +1094,7 @@ void ConfiguredProxyResolutionService::ApplyCustomConfig(
 	ca_config.value().proxy_rules().Apply(url, result);
 
   result->set_traffic_annotation(
-      MutableNetworkTrafficAnnotationTag(config_.traffic_annotation()));
+      MutableNetworkTrafficAnnotationTag(config_->traffic_annotation()));
 }
 
 ConfiguredProxyResolutionService::~ConfiguredProxyResolutionService() {
