@@ -1016,10 +1016,7 @@ void ConfiguredProxyResolutionService::ApplyCustomConfig(
 	ca_config.value().proxy_rules().Apply(url, result);
 
   result->set_traffic_annotation(
-      MutableNetworkTrafficAnnotationTag(ca_config.traffic_annotation()));
-
-
-	SetReady();
+      MutableNetworkTrafficAnnotationTag(config_.traffic_annotation()));
 }
 
 ConfiguredProxyResolutionService::~ConfiguredProxyResolutionService() {
