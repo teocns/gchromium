@@ -26,6 +26,7 @@
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_with_source.h"
 #include "url/scheme_host_port.h"
+#include "net/base/proxy_server.h"
 
 namespace net {
 
@@ -82,17 +83,41 @@ void HttpAuthController::BindToCallingNetLog(
 int HttpAuthController::MaybeGenerateAuthToken(
     const HttpRequestInfo* request,
     CompletionOnceCallback callback,
-    const NetLogWithSource& caller_net_log) {
+    const NetLogWithSource& caller_net_log,
+    const absl::optional<ProxyServer>& proxy_server
+  ) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!auth_info_);
+
+
   bool needs_auth = HaveAuth() || SelectPreemptiveAuth(caller_net_log);
+
+  const AuthCredentials* credentials = nullptr;
+
+  bool has_proxy = proxy_server.has_value();
+
+
+
+  bool has_auth_header = has_proxy && !proxy_server.value().auth_credentials().Empty();
+  if (has_auth_header){
+    credentials = &proxy_server.value().auth_credentials();
+    needs_auth = true;
+    identity_.source = HttpAuth::IDENT_SRC_NONE;
+
+  }
+
+
   if (!needs_auth)
     return OK;
+
   net_log_.BeginEventReferencingSource(NetLogEventType::AUTH_GENERATE_TOKEN,
                                        caller_net_log.source());
-  const AuthCredentials* credentials = nullptr;
-  if (identity_.source != HttpAuth::IDENT_SRC_DEFAULT_CREDENTIALS)
+
+
+  if (identity_.source != HttpAuth::IDENT_SRC_DEFAULT_CREDENTIALS && !has_auth_header)
     credentials = &identity_.credentials;
+
+
   DCHECK(auth_token_.empty());
   DCHECK(callback_.is_null());
   int rv = handler_->GenerateAuthToken(

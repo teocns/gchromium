@@ -15,6 +15,7 @@
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
 #include "net/base/network_anonymization_key.h"
+#include "net/base/proxy_server.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_preferences.h"
 #include "net/log/net_log_with_source.h"
@@ -96,9 +97,11 @@ class NET_EXPORT_PRIVATE HttpAuthController
   // value is a net error code. |OK| will be returned both in the case that
   // a token is correctly generated synchronously, as well as when no tokens
   // were necessary.
-  int MaybeGenerateAuthToken(const HttpRequestInfo* request,
+                             
+int MaybeGenerateAuthToken(const HttpRequestInfo* request,
                              CompletionOnceCallback callback,
-                             const NetLogWithSource& net_log);
+                             const NetLogWithSource& net_log,
+                             const absl::optional<ProxyServer>& proxy_server = absl::nullopt);
 
   // Adds either the proxy auth header, or the origin server auth header,
   // as specified by |target_|.

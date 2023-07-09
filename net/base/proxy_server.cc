@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "net/base/proxy_string_util.h"
+#include "net/base/auth.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_canon.h"
@@ -98,6 +99,33 @@ ProxyServer ProxyServer::FromSchemeHostAndPort(Scheme scheme,
 
   return ProxyServer(scheme, HostPortPair(unbracketed_host, fixed_port));
 }
+
+
+// static
+ProxyServer ProxyServer::FromSchemeHostAndPort(Scheme scheme,
+                                               base::StringPiece host,
+                                               absl::optional<uint16_t> port,
+                                               AuthCredentials& auth_credentials) {
+  ProxyServer proxy_server = FromSchemeHostAndPort(scheme, host, port);
+
+  proxy_server.SetAuthCredentials(auth_credentials);
+
+  return proxy_server;
+}
+
+
+ProxyServer ProxyServer::FromSchemeHostAndPort(Scheme scheme,
+                                          base::StringPiece host,
+                                          base::StringPiece port_str,
+                                          AuthCredentials &auth_credentials){
+  ProxyServer proxy_server = FromSchemeHostAndPort(scheme, host, port_str);
+
+  proxy_server.SetAuthCredentials(auth_credentials);
+
+  return proxy_server;
+}
+
+                                          
 
 std::string ProxyServer::GetHost() const {
   return host_port_pair().HostForURL();

@@ -1081,9 +1081,28 @@ void ConfiguredProxyResolutionService::ApplyCustomConfig(
   ProxyInfo* result
 ) {
 
-	// Apply a custom configuration for a specific request
+	// // Applies a custom proxy config for this specific request
 
+  // // Parse authentication, if provided
+  // std::string proxy_config_string = "http://user:@127.0.0.1:8899";
+  // std::string user, password, proxy_without_auth;
+  // size_t pos_at = proxy_config_string.find('@');
+  // if (pos_at != std::string::npos) {
+  //   size_t pos_protocol = proxy_config_string.find("://");
+  //   size_t pos_colon = (pos_protocol != std::string::npos) ? proxy_config_string.find(':', pos_protocol + 3) : proxy_config_string.find(':');
+  //   if (pos_colon != std::string::npos && pos_colon < pos_at) {
+  //     user = proxy_config_string.substr((pos_protocol != std::string::npos) ? pos_protocol + 3 : 0, pos_colon - ((pos_protocol != std::string::npos) ? pos_protocol + 3 : 0));
+  //     password = proxy_config_string.substr(pos_colon + 1, pos_at - pos_colon - 1);
+  //     proxy_without_auth = (pos_protocol != std::string::npos) ? proxy_config_string.substr(0, pos_protocol + 3) + proxy_config_string.substr(pos_at + 1) : proxy_config_string.substr(pos_at + 1);
+  //   } else {
+  //     // Handle error: no colon or colon after @
+  //   }
+  // } else {
+  //   proxy_without_auth = proxy_config_string;
+  // }
+  
 	net::ProxyConfig c_config;
+
 
 	c_config.proxy_rules().ParseFromString(proxy_config_string);
 
