@@ -98,17 +98,16 @@ int HttpAuthController::MaybeGenerateAuthToken(
 
 
 
+  if (!needs_auth)
+    return OK;
+  
+
   bool has_auth_header = has_proxy && !proxy_server.value().auth_credentials().Empty();
   if (has_auth_header){
     credentials = &proxy_server.value().auth_credentials();
-    needs_auth = true;
     identity_.source = HttpAuth::IDENT_SRC_NONE;
-
   }
 
-
-  if (!needs_auth)
-    return OK;
 
   net_log_.BeginEventReferencingSource(NetLogEventType::AUTH_GENERATE_TOKEN,
                                        caller_net_log.source());
