@@ -66,7 +66,6 @@ struct NET_EXPORT_PRIVATE CommonConnectJobParams {
       const quic::ParsedQuicVersionVector* quic_supported_versions,
       QuicStreamFactory* quic_stream_factory,
       ProxyDelegate* proxy_delegate,
-      const ProxyServer* proxy_server,
       const HttpUserAgentSettings* http_user_agent_settings,
       SSLClientContext* ssl_client_context,
       SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
@@ -77,6 +76,13 @@ struct NET_EXPORT_PRIVATE CommonConnectJobParams {
   ~CommonConnectJobParams();
 
   CommonConnectJobParams& operator=(const CommonConnectJobParams& other);
+
+
+  // Add a setter method for proxy_server
+  void set_proxy_server(const ProxyServer* proxy_server_) {
+    proxy_server = proxy_server_;
+  }
+
 
   raw_ptr<ClientSocketFactory> client_socket_factory;
   raw_ptr<HostResolver> host_resolver;
