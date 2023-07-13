@@ -22,6 +22,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
+#include "net/base/proxy_server.h"
 
 namespace net {
 
@@ -161,7 +162,7 @@ int MaybeGenerateAuthToken(const HttpRequestInfo* request,
   // Searches the auth cache for an entry that encompasses the request's path.
   // If such an entry is found, updates |identity_| and |handler_| with the
   // cache entry's data and returns true.
-  bool SelectPreemptiveAuth(const NetLogWithSource& caller_net_log);
+  bool SelectPreemptiveAuth(const NetLogWithSource& caller_net_log,const absl::optional<ProxyServer>& proxy_server);
 
   // Invalidates the current handler. If |action| is
   // INVALIDATE_HANDLER_AND_CACHED_CREDENTIALS, then also invalidate
