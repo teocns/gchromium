@@ -174,6 +174,10 @@ std::unique_ptr<ConnectJob> ConnectJobFactory::CreateConnectJob(
     // TODO(crbug.com/1206799): For an http-like proxy, should this pass a
     // `SchemeHostPort`, so proxies can participate in ECH? Note doing so with
     // `SCHEME_HTTP` requires handling the HTTPS record upgrade.
+
+    // Pass proxyserver as whole to common_connect_job_params
+    common_connect_job_params->proxy_server = proxy_server;
+
     auto proxy_tcp_params = base::MakeRefCounted<TransportSocketParams>(
         proxy_server.host_port_pair(), proxy_dns_network_anonymization_key_,
         secure_dns_policy, resolution_callback,

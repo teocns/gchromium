@@ -11,6 +11,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/trace_constants.h"
 #include "net/base/tracing.h"
+#include "net/base/proxy_server.h"
 #include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_auth_controller.h"
@@ -36,6 +37,7 @@ CommonConnectJobParams::CommonConnectJobParams(
     const quic::ParsedQuicVersionVector* quic_supported_versions,
     QuicStreamFactory* quic_stream_factory,
     ProxyDelegate* proxy_delegate,
+    const ProxyServer* proxy_server,
     const HttpUserAgentSettings* http_user_agent_settings,
     SSLClientContext* ssl_client_context,
     SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
@@ -50,6 +52,7 @@ CommonConnectJobParams::CommonConnectJobParams(
       quic_supported_versions(quic_supported_versions),
       quic_stream_factory(quic_stream_factory),
       proxy_delegate(proxy_delegate),
+      proxy_server(proxy_server),
       http_user_agent_settings(http_user_agent_settings),
       ssl_client_context(ssl_client_context),
       socket_performance_watcher_factory(socket_performance_watcher_factory),

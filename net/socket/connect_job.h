@@ -19,6 +19,7 @@
 #include "net/base/load_timing_info.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
+#include "net/base/proxy_server.h"
 #include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/resolve_error_info.h"
 #include "net/log/net_log_with_source.h"
@@ -27,7 +28,6 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_versions.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
 namespace net {
 
 class ClientSocketFactory;
@@ -66,6 +66,7 @@ struct NET_EXPORT_PRIVATE CommonConnectJobParams {
       const quic::ParsedQuicVersionVector* quic_supported_versions,
       QuicStreamFactory* quic_stream_factory,
       ProxyDelegate* proxy_delegate,
+      const ProxyServer* proxy_server,
       const HttpUserAgentSettings* http_user_agent_settings,
       SSLClientContext* ssl_client_context,
       SocketPerformanceWatcherFactory* socket_performance_watcher_factory,
@@ -85,6 +86,7 @@ struct NET_EXPORT_PRIVATE CommonConnectJobParams {
   raw_ptr<const quic::ParsedQuicVersionVector> quic_supported_versions;
   raw_ptr<QuicStreamFactory> quic_stream_factory;
   raw_ptr<ProxyDelegate> proxy_delegate;
+  raw_ptr<const ProxyServer> proxy_server;
   raw_ptr<const HttpUserAgentSettings> http_user_agent_settings;
   raw_ptr<SSLClientContext> ssl_client_context;
   raw_ptr<SocketPerformanceWatcherFactory> socket_performance_watcher_factory;
