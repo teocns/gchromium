@@ -1018,7 +1018,8 @@ int HttpNetworkTransaction::DoGenerateProxyAuthToken() {
         session_->host_resolver());
   return auth_controllers_[target]->MaybeGenerateAuthToken(request_,
                                                            io_callback_,
-                                                           net_log_);
+                                                           net_log_,
+                                                           proxy_info_.proxy_server());
 }
 
 int HttpNetworkTransaction::DoGenerateProxyAuthTokenComplete(int rv) {
@@ -1055,6 +1056,10 @@ int HttpNetworkTransaction::DoGenerateServerAuthTokenComplete(int rv) {
 
 int HttpNetworkTransaction::BuildRequestHeaders(
     bool using_http_proxy_without_tunnel) {
+
+
+
+
   request_headers_.SetHeader(HttpRequestHeaders::kHost,
                              GetHostAndOptionalPort(request_->url));
 
@@ -1102,6 +1107,10 @@ int HttpNetworkTransaction::BuildRequestHeaders(
         &request_headers_);
 
   request_headers_.MergeFrom(request_->extra_headers);
+
+
+  // Remove header Stealthium-Proxy, if present
+  request_headers_.RemoveHeader("Stealthium-Proxy");
 
   response_.did_use_http_auth =
       request_headers_.HasHeader(HttpRequestHeaders::kAuthorization) ||

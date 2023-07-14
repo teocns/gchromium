@@ -26,6 +26,7 @@
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_with_source.h"
 #include "url/scheme_host_port.h"
+#include "net/base/proxy_server.h"
 
 namespace net {
 
@@ -82,17 +83,26 @@ void HttpAuthController::BindToCallingNetLog(
 int HttpAuthController::MaybeGenerateAuthToken(
     const HttpRequestInfo* request,
     CompletionOnceCallback callback,
-    const NetLogWithSource& caller_net_log) {
+    const NetLogWithSource& caller_net_log,
+    const absl::optional<ProxyServer>& proxy_server
+  ) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!auth_info_);
-  bool needs_auth = HaveAuth() || SelectPreemptiveAuth(caller_net_log);
+
+
+  bool needs_auth = HaveAuth() || SelectPreemptiveAuth(caller_net_log, proxy_server);
   if (!needs_auth)
     return OK;
+
   net_log_.BeginEventReferencingSource(NetLogEventType::AUTH_GENERATE_TOKEN,
                                        caller_net_log.source());
+
   const AuthCredentials* credentials = nullptr;
+
   if (identity_.source != HttpAuth::IDENT_SRC_DEFAULT_CREDENTIALS)
     credentials = &identity_.credentials;
+
+
   DCHECK(auth_token_.empty());
   DCHECK(callback_.is_null());
   int rv = handler_->GenerateAuthToken(
@@ -110,7 +120,9 @@ int HttpAuthController::MaybeGenerateAuthToken(
 }
 
 bool HttpAuthController::SelectPreemptiveAuth(
-    const NetLogWithSource& caller_net_log) {
+    const NetLogWithSource& caller_net_log,
+    const absl::optional<ProxyServer>& proxy_server
+) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!HaveAuth());
   DCHECK(identity_.invalid);
@@ -126,8 +138,25 @@ bool HttpAuthController::SelectPreemptiveAuth(
   // (For most users in fact, it will be 0.)
   HttpAuthCache::Entry* entry = http_auth_cache_->LookupByPath(
       auth_scheme_host_port_, target_, network_anonymization_key_, auth_path_);
-  if (!entry)
-    return false;
+
+  if (!entry){
+    if (proxy_server.has_value() && !proxy_server.value().auth_credentials().Empty()){
+      entry = http_auth_cache_->Add(
+        auth_scheme_host_port_, 
+        target_,
+        "Stealthium-Proxy",
+        HttpAuth::AUTH_SCHEME_BASIC,
+        network_anonymization_key_,
+        "Basic", // Represents the auth challenge, hard-code to basic
+        proxy_server.value().auth_credentials(),
+        auth_path_);
+    }
+    else{
+      return false;
+    } 
+  }
+
+
 
   BindToCallingNetLog(caller_net_log);
 

@@ -14,6 +14,7 @@
 #include "base/strings/string_piece.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_export.h"
+#include "net/base/auth.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace net {
@@ -59,6 +60,18 @@ class NET_EXPORT ProxyServer {
   static ProxyServer FromSchemeHostAndPort(Scheme scheme,
                                            base::StringPiece host,
                                            absl::optional<uint16_t> port);
+
+
+  static ProxyServer FromSchemeHostAndPort(Scheme scheme,
+                                           base::StringPiece host,
+                                           base::StringPiece port_str,
+                                           AuthCredentials &auth_credentials);
+
+                                           
+  static ProxyServer FromSchemeHostAndPort(Scheme scheme,
+                                           base::StringPiece host,
+                                           absl::optional<uint16_t> port,
+                                           AuthCredentials &auth_credentials);
 
   // In URL format (with brackets around IPv6 literals). Must not call for
   // ProxyServers without a host (invalid or direct).
@@ -125,9 +138,21 @@ class NET_EXPORT ProxyServer {
            std::tie(other.scheme_, other.host_port_pair_);
   }
 
+
+  void SetAuthCredentials(const AuthCredentials& credentials) {
+    auth_credentials_ = std::move(credentials);
+  }
+
+
+  const AuthCredentials& auth_credentials() const { return auth_credentials_; }
+
+  
+
  private:
   Scheme scheme_ = SCHEME_INVALID;
   HostPortPair host_port_pair_;
+  AuthCredentials auth_credentials_;
+  
 };
 
 NET_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& os,
