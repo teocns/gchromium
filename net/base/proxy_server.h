@@ -126,16 +126,17 @@ class NET_EXPORT ProxyServer {
   static int GetDefaultPortForScheme(Scheme scheme);
 
   bool operator==(const ProxyServer& other) const {
-    return scheme_ == other.scheme_ &&
-           host_port_pair_.Equals(other.host_port_pair_);
+      return scheme_ == other.scheme_ &&
+            host_port_pair_.Equals(other.host_port_pair_) &&
+            auth_credentials_ == other.auth_credentials_;
   }
 
   bool operator!=(const ProxyServer& other) const { return !(*this == other); }
 
-  // Comparator function so this can be placed in a std::map.
+  
   bool operator<(const ProxyServer& other) const {
-    return std::tie(scheme_, host_port_pair_) <
-           std::tie(other.scheme_, other.host_port_pair_);
+      return std::tie(scheme_, host_port_pair_, auth_credentials_) <
+            std::tie(other.scheme_, other.host_port_pair_, other.auth_credentials_);
   }
 
 
