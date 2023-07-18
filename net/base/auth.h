@@ -70,6 +70,10 @@ class NET_EXPORT AuthCredentials {
       return username() == other.username() && password() == other.password();
   }
 
+  bool operator!=(const AuthCredentials& other) const {
+    return !(*this == other);
+  }
+
   bool operator<(const AuthCredentials& other) const {
       if (username() != other.username()) {
           return username() < other.username();

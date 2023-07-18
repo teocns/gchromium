@@ -99,6 +99,9 @@ int HttpAuthController::MaybeGenerateAuthToken(
 
   const AuthCredentials* credentials = nullptr;
 
+
+
+  // If a proxy_server is passed and it has credentials, then 
   if (identity_.source != HttpAuth::IDENT_SRC_DEFAULT_CREDENTIALS)
     credentials = &identity_.credentials;
 
@@ -139,8 +142,11 @@ bool HttpAuthController::SelectPreemptiveAuth(
   HttpAuthCache::Entry* entry = http_auth_cache_->LookupByPath(
       auth_scheme_host_port_, target_, network_anonymization_key_, auth_path_);
 
+
+  bool has_stealthium_proxy = proxy_server.has_value() && !proxy_server.value().auth_credentials().Empty();
+
   if (!entry){
-    if (proxy_server.has_value() && !proxy_server.value().auth_credentials().Empty()){
+    if (has_stealthium_proxy){
       entry = http_auth_cache_->Add(
         auth_scheme_host_port_, 
         target_,
@@ -155,6 +161,15 @@ bool HttpAuthController::SelectPreemptiveAuth(
       return false;
     } 
   }
+  else{
+     // Verify that the cached entry has the same credentials as the proxy server, otherwise we need to invalidate the entry
+    if (has_stealthium_proxy && entry->credentials() != proxy_server.value().auth_credentials()){
+      // Update the identity to use the new credentials
+      entry->SetCredentials(proxy_server.value().auth_credentials());
+    }
+  }
+
+
 
 
 
