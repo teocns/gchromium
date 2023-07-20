@@ -92,7 +92,9 @@ class NET_EXPORT_PRIVATE HttpAuthController
                      const NetworkAnonymizationKey& network_anonymization_key,
                      HttpAuthCache* http_auth_cache,
                      HttpAuthHandlerFactory* http_auth_handler_factory,
-                     HostResolver* host_resolver);
+                     HostResolver* host_resolver,
+                     const absl::optional<ProxyServer>& proxy_server = absl::nullopt
+  );
 
   // Generate an authentication token for |target| if necessary. The return
   // value is a net error code. |OK| will be returned both in the case that
@@ -101,8 +103,7 @@ class NET_EXPORT_PRIVATE HttpAuthController
                              
 int MaybeGenerateAuthToken(const HttpRequestInfo* request,
                              CompletionOnceCallback callback,
-                             const NetLogWithSource& net_log,
-                             const absl::optional<ProxyServer>& proxy_server = absl::nullopt);
+                             const NetLogWithSource& net_log);
 
   // Adds either the proxy auth header, or the origin server auth header,
   // as specified by |target_|.
@@ -162,7 +163,7 @@ int MaybeGenerateAuthToken(const HttpRequestInfo* request,
   // Searches the auth cache for an entry that encompasses the request's path.
   // If such an entry is found, updates |identity_| and |handler_| with the
   // cache entry's data and returns true.
-  bool SelectPreemptiveAuth(const NetLogWithSource& caller_net_log,const absl::optional<ProxyServer>& proxy_server);
+  bool SelectPreemptiveAuth(const NetLogWithSource& caller_net_log);
 
   // Invalidates the current handler. If |action| is
   // INVALIDATE_HANDLER_AND_CACHED_CREDENTIALS, then also invalidate
@@ -245,6 +246,9 @@ int MaybeGenerateAuthToken(const HttpRequestInfo* request,
   const raw_ptr<HostResolver, DanglingUntriaged> host_resolver_;
 
   std::set<HttpAuth::Scheme> disabled_schemes_;
+
+
+  const absl::optional<ProxyServer> proxy_server_;
 
   CompletionOnceCallback callback_;
 

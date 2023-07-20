@@ -198,7 +198,9 @@ HttpProxyConnectJob::HttpProxyConnectJob(
                     params_->network_anonymization_key(),
                     common_connect_job_params->http_auth_cache,
                     common_connect_job_params->http_auth_handler_factory,
-                    host_resolver())
+                    host_resolver(),
+                    *common_connect_job_params->proxy_server
+              )
               : nullptr) {}
 
 HttpProxyConnectJob::~HttpProxyConnectJob() = default;

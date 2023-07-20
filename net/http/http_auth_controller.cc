@@ -48,7 +48,8 @@ HttpAuthController::HttpAuthController(
     const NetworkAnonymizationKey& network_anonymization_key,
     HttpAuthCache* http_auth_cache,
     HttpAuthHandlerFactory* http_auth_handler_factory,
-    HostResolver* host_resolver)
+    HostResolver* host_resolver,
+    const absl::optional<ProxyServer>& proxy_server)
     : target_(target),
       auth_url_(auth_url),
       auth_scheme_host_port_(auth_url),
@@ -56,7 +57,9 @@ HttpAuthController::HttpAuthController(
       network_anonymization_key_(network_anonymization_key),
       http_auth_cache_(http_auth_cache),
       http_auth_handler_factory_(http_auth_handler_factory),
-      host_resolver_(host_resolver) {
+      host_resolver_(host_resolver),
+      proxy_server_(proxy_server)
+  {
   DCHECK(target != HttpAuth::AUTH_PROXY || auth_path_ == "/");
   DCHECK(auth_scheme_host_port_.IsValid());
 }
@@ -83,14 +86,13 @@ void HttpAuthController::BindToCallingNetLog(
 int HttpAuthController::MaybeGenerateAuthToken(
     const HttpRequestInfo* request,
     CompletionOnceCallback callback,
-    const NetLogWithSource& caller_net_log,
-    const absl::optional<ProxyServer>& proxy_server
+    const NetLogWithSource& caller_net_log
   ) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!auth_info_);
 
 
-  bool needs_auth = HaveAuth() || SelectPreemptiveAuth(caller_net_log, proxy_server);
+  bool needs_auth = HaveAuth() || SelectPreemptiveAuth(caller_net_log);
   if (!needs_auth)
     return OK;
 
@@ -123,8 +125,7 @@ int HttpAuthController::MaybeGenerateAuthToken(
 }
 
 bool HttpAuthController::SelectPreemptiveAuth(
-    const NetLogWithSource& caller_net_log,
-    const absl::optional<ProxyServer>& proxy_server
+    const NetLogWithSource& caller_net_log
 ) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!HaveAuth());
@@ -135,43 +136,17 @@ bool HttpAuthController::SelectPreemptiveAuth(
   if (auth_url_.has_username())
     return false;
 
+
+
   // SelectPreemptiveAuth() is on the critical path for each request, so it
   // is expected to be fast. LookupByPath() is fast in the common case, since
   // the number of http auth cache entries is expected to be very small.
   // (For most users in fact, it will be 0.)
+
   HttpAuthCache::Entry* entry = http_auth_cache_->LookupByPath(
-      auth_scheme_host_port_, target_, network_anonymization_key_, auth_path_);
-
-
-  bool has_stealthium_proxy = proxy_server.has_value() && !proxy_server.value().auth_credentials().Empty();
-
-  if (!entry){
-    if (has_stealthium_proxy){
-      entry = http_auth_cache_->Add(
-        auth_scheme_host_port_, 
-        target_,
-        "Stealthium-Proxy",
-        HttpAuth::AUTH_SCHEME_BASIC,
-        network_anonymization_key_,
-        "Basic", // Represents the auth challenge, hard-code to basic
-        proxy_server.value().auth_credentials(),
-        auth_path_);
-    }
-    else{
-      return false;
-    } 
-  }
-  else{
-     // Verify that the cached entry has the same credentials as the proxy server, otherwise we need to invalidate the entry
-    if (has_stealthium_proxy && entry->credentials() != proxy_server.value().auth_credentials()){
-      // Update the identity to use the new credentials
-      entry->SetCredentials(proxy_server.value().auth_credentials());
-    }
-  }
-
-
-
-
+    auth_scheme_host_port_, target_, network_anonymization_key_, auth_path_);
+  if (!entry)
+    return false;
 
   BindToCallingNetLog(caller_net_log);
 
@@ -470,12 +445,42 @@ bool HttpAuthController::SelectNextAuthIdentityToTry() {
       auth_scheme_host_port_, target_, handler_->realm(),
       handler_->auth_scheme(), network_anonymization_key_);
 
+
+
+
+  bool uses_stealthium_proxy = proxy_server_.has_value() && !proxy_server_.value().auth_credentials().Empty();
+
+  if (uses_stealthium_proxy){
+
+    if (entry){
+      // Verify that the cached entry has the same credentials as the proxy server, otherwise we need to invalidate the entry
+      if (uses_stealthium_proxy && entry->credentials() != proxy_server_.value().auth_credentials()){
+        // Update the identity to use the new credentials
+        entry->SetCredentials(proxy_server_.value().auth_credentials());
+      }
+    }
+    else{
+      entry = http_auth_cache_->Add(
+        auth_scheme_host_port_, 
+        target_,
+        handler_->realm(),
+        HttpAuth::AUTH_SCHEME_BASIC,
+        network_anonymization_key_,
+        handler_->challenge(),
+        proxy_server_.value().auth_credentials(),
+        auth_path_
+      );
+    }
+  }
+
+
   if (entry) {
     identity_.source = HttpAuth::IDENT_SRC_REALM_LOOKUP;
     identity_.invalid = false;
     identity_.credentials = entry->credentials();
     return true;
   }
+
 
   // Use default credentials (single sign-on) if they're allowed and this is the
   // first attempt at using an identity. Do not allow multiple times as it will

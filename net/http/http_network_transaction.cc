@@ -1018,8 +1018,7 @@ int HttpNetworkTransaction::DoGenerateProxyAuthToken() {
         session_->host_resolver());
   return auth_controllers_[target]->MaybeGenerateAuthToken(request_,
                                                            io_callback_,
-                                                           net_log_,
-                                                           proxy_info_.proxy_server());
+                                                           net_log_);
 }
 
 int HttpNetworkTransaction::DoGenerateProxyAuthTokenComplete(int rv) {
