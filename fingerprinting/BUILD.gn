@@ -1,0 +1,31 @@
+import("//build/config/chrome_build.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+
+source_set("fingerprinting") {
+  sources = [
+    "manager.h",
+    "manager.cc",
+    "fingerprint.h",
+  ]
+
+  public_deps = [
+    ":mojom",
+    "//base",
+    "//mojo/public/mojom/base",
+    "//third_party/abseil-cpp:absl",
+
+  ]
+}
+
+mojom("mojom") {
+  # We don't want Blink variants of bindings to be generated.
+  disable_variants = true
+
+  sources = [
+    "manager.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/public/mojom/base",
+  ]
+}

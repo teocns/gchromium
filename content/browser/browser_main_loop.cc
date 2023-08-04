@@ -153,6 +153,8 @@
 #include "ui/gfx/font_render_params.h"
 #include "ui/gfx/switches.h"
 
+#include "fingerprinting/manager.h"
+
 #if defined(USE_AURA) || BUILDFLAG(IS_MAC)
 #include "content/browser/compositor/image_transport_factory.h"
 #endif
@@ -864,6 +866,15 @@ void BrowserMainLoop::CreateStartupTasks() {
   StartupTask post_create_threads = base::BindOnce(
       &BrowserMainLoop::PostCreateThreads, base::Unretained(this));
   startup_task_runner_->AddTask(std::move(post_create_threads));
+
+
+  StartupTask initialize_fingerprint_manager = base::BindOnce(
+      [] {
+        fingerprinting::FingerprintManager::GetInstance()->Init();
+        return 0;
+      });
+
+  startup_task_runner_->AddTask(std::move(initialize_fingerprint_manager));
 
   StartupTask pre_main_message_loop_run = base::BindOnce(
       &BrowserMainLoop::PreMainMessageLoopRun, base::Unretained(this));

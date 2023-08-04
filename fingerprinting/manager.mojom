@@ -1,0 +1,14 @@
+module fingerprinting.mojom;
+
+import "mojo/public/mojom/base/file_path.mojom";
+
+
+interface FingerprintManager {
+  [Sync]
+  SetFingerprintStr(string fingerprint) => (bool success);
+  [Sync]
+  GetFingerprintStr() => (string fingerprint);
+  [Sync]
+  Enabled() => (bool enabled);
+  
+};

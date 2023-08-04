@@ -178,6 +178,10 @@
 #include "third_party/blink/public/public_buildflags.h"
 #include "url/origin.h"
 
+#include "fingerprinting/manager.h"
+#include "fingerprinting/manager.mojom.h"
+
+
 #if BUILDFLAG(IS_ANDROID)
 #include "content/browser/android/date_time_chooser_android.h"
 #include "content/browser/android/text_suggestion_host_android.h"
@@ -1108,6 +1112,13 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
       base::BindRepeating(&RenderProcessHost::BindMediaCodecProvider,
                           base::Unretained(host->GetProcess())));
 #endif
+
+  map->Add<fingerprinting::mojom::FingerprintManager>(
+      base::BindRepeating([](mojo::PendingReceiver<fingerprinting::mojom::FingerprintManager> receiver) {
+        auto* fingerprint_manager = fingerprinting::FingerprintManager::GetInstance();
+        fingerprint_manager->Bind(std::move(receiver));
+      }));
+
 }
 
 void PopulateBinderMapWithContext(

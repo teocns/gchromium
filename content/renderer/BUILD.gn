@@ -329,6 +329,7 @@ target(link_target_type, "renderer") {
     "//ui/surface",
     "//url",
     "//v8",
+    "//fingerprinting",
   ]
   allow_circular_includes_from = []
 

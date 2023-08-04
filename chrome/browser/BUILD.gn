@@ -2474,6 +2474,7 @@ static_library("browser") {
     "//ui/surface",
     "//ui/web_dialogs",
     "//ui/webui",
+    "//fingerprinting",
   ]
 
   if (enable_screen_ai_service) {

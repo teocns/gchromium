@@ -239,6 +239,12 @@
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-microtask-queue.h"
 
+#include "fingerprinting/manager.h"
+#include "fingerprinting/manager.mojom.h"
+
+
+
+
 #if BUILDFLAG(ENABLE_PPAPI)
 #include "content/renderer/pepper/pepper_browser_connection.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
@@ -4410,6 +4416,28 @@ void RenderFrameImpl::DidObserveLayoutShift(double score,
 
 void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
                                              int world_id) {
+
+
+  mojo::Remote<fingerprinting::mojom::FingerprintManager> fingerprint_manager;
+  GetBrowserInterfaceBroker()->GetInterface(
+      fingerprint_manager.BindNewPipeAndPassReceiver());
+
+  // Use the fingerprint_manager to call GetFingerprintStr
+  std::string fingerprint_str;
+
+  bool enabled = false;
+  fingerprint_manager->Enabled(&enabled);
+  if (enabled){
+
+    fingerprint_manager->GetFingerprintStr(&fingerprint_str);
+
+    if (fingerprint_str.empty()) {
+      // Fingerprinting is blocked, so we should not enable the API.
+      return;
+    }
+  }
+
+
   v8::MicrotasksScope microtasks(blink::MainThreadIsolate(),
                                  context->GetMicrotaskQueue(),
                                  v8::MicrotasksScope::kDoNotRunMicrotasks);
