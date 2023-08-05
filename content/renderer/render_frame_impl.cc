@@ -4414,33 +4414,91 @@ void RenderFrameImpl::DidObserveLayoutShift(double score,
     observer.DidObserveLayoutShift(score, after_input_or_scroll);
 }
 
+void replaceHandler(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+    v8::Local<v8::Object> target = v8::Local<v8::Object>::Cast(args[0]);
+    v8::Local<v8::String> propName = v8::Local<v8::String>::Cast(args[1]);
+    v8::Local<v8::Object> handlerOverrides = v8::Local<v8::Object>::Cast(args[2]);
+
+    v8::Local<v8::Array> property_names = handlerOverrides->GetPropertyNames(context).ToLocalChecked();
+
+    for (uint32_t i = 0; i < property_names->Length(); i++) {
+        v8::Local<v8::Value> key = property_names->Get(context, i).ToLocalChecked();
+        v8::Local<v8::Value> value = handlerOverrides->Get(context, key).ToLocalChecked();
+
+        // // Override the handler in the target object
+        // target->SetAccessorProperty(
+        //     v8::Local<v8::String>::Cast(key),
+        //     v8::Function::New(context, *v8::Local<v8::Function>::Cast(value)).ToLocalChecked(),
+        //     v8::Local<v8::Function>(),
+        //     v8::ReadOnly
+        // );
+
+        target->Set(context, v8::Local<v8::String>::Cast(key), value).FromJust();
+
+    }
+
+    // Replace the original object with the new one
+    target->Set(context, propName, target).FromJust();
+}
+
 void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
                                              int world_id) {
 
+                  
+  // mojo::Remote<fingerprinting::mojom::FingerprintManager> fingerprint_manager;
+  // GetBrowserInterfaceBroker()->GetInterface(
+  //     fingerprint_manager.BindNewPipeAndPassReceiver());
 
-  mojo::Remote<fingerprinting::mojom::FingerprintManager> fingerprint_manager;
-  GetBrowserInterfaceBroker()->GetInterface(
-      fingerprint_manager.BindNewPipeAndPassReceiver());
+  // // Use the fingerprint_manager to call GetFingerprintStr
+  // std::string fingerprint_str;
 
-  // Use the fingerprint_manager to call GetFingerprintStr
-  std::string fingerprint_str;
+  // bool enabled = false;
+  // fingerprint_manager->Enabled(&enabled);
+  // if (enabled){
 
-  bool enabled = false;
-  fingerprint_manager->Enabled(&enabled);
-  if (enabled){
+  //   fingerprint_manager->GetFingerprintStr(&fingerprint_str);
 
-    fingerprint_manager->GetFingerprintStr(&fingerprint_str);
+  //   if (fingerprint_str.empty()) {
+  //     // Fingerprinting is blocked, so we should not enable the API.
+  //     return;
+  //   }
+  // }
+  
 
-    if (fingerprint_str.empty()) {
-      // Fingerprinting is blocked, so we should not enable the API.
-      return;
-    }
-  }
 
+  /// Implementation of utility replace with proxy
+
+    // v8::Isolate* isolate = context->GetIsolate();
+    // v8::HandleScope handle_scope(isolate);
+    // v8::Context::Scope context_scope(context);
+
+    
+    
 
   v8::MicrotasksScope microtasks(blink::MainThreadIsolate(),
                                  context->GetMicrotaskQueue(),
                                  v8::MicrotasksScope::kDoNotRunMicrotasks);
+
+    // Expose replaceHandler
+    v8::Isolate* isolate = context->GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::MicrotasksScope microtask_scope(isolate, v8::MicrotasksScope::Type::kRunMicrotasks);
+    v8::Context::Scope context_scope(context);
+
+    // Create a new function template
+    v8::Local<v8::FunctionTemplate> func_template = v8::FunctionTemplate::New(isolate, replaceHandler);
+
+    // Get the global object
+    v8::Local<v8::Object> global = context->Global();
+
+    // Inject the function into the global object
+    global->Set(context, v8::String::NewFromUtf8(isolate, "replaceHandler").ToLocalChecked(), func_template->GetFunction(context).ToLocalChecked()).FromJust();
+
+
   if (((enabled_bindings_ & BINDINGS_POLICY_MOJO_WEB_UI) ||
        enable_mojo_js_bindings_) &&
       IsMainFrame() && world_id == ISOLATED_WORLD_ID_GLOBAL) {
