@@ -62,6 +62,7 @@ target(link_target_type, "renderer") {
     "dom_automation_controller.h",
     "effective_connection_type_helper.cc",
     "effective_connection_type_helper.h",
+    "fingerprinting/utilities.cc",
     "frame_owner_properties_converter.cc",
     "frame_owner_properties_converter.h",
     "gpu_benchmarking_extension.cc",

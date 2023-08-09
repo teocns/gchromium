@@ -241,7 +241,7 @@
 
 #include "fingerprinting/manager.h"
 #include "fingerprinting/manager.mojom.h"
-
+#include "content/renderer/fingerprinting/utilities.cc"
 
 
 
@@ -4438,101 +4438,6 @@ void RenderFrameImpl::DidObserveLayoutShift(double score,
 // }
 
 
-void wrappedFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {
-    v8::Isolate* innerIsolate = innerArgs.GetIsolate();
-    v8::Local<v8::Context> innerContext = innerIsolate->GetCurrentContext();
-    
-    
-    
-
-    // get handlerOverrides, target, propName from data
-    // beware of error: no member named 'Get' in 'v8::Value'
-    // cast dataVal to object:
-
-    v8::Local<v8::Value> dataVal = innerArgs.Data();
-
-    v8::Local<v8::Object> data = v8::Local<v8::Object>::Cast(dataVal);
-
-    
-    v8::Local<v8::Object> target = v8::Local<v8::Object>::Cast(data->Get(innerContext, v8::String::NewFromUtf8(innerIsolate, "target").ToLocalChecked()).ToLocalChecked());
-    v8::Local<v8::Function> origFunc = v8::Local<v8::Function>::Cast(data->Get(innerContext, v8::String::NewFromUtf8(innerIsolate, "origFunc").ToLocalChecked()).ToLocalChecked());
-    v8::Local<v8::Object> handlerOverrides = v8::Local<v8::Object>::Cast(data->Get(innerContext, v8::String::NewFromUtf8(innerIsolate, "handlerOverrides").ToLocalChecked()).ToLocalChecked());
-    v8::Local<v8::String> propName = v8::Local<v8::String>::Cast(data->Get(innerContext, v8::String::NewFromUtf8(innerIsolate, "propName").ToLocalChecked()).ToLocalChecked());
-    
-    int len = innerArgs.Length();
-    std::vector<v8::Local<v8::Value>> innerArgsVec(len);
-    for (int i = 0; i < len; i++) {
-        innerArgsVec[i] = innerArgs[i];
-    }
-    v8::Local<v8::Value> origResult = origFunc->Call(innerContext, innerArgs.This(), len, innerArgsVec.data()).ToLocalChecked();
-
-  
-    // Now check for an 'apply' handler override
-    v8::Local<v8::String> applyKey = v8::String::NewFromUtf8(innerIsolate, "apply").ToLocalChecked();
-    if (handlerOverrides->Has(innerContext, applyKey).ToChecked()) {
-        v8::Local<v8::Function> applyFunc = v8::Local<v8::Function>::Cast(handlerOverrides->Get(innerContext, applyKey).ToLocalChecked());
-        v8::Local<v8::Value> applyArgs[] = { origFunc, innerArgs.This(), origResult };
-        origResult = applyFunc->Call(innerContext, handlerOverrides, 3, applyArgs).ToLocalChecked();
-    }
-
-    // Check for 'get' handler override
-    v8::Local<v8::String> getKey = v8::String::NewFromUtf8(innerIsolate, "get").ToLocalChecked();
-    if (handlerOverrides->Has(innerContext, getKey).ToChecked()) {
-        v8::Local<v8::Function> getFunc = v8::Local<v8::Function>::Cast(handlerOverrides->Get(innerContext, getKey).ToLocalChecked());
-        v8::Local<v8::Value> getArgs[] = { target, propName };
-        origResult = getFunc->Call(innerContext, handlerOverrides, 2, getArgs).ToLocalChecked();
-    }
-
-    // Check for 'set' handler override
-    v8::Local<v8::String> setKey = v8::String::NewFromUtf8(innerIsolate, "set").ToLocalChecked();
-    if (handlerOverrides->Has(innerContext, setKey).ToChecked()) {
-        v8::Local<v8::Function> setFunc = v8::Local<v8::Function>::Cast(handlerOverrides->Get(innerContext, setKey).ToLocalChecked());
-        v8::Local<v8::Value> setArgs[] = { target, propName, origResult };
-        origResult = setFunc->Call(innerContext, handlerOverrides, 3, setArgs).ToLocalChecked();
-    }
-
-    // Check for 'construct' handler override
-    v8::Local<v8::String> constructKey = v8::String::NewFromUtf8(innerIsolate, "construct").ToLocalChecked();
-    if (handlerOverrides->Has(innerContext, constructKey).ToChecked()) {
-        v8::Local<v8::Function> constructFunc = v8::Local<v8::Function>::Cast(handlerOverrides->Get(innerContext, constructKey).ToLocalChecked());
-        v8::Local<v8::Value> constructArgs[] = { origFunc, innerArgs.This() };
-        origResult = constructFunc->Call(innerContext, handlerOverrides, 2, constructArgs).ToLocalChecked();
-    }
-
-    innerArgs.GetReturnValue().Set(origResult);
-}
-
-
-void replaceTraps(const v8::FunctionCallbackInfo<v8::Value>& args) {
-    v8::Isolate* isolate = args.GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-    v8::Local<v8::Object> target = v8::Local<v8::Object>::Cast(args[0]);
-    v8::Local<v8::String> propName = v8::Local<v8::String>::Cast(args[1]);
-    v8::Local<v8::Object> handlerOverrides = v8::Local<v8::Object>::Cast(args[2]);
-
-    // Get the target's original function by propName
-    v8::Local<v8::Function> origFunc = v8::Local<v8::Function>::Cast(target->Get(context, propName).ToLocalChecked());
-      
-    v8::Local<v8::Object> callbackData = v8::Object::New(isolate);
-    (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "origFunc").ToLocalChecked(), origFunc);
-    (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "handlerOverrides").ToLocalChecked(), handlerOverrides);
-    (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "target").ToLocalChecked(), target);
-    (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "propName").ToLocalChecked(), propName);
-
-    v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(isolate, wrappedFunctionCallback, callbackData);
-
-    v8::Local<v8::Function> newFunc = templ->GetFunction(context).ToLocalChecked();
-
-    // Replace the original function with the new function on the target object
-    v8::Maybe<bool> success = target->Set(context, propName, newFunc);
-
-    if (success.IsNothing()) {
-        LOG(ERROR) << "Failed to replace trap";
-    }
-}
-
 
 
 // void ReplaceTraps(const v8::FunctionCallbackInfo<v8::Value>& args) {
@@ -4644,13 +4549,13 @@ void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
     v8::Context::Scope context_scope(context);
 
     // Create a new function template
-    v8::Local<v8::FunctionTemplate> func_template = v8::FunctionTemplate::New(isolate, replaceTraps);
+    v8::Local<v8::FunctionTemplate> func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::MockTrap);
 
     // Get the global object
     v8::Local<v8::Object> global = context->Global();
 
     // Inject the function into the global object
-    global->Set(context, v8::String::NewFromUtf8(isolate, "replaceTraps").ToLocalChecked(), func_template->GetFunction(context).ToLocalChecked()).FromJust();
+    global->Set(context, v8::String::NewFromUtf8(isolate, "MockTrap").ToLocalChecked(), func_template->GetFunction(context).ToLocalChecked()).FromJust();
 
 
   if (((enabled_bindings_ & BINDINGS_POLICY_MOJO_WEB_UI) ||
