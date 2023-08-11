@@ -16,171 +16,150 @@
 namespace fingerprinting{
 
 
-class FINGERPRINTING_EXPORT utilities{
-public:
-// Internal method	Corresponding trap
-// [[GetPrototypeOf]]	getPrototypeOf()
-// [[SetPrototypeOf]]	setPrototypeOf()
-// [[IsExtensible]]	isExtensible()
-// [[PreventExtensions]]	preventExtensions()
-// [[GetOwnProperty]]	getOwnPropertyDescriptor()
-// [[DefineOwnProperty]]	defineProperty()
-// [[HasProperty]]	has()
-// [[Get]]	get()
-// [[Set]]	set()
-// [[Delete]]	deleteProperty()
-// [[OwnPropertyKeys]]	ownKeys()
-// Function objects also have the following internal methods:
 
-// Internal method	Corresponding trap
-// [[Call]]	apply()
-// [[Construct]]	construct()
+inline void accessorWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs){
 
 
-static void wrappedFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {
-    v8::Isolate* innerIsolate = innerArgs.GetIsolate();
-    v8::Local<v8::Context> innerContext = innerIsolate->GetCurrentContext();
-    
-    
-    
-
-    // get handlerFn, target, propName from data
-    // beware of error: no member named 'Get' in 'v8::Value'
-    // cast dataVal to object:
-
-    v8::Local<v8::Value> dataVal = innerArgs.Data();
-
-    v8::Local<v8::Object> data = v8::Local<v8::Object>::Cast(dataVal);
-
-    
-    v8::Local<v8::Object> target = v8::Local<v8::Object>::Cast(data->Get(innerContext, v8::String::NewFromUtf8(innerIsolate, "target").ToLocalChecked()).ToLocalChecked());
-    v8::Local<v8::Function> nativeFunc = v8::Local<v8::Function>::Cast(data->Get(innerContext, v8::String::NewFromUtf8(innerIsolate, "nativeFunc").ToLocalChecked()).ToLocalChecked());
-    v8::Local<v8::Function> handlerFn = v8::Local<v8::Function>::Cast(data->Get(innerContext, v8::String::NewFromUtf8(innerIsolate, "handlerFn").ToLocalChecked()).ToLocalChecked());
-    v8::Local<v8::String> propName = v8::Local<v8::String>::Cast(data->Get(innerContext, v8::String::NewFromUtf8(innerIsolate, "propName").ToLocalChecked()).ToLocalChecked());
-    v8::Local<v8::String> trapName = v8::Local<v8::String>::Cast(data->Get(innerContext, v8::String::NewFromUtf8(innerIsolate, "trapName").ToLocalChecked()).ToLocalChecked());
-    std::string trapNameStr = *v8::String::Utf8Value(innerIsolate, trapName);
-
-    int len = innerArgs.Length();
-    std::vector<v8::Local<v8::Value>> innerArgsVec(len);
-    for (int i = 0; i < len; i++) {
-        innerArgsVec[i] = innerArgs[i];
-    }
-
-    v8::Local<v8::Value> origResult = v8::Undefined(innerIsolate);
-
-    if (trapNameStr == "apply") {
-        v8::Local<v8::Value> applyArgs[] = { nativeFunc, innerArgs.This(), origResult, nativeFunc };
-        origResult = handlerFn->Call(innerContext, handlerFn, 3, applyArgs).ToLocalChecked();
-    } else if (trapNameStr == "get") {
-        v8::Local<v8::Value> getArgs[] = { target, propName, nativeFunc};
-        origResult = handlerFn->Call(innerContext, handlerFn, 2, getArgs).ToLocalChecked();
-    } else if (trapNameStr == "set") {
-        v8::Local<v8::Value> setArgs[] = { target, propName, origResult, nativeFunc };
-        origResult = handlerFn->Call(innerContext, handlerFn, 3, setArgs).ToLocalChecked();
-    } else if (trapNameStr == "construct") {
-        v8::Local<v8::Value> constructArgs[] = { nativeFunc, innerArgs.This(), nativeFunc };
-        origResult = handlerFn->Call(innerContext, handlerFn, 2, constructArgs).ToLocalChecked();
-    } else {
-        // Handle unknown trapName if necessary
-        LOG(WARNING) << "Unknown trapName: " << trapNameStr;
-    }
+    v8::Local<v8::Context> context = innerArgs.GetIsolate()->GetCurrentContext();
+    v8::Local<v8::Object> callbackData = v8::Local<v8::Object>::Cast(innerArgs.Data());
+    v8::Local<v8::Function> handler = v8::Local<v8::Function>::Cast(callbackData->Get(context, v8::String::NewFromUtf8(innerArgs.GetIsolate(), "handler").ToLocalChecked()).ToLocalChecked());
 
 
-    innerArgs.GetReturnValue().Set(origResult);
+    v8::Local<v8::Value> origValue = callbackData->Get(context, v8::String::NewFromUtf8(innerArgs.GetIsolate(), "super").ToLocalChecked()).ToLocalChecked();
+
+    v8::Local<v8::Object> target = innerArgs.Holder();
+    v8::Local<v8::Object> thisArg = innerArgs.This();
+    v8::Local<v8::Value> argv[3] = { target, thisArg, origValue };
+
+    v8::Local<v8::Value> result = handler->Call(context, innerArgs.Holder(), 3, argv).ToLocalChecked();
+
+    // if (result->IsFunction()) {
+    // 	innerArgs.GetReturnValue().Set(
+    // 		maskRetVal(result, context)
+    // 	);
+    // 	return;
+    // }
+
+    innerArgs.GetReturnValue().Set(result);
 }
 
+inline void ThrowAndLogError(v8::Isolate* isolate, const char* message) {
+    isolate->ThrowException(v8::String::NewFromUtf8(isolate, message).ToLocalChecked());
+}
+
+class FINGERPRINTING_EXPORT utilities{
+public:
 
 
 
 
-static void MockTrap(const v8::FunctionCallbackInfo<v8::Value>& args) {
-/**
- * Method commonly used to override objects' internal method traps
-  MockTrap(NavigatorUAData.prototype, 'getHighEntropyValues', 'apply', (target, thisArg, args) => {
-    return "Hello!"
-  });
-*/
+
+
+static void PatchAccessor(const v8::FunctionCallbackInfo<v8::Value>& args) {
     v8::Isolate* isolate = args.GetIsolate();
     v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
-      
-    v8::Local<v8::Object> target = v8::Local<v8::Object>::Cast(args[0]);
-    v8::Local<v8::String> propName = v8::Local<v8::String>::Cast(args[1]);
-    // The trap name
-    v8::Local<v8::String> trapName = v8::Local<v8::String>::Cast(args[2]);
-    v8::Local<v8::Function> handlerFn = v8::Local<v8::Function>::Cast(args[3]);
+    v8::Local<v8::String> __SET__ = v8::String::NewFromUtf8(isolate, "set").ToLocalChecked();
+    v8::Local<v8::String> __GET__ = v8::String::NewFromUtf8(isolate, "get").ToLocalChecked();
 
-
-
-
-    v8::Local<v8::Object> descriptor;
-    v8::Local<v8::Function> nativeFunc;
-
-
-
-    v8::MaybeLocal<v8::Value> maybeValue = target->GetOwnPropertyDescriptor(context, propName);
-    if (!maybeValue.IsEmpty()) {
-        v8::Local<v8::Value> value = maybeValue.ToLocalChecked();
-        if (value->IsObject()) {
-            descriptor = v8::Local<v8::Object>::Cast(value);
-            // Now you can use 'descriptor'
-        }
-    }
-
-
-    if (!descriptor.IsEmpty()) {
-
-        if (!descriptor->Has(context, trapName).ToChecked()){
-            // Log the trap name and the object's descriptor name
-            LOG(ERROR) << "Trap " << *v8::String::Utf8Value(isolate, trapName) << " not found in descriptor " << *v8::String::Utf8Value(isolate, propName);
-            return;
-        }
-
-        nativeFunc = v8::Local<v8::Function>::Cast(descriptor->Get(context, trapName).ToLocalChecked());
-    }
-    
-
-    // Get the target's original function by propName
-    v8::Local<v8::Object> callbackData = v8::Object::New(isolate);
-
-    (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "nativeFunc").ToLocalChecked(), nativeFunc);
-    (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "handlerFn").ToLocalChecked(), handlerFn);
-    (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "target").ToLocalChecked(), target);
-    (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "propName").ToLocalChecked(), propName);
-    (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "trapName").ToLocalChecked(), trapName);
-
-    v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(isolate, wrappedFunctionCallback, callbackData);
-
-    v8::Local<v8::Function> newFunc = templ->GetFunction(context).ToLocalChecked();
-
-    // Replace the original function with the new function on the target object
-    
-
-
-    v8::Maybe<bool> maybeDescriptorSetSuccess = v8::Nothing<bool>();
-
-
-     // Check if we're dealing with a getter or setter, and adjust accordingly
-    if (trapName->StrictEquals(v8::String::NewFromUtf8(isolate, "get").ToLocalChecked())) {
-        descriptor->SetAccessorProperty(propName, newFunc, v8::Local<v8::Function>(), v8::ReadOnly);
-    } else if (trapName->StrictEquals(v8::String::NewFromUtf8(isolate, "set").ToLocalChecked())) {
-        descriptor->SetAccessorProperty(propName, v8::Local<v8::Function>(), newFunc, v8::ReadOnly);
-    } else {
-        maybeDescriptorSetSuccess = descriptor->Set(context, trapName, newFunc);
-    }
-
-    if (!maybeDescriptorSetSuccess.IsNothing() && !maybeDescriptorSetSuccess.FromJust()) {
-        LOG(ERROR) << "Failed to replace trap on descriptor";
+    // Check for the correct number of arguments
+    if (args.Length() != 3) {
+        ThrowAndLogError(isolate,"Expected 3 arguments: target, property name, and config.");
         return;
     }
 
-    if (!target->DefineOwnProperty(context, propName, descriptor).FromJust()){
-        LOG(ERROR) << "Failed to replace target's descriptor";
+    // Validation for object and string arguments
+    auto ValidateArg = [&](int index, bool should_be_object, const char* message) -> v8::Local<v8::Value> {
+        if ((should_be_object && !args[index]->IsObject()) || (!should_be_object && !args[index]->IsString())) {
+            ThrowAndLogError(isolate,message);
+            return {};
+        }
+        return args[index];
+    };
+
+    v8::Local<v8::Object> target = v8::Local<v8::Object>::Cast(ValidateArg(0, true, "Expected first argument to be an object (target)."));
+    v8::Local<v8::String> propName = v8::Local<v8::String>::Cast(ValidateArg(1, false, "Expected second argument to be a string (property name)."));
+    v8::Local<v8::Object> config = v8::Local<v8::Object>::Cast(ValidateArg(2, true, "Expected third argument to be an object (config)."));
+
+    // Check if config object has a getter/setter and validate its type
+    auto HasValidFunction = [&](v8::Local<v8::String> key, const char* message) {
+        if (config->HasOwnProperty(context, key).FromJust() && !config->Get(context, key).ToLocalChecked()->IsFunction()) {
+            ThrowAndLogError(isolate,message);
+            return false;
+        }
+        return true;
+    };
+
+    if (!HasValidFunction(__GET__, "'get' property in config should be a function.") ||
+        !HasValidFunction(__SET__, "'set' property in config should be a function.")) {
         return;
     }
+
+
+		v8::Local<v8::Value> descValue = target->GetOwnPropertyDescriptor(context, propName).ToLocalChecked();
+    v8::Local<v8::Object> descriptor = v8::Local<v8::Object>::Cast(descValue);
+
+
+    // Function to process either a getter or setter
+    auto ProcessAccessor = [&](v8::Local<v8::String> accessorType) -> v8::Local<v8::Function> {
+        v8::Local<v8::Function> nativeFn;
+        if (descriptor->Has(context, accessorType).FromJust()) {
+            v8::Local<v8::Value> value = descriptor->Get(context, accessorType).ToLocalChecked();
+            if (value->IsFunction()) {
+                nativeFn = v8::Local<v8::Function>::Cast(value);
+            }
+        }
+
+        if (config->HasOwnProperty(context, accessorType).FromJust()) {
+            v8::Local<v8::Object> callbackData = v8::Object::New(isolate);
+            if (!nativeFn.IsEmpty()) {
+                (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "super").ToLocalChecked(), nativeFn);
+            }
+            
+						(void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "handler").ToLocalChecked(), v8::Local<v8::Function>::Cast(config->Get(context, accessorType).ToLocalChecked()));
+
+
+            v8::Local<v8::FunctionTemplate> templateFn = v8::FunctionTemplate::New(isolate,
+                accessorWrapper,
+                callbackData
+            );
+
+            return templateFn->GetFunction(context).ToLocalChecked();
+        }
+        return nativeFn;
+    };
+
+    if (!descriptor->Has(context, __GET__).FromJust() && !descriptor->Has(context, __SET__).FromJust()) {
+        ThrowAndLogError(isolate,"Cannot patch a data descriptor with this PatchAccessor. Use PatchValue instead.");
+        return;
+    }
+
+    v8::Local<v8::Function> patchedGetterFn = ProcessAccessor(__GET__);
+    v8::Local<v8::Function> patchedSetterFn = ProcessAccessor(__SET__);
+
+    target->SetAccessorProperty(propName, patchedGetterFn, patchedSetterFn, target->GetPropertyAttributes(context, propName).FromJust(), v8::DEFAULT);
 }
 
+
+private:
+	// static v8::Local<v8::Function> maskRetVal(v8::Local<v8::Value> result, v8::Local<v8::Context> context){
+	// 	return v8::Function::New(context, 
+	// 			maskRetValWrapper,
+	// 			result
+	// 	).ToLocalChecked();
+
+	// }
+
+	// static void maskRetValWrapper(const v8::FunctionCallbackInfo<v8::Value>& nativeArgs) {
+	// 		v8::Local<v8::Function> innerFunc = v8::Local<v8::Function>::Cast(nativeArgs.Data());
+	// 		v8::Local<v8::Value> innerResult = innerFunc->Call(nativeArgs.GetIsolate()->GetCurrentContext(), nativeArgs.Holder(), 0, nullptr).ToLocalChecked();
+	// 		nativeArgs.GetReturnValue().Set(innerResult);
+	// }
+
+
+
+	// get_str = 
 
 
 

@@ -4549,13 +4549,13 @@ void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
     v8::Context::Scope context_scope(context);
 
     // Create a new function template
-    v8::Local<v8::FunctionTemplate> func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::MockTrap);
+    v8::Local<v8::FunctionTemplate> func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::PatchAccessor);
 
     // Get the global object
     v8::Local<v8::Object> global = context->Global();
 
-    // Inject the function into the global object
-    global->Set(context, v8::String::NewFromUtf8(isolate, "MockTrap").ToLocalChecked(), func_template->GetFunction(context).ToLocalChecked()).FromJust();
+    // Inject the function into the global objecta
+    global->Set(context, v8::String::NewFromUtf8(isolate, "PatchAccessor").ToLocalChecked(), func_template->GetFunction(context).ToLocalChecked()).FromJust();
 
 
   if (((enabled_bindings_ & BINDINGS_POLICY_MOJO_WEB_UI) ||
