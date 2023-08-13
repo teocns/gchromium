@@ -17,31 +17,33 @@ namespace fingerprinting{
 
 
 
-inline void accessorWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs){
 
 
+
+inline void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {
     v8::Local<v8::Context> context = innerArgs.GetIsolate()->GetCurrentContext();
     v8::Local<v8::Object> callbackData = v8::Local<v8::Object>::Cast(innerArgs.Data());
-    v8::Local<v8::Function> handler = v8::Local<v8::Function>::Cast(callbackData->Get(context, v8::String::NewFromUtf8(innerArgs.GetIsolate(), "handler").ToLocalChecked()).ToLocalChecked());
+    v8::Local<v8::Function> handler = v8::Local<v8::Function>::Cast(
+        callbackData->Get(context, v8::String::NewFromUtf8(innerArgs.GetIsolate(), "handler").ToLocalChecked()).ToLocalChecked()
+    );
+    int argc = innerArgs.Length(); // Get the number of arguments
 
+    // Create an array to hold the arguments
+    v8::Local<v8::Value>* argv = new v8::Local<v8::Value>[argc];
 
-    v8::Local<v8::Value> origValue = callbackData->Get(context, v8::String::NewFromUtf8(innerArgs.GetIsolate(), "super").ToLocalChecked()).ToLocalChecked();
+    // Populate the array with argument values
+    for (int i = 0; i < argc; ++i) {
+        argv[i] = innerArgs[i];
+    }
 
-    v8::Local<v8::Object> target = innerArgs.Holder();
-    v8::Local<v8::Object> thisArg = innerArgs.This();
-    v8::Local<v8::Value> argv[3] = { target, thisArg, origValue };
-
-    v8::Local<v8::Value> result = handler->Call(context, innerArgs.Holder(), 3, argv).ToLocalChecked();
-
-    // if (result->IsFunction()) {
-    // 	innerArgs.GetReturnValue().Set(
-    // 		maskRetVal(result, context)
-    // 	);
-    // 	return;
-    // }
-
+    v8::Local<v8::Value> result = handler->Call(context, innerArgs.Holder(), argc, argv).ToLocalChecked();
     innerArgs.GetReturnValue().Set(result);
+
+    // Don't forget to delete the allocated array when done
+    delete[] argv;
 }
+
+
 
 inline void ThrowAndLogError(v8::Isolate* isolate, const char* message) {
     isolate->ThrowException(v8::String::NewFromUtf8(isolate, message).ToLocalChecked());
@@ -56,6 +58,18 @@ public:
 
 
 static void PatchAccessor(const v8::FunctionCallbackInfo<v8::Value>& args) {
+	/**
+	 * 
+    PatchAccessor(
+      Navigator.prototype,
+      'userAgent',
+      {
+        get: function(){
+          return "hey"
+        }
+      }
+    )
+	*/
     v8::Isolate* isolate = args.GetIsolate();
     v8::HandleScope handle_scope(isolate);
     v8::Local<v8::Context> context = isolate->GetCurrentContext();
@@ -96,9 +110,17 @@ static void PatchAccessor(const v8::FunctionCallbackInfo<v8::Value>& args) {
         return;
     }
 
+    v8::MaybeLocal<v8::Value> maybeDescriptor = target->GetOwnPropertyDescriptor(context, propName);
+    
+    if (maybeDescriptor.IsEmpty()) {
+        ThrowAndLogError(isolate, "Property does not exist on target object.");
+        return;
+    }
 
-		v8::Local<v8::Value> descValue = target->GetOwnPropertyDescriptor(context, propName).ToLocalChecked();
-    v8::Local<v8::Object> descriptor = v8::Local<v8::Object>::Cast(descValue);
+
+
+
+    v8::Local<v8::Object> descriptor = v8::Local<v8::Object>::Cast(maybeDescriptor.ToLocalChecked());
 
 
     // Function to process either a getter or setter
@@ -113,15 +135,15 @@ static void PatchAccessor(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
         if (config->HasOwnProperty(context, accessorType).FromJust()) {
             v8::Local<v8::Object> callbackData = v8::Object::New(isolate);
-            if (!nativeFn.IsEmpty()) {
-                (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "super").ToLocalChecked(), nativeFn);
-            }
+            // if (!nativeFn.IsEmpty()) {
+            //     (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "super").ToLocalChecked(), nativeFn);
+            // }
             
-						(void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "handler").ToLocalChecked(), v8::Local<v8::Function>::Cast(config->Get(context, accessorType).ToLocalChecked()));
+            (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "handler").ToLocalChecked(), v8::Local<v8::Function>::Cast(config->Get(context, accessorType).ToLocalChecked()));
 
 
             v8::Local<v8::FunctionTemplate> templateFn = v8::FunctionTemplate::New(isolate,
-                accessorWrapper,
+                patchWrapper,
                 callbackData
             );
 
@@ -141,26 +163,52 @@ static void PatchAccessor(const v8::FunctionCallbackInfo<v8::Value>& args) {
     target->SetAccessorProperty(propName, patchedGetterFn, patchedSetterFn, target->GetPropertyAttributes(context, propName).FromJust(), v8::DEFAULT);
 }
 
+static void PatchInternalMethod(const v8::FunctionCallbackInfo<v8::Value>& args) {
+    v8::Isolate* isolate = args.GetIsolate();
+    v8::HandleScope handle_scope(isolate);
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
-private:
-	// static v8::Local<v8::Function> maskRetVal(v8::Local<v8::Value> result, v8::Local<v8::Context> context){
-	// 	return v8::Function::New(context, 
-	// 			maskRetValWrapper,
-	// 			result
-	// 	).ToLocalChecked();
+    if (args.Length() != 3) {
+        ThrowAndLogError(isolate,"Expected 3 arguments: target, method name, and config.");
+        return;
+    }
 
-	// }
+    v8::Local<v8::Object> target = v8::Local<v8::Object>::Cast(args[0]);
+    v8::Local<v8::String> propName = v8::Local<v8::String>::Cast(args[1]);
+    v8::Local<v8::Object> config = v8::Local<v8::Object>::Cast(args[2]);
 
-	// static void maskRetValWrapper(const v8::FunctionCallbackInfo<v8::Value>& nativeArgs) {
-	// 		v8::Local<v8::Function> innerFunc = v8::Local<v8::Function>::Cast(nativeArgs.Data());
-	// 		v8::Local<v8::Value> innerResult = innerFunc->Call(nativeArgs.GetIsolate()->GetCurrentContext(), nativeArgs.Holder(), 0, nullptr).ToLocalChecked();
-	// 		nativeArgs.GetReturnValue().Set(innerResult);
-	// }
+    if (!target->HasOwnProperty(context, propName).FromJust()) {
+        return ThrowAndLogError(isolate,"Property does not exist on target object.");
+    }
 
+    v8::Local<v8::Array> configKeys = config->GetPropertyNames(context).ToLocalChecked();
 
+    for (uint32_t i = 0; i < configKeys->Length(); i++) {
+        v8::Local<v8::Value> key = configKeys->Get(context, i).ToLocalChecked();
 
-	// get_str = 
+        // Ensure it's a string (in case it's a symbol or other exotic key)
+        if (!key->IsString()) {
+            continue;
+        }
 
+        v8::Local<v8::String> keyStr = key->ToString(context).ToLocalChecked();
+        if (target->HasOwnProperty(context, keyStr).FromJust()) {
+
+            v8::Local<v8::Function> oInternalMethod = v8::Local<v8::Function>::Cast(targetMethod->Get(context, keyStr).ToLocalChecked());
+
+            v8::Local<v8::Object> callbackData = v8::Object::New(isolate);
+
+            (void)callbackData->Set(context, v8::String::NewFromUtf8(isolate, "handler").ToLocalChecked(), config->Get(context, keyStr).ToLocalChecked());
+
+            v8::Local<v8::FunctionTemplate> templateFn = v8::FunctionTemplate::New(isolate, patchWrapper, callbackData);
+
+            v8::Local<v8::Function> newMethod = templateFn->GetFunction(context).ToLocalChecked();
+
+            
+            (void)oInternalMethod->Set(context, keyStr, newMethod);
+        }
+    }
+}
 
 
 };
