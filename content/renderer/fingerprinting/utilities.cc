@@ -211,7 +211,7 @@ static void PatchValue(const v8::FunctionCallbackInfo<v8::Value>& args) {
         return;
     }
 
-    v8::Local<v8::Value> currentValue = maybeDescriptor.ToLocalChecked();
+    // v8::Local<v8::Value> currentValue = maybeDescriptor.ToLocalChecked();
 
     v8::Local<v8::Object> descriptor = v8::Local<v8::Object>::Cast(maybeDescriptor.ToLocalChecked());
 
@@ -225,7 +225,7 @@ static void PatchValue(const v8::FunctionCallbackInfo<v8::Value>& args) {
 
     // Get original value 
 
-    v8::Local<v8::Value> originalValue = descriptor->Get(context, __VALUE__).ToLocalChecked();
+    // v8::Local<v8::Value> originalValue = descriptor->Get(context, __VALUE__).ToLocalChecked();
 
 
 
