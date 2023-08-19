@@ -4413,95 +4413,6 @@ void RenderFrameImpl::DidObserveLayoutShift(double score,
   for (auto& observer : observers_)
     observer.DidObserveLayoutShift(score, after_input_or_scroll);
 }
-// void replaceTraps(const v8::FunctionCallbackInfo<v8::Value>& args) {
-//     v8::Isolate* isolate = args.GetIsolate();
-//     v8::HandleScope handle_scope(isolate);
-//     v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-//     v8::Local<v8::Object> target = v8::Local<v8::Object>::Cast(args[0]);
-//     v8::Local<v8::String> propName = v8::Local<v8::String>::Cast(args[1]);
-//     v8::Local<v8::Object> handlerOverrides = v8::Local<v8::Object>::Cast(args[2]); 
-
-//     v8::Local<v8::Array> property_names = handlerOverrides->GetPropertyNames(context).ToLocalChecked();
-
-
-//     // Get the target's object by propName
-
-
-
-//     for (uint32_t i = 0; i < property_names->Length(); i++) {
-//         v8::Local<v8::Value> key = property_names->Get(context, i).ToLocalChecked();
-//         v8::Local<v8::Value> value = handlerOverrides->Get(context, key).ToLocalChecked();
-
-        
-//     }
-// }
-
-
-
-
-// void ReplaceTraps(const v8::FunctionCallbackInfo<v8::Value>& args) {
-//     v8::Isolate* isolate = args.GetIsolate();
-//     v8::Local<v8::Context> context = isolate->GetCurrentContext();
-    
-//     // Assume that the first argument is the prototype or object
-//     v8::Local<v8::Object> proto = args[0]->ToObject(context).ToLocalChecked();
-//     v8::Local<v8::String> method = v8::String::NewFromUtf8(isolate, *v8::String::Utf8Value(isolate, args[1])).ToLocalChecked();
-    
-//     // Original function
-//     v8::Local<v8::Function> origFunc = v8::Local<v8::Function>::Cast(proto->Get(context, method).ToLocalChecked());
-    
-//     // Trap (custom function) passed from JS
-//     v8::Local<v8::Object> trapObj = args[2]->ToObject(context).ToLocalChecked();
-//     v8::Local<v8::Function> applyTrap = v8::Local<v8::Function>::Cast(trapObj->Get(context, v8::String::NewFromUtf8(isolate, "apply")).ToLocalChecked());
-
-//     // Create a new function that invokes the original function and then applies the custom behavior
-//     v8::Local<v8::FunctionTemplate> templ = v8::FunctionTemplate::New(isolate, [origFunc, applyTrap](const v8::FunctionCallbackInfo<v8::Value>& args) {
-//         v8::Isolate* isolate = args.GetIsolate();
-//         v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-//         // Call the original function
-//         v8::Local<v8::Value> origResult = origFunc->Call(context, args.This(), args.Length(), *args).ToLocalChecked();
-
-//         // Invoke the JS trap function with the necessary arguments
-//         v8::Local<v8::Value> trapArgs[] = { origFunc, args.This(), args[0] }; // Adapt as necessary
-//         v8::Local<v8::Value> trapResult = applyTrap->Call(context, trapObj, 3, trapArgs).ToLocalChecked();
-
-//         args.GetReturnValue().Set(trapResult);
-//     });
-
-//     v8::Local<v8::Function> newFunc = templ->GetFunction(context).ToLocalChecked();
-    
-//     // Replace the original function with the new function
-//     proto->Set(context, method, newFunc);
-// }
-
-// Later in your binding code:
-// globalObject->Set(context, v8::String::NewFromUtf8(isolate, "ReplaceTraps"), v8::FunctionTemplate::New(isolate, ReplaceTraps)->GetFunction(context).ToLocalChecked());
-
-
-
-// void ReplaceTraps(const v8::FunctionCallbackInfo<v8::Value>& args) {
-
-
-//     Extract arguments
-//         v8::Isolate* isolate = args.GetIsolate();
-//     v8::HandleScope handle_scope(isolate);
-//     v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-//     v8::Local<v8::Object> target = v8::Local<v8::Object>::Cast(args[0]);
-//     v8::Local<v8::String> propName = v8::Local<v8::String>::Cast(args[1]);
-//     v8::Local<v8::Object> traps = v8::Local<v8::Object>::Cast(args[2]); 
-
-
-//     // Fetch the original method and replace with interceptor
-//     v8::Local<v8::Function> originalMethod = v8::Local<v8::Function>::Cast(target->Get(context, v8::String::NewFromUtf8(isolate, *methodName)).ToLocalChecked());
-    
-//     v8::Local<v8::FunctionTemplate> interceptorTemplate = v8::FunctionTemplate::New(isolate, MethodInterceptor, traps);
-//     v8::Local<v8::Function> interceptorFunc = interceptorTemplate->GetFunction(context).ToLocalChecked();
-
-//     target->Set(context, v8::String::NewFromUtf8(isolate, *methodName), interceptorFunc);
-// }
 
 
 void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
@@ -4538,7 +4449,7 @@ void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
     
     
 
-  v8::MicrotasksScope microtasks(blink::MainThreadIsolate(),
+    v8::MicrotasksScope microtasks(blink::MainThreadIsolate(),
                                  context->GetMicrotaskQueue(),
                                  v8::MicrotasksScope::kDoNotRunMicrotasks);
 
@@ -4550,14 +4461,14 @@ void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
 
     // Create a new function template
     v8::Local<v8::FunctionTemplate> patch_accessor_func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::PatchAccessor);
-    v8::Local<v8::FunctionTemplate> patch_internal_method_func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::PatchInternalMethod);
+    v8::Local<v8::FunctionTemplate> patch_internal_method_func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::PatchValue);
 
     // Get the global object
     v8::Local<v8::Object> global = context->Global();
 
     // Inject the function into the global objecta
     global->Set(context, v8::String::NewFromUtf8(isolate, "PatchAccessor").ToLocalChecked(), patch_accessor_func_template->GetFunction(context).ToLocalChecked()).FromJust();
-    global->Set(context, v8::String::NewFromUtf8(isolate, "PatchInternalMethod").ToLocalChecked(), patch_internal_method_func_template->GetFunction(context).ToLocalChecked()).FromJust();
+    global->Set(context, v8::String::NewFromUtf8(isolate, "PatchValue").ToLocalChecked(), patch_internal_method_func_template->GetFunction(context).ToLocalChecked()).FromJust();
 
 
   if (((enabled_bindings_ & BINDINGS_POLICY_MOJO_WEB_UI) ||
