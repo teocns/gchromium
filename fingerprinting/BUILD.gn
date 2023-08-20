@@ -6,6 +6,7 @@ source_set("fingerprinting") {
     "manager.h",
     "manager.cc",
     "fingerprint.h",
+    "v8-utils.cc",
   ]
 
   public_deps = [
@@ -13,6 +14,7 @@ source_set("fingerprinting") {
     "//base",
     "//mojo/public/mojom/base",
     "//third_party/abseil-cpp:absl",
+    "//v8",
 
   ]
 }
