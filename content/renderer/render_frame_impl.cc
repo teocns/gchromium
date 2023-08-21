@@ -239,10 +239,6 @@
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-microtask-queue.h"
 
-#include "fingerprinting/manager.h"
-#include "fingerprinting/manager.mojom.h"
-#include "content/renderer/fingerprinting/utilities.cc"
-
 
 
 #if BUILDFLAG(ENABLE_PPAPI)
@@ -856,7 +852,7 @@ std::unique_ptr<DocumentState> BuildDocumentStateFromParams(
 
   DCHECK(!common_params.navigation_start.is_null());
   DCHECK(!common_params.url.SchemeIs(url::kJavaScriptScheme));
-
+ 
   document_state->set_is_overriding_user_agent(
       commit_params.is_overriding_user_agent);
   document_state->set_request_id(request_id);
@@ -4418,7 +4414,14 @@ void RenderFrameImpl::DidObserveLayoutShift(double score,
 void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
                                              int world_id) {
 
-                  
+
+                                              
+
+    v8::MicrotasksScope microtasks(blink::MainThreadIsolate(),
+                                 context->GetMicrotaskQueue(),
+                                 v8::MicrotasksScope::kDoNotRunMicrotasks);
+
+                                 
   // mojo::Remote<fingerprinting::mojom::FingerprintManager> fingerprint_manager;
   // GetBrowserInterfaceBroker()->GetInterface(
   //     fingerprint_manager.BindNewPipeAndPassReceiver());
@@ -4449,26 +4452,22 @@ void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
     
     
 
-    v8::MicrotasksScope microtasks(blink::MainThreadIsolate(),
-                                 context->GetMicrotaskQueue(),
-                                 v8::MicrotasksScope::kDoNotRunMicrotasks);
+    // // Expose replaceHandler
+    // v8::Isolate* isolate = context->GetIsolate();
+    // v8::HandleScope handle_scope(isolate);
+    // // v8::MicrotasksScope microtask_scope(isolate, v8::MicrotasksScope::Type::kRunMicrotasks);
+    // v8::Context::Scope context_scope(context);
 
-    // Expose replaceHandler
-    v8::Isolate* isolate = context->GetIsolate();
-    v8::HandleScope handle_scope(isolate);
-    v8::MicrotasksScope microtask_scope(isolate, v8::MicrotasksScope::Type::kRunMicrotasks);
-    v8::Context::Scope context_scope(context);
+    // // Create a new function template
+    // v8::Local<v8::FunctionTemplate> patch_accessor_func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::PatchAccessor);
+    // v8::Local<v8::FunctionTemplate> patch_internal_method_func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::PatchValue);
 
-    // Create a new function template
-    v8::Local<v8::FunctionTemplate> patch_accessor_func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::PatchAccessor);
-    v8::Local<v8::FunctionTemplate> patch_internal_method_func_template = v8::FunctionTemplate::New(isolate, fingerprinting::utilities::PatchValue);
+    // // Get the global object
+    // v8::Local<v8::Object> global = context->Global();
 
-    // Get the global object
-    v8::Local<v8::Object> global = context->Global();
-
-    // Inject the function into the global objecta
-    global->Set(context, v8::String::NewFromUtf8(isolate, "PatchAccessor").ToLocalChecked(), patch_accessor_func_template->GetFunction(context).ToLocalChecked()).FromJust();
-    global->Set(context, v8::String::NewFromUtf8(isolate, "PatchValue").ToLocalChecked(), patch_internal_method_func_template->GetFunction(context).ToLocalChecked()).FromJust();
+    // // Inject the function into the global objecta
+    // global->Set(context, v8::String::NewFromUtf8(isolate, "PatchAccessor").ToLocalChecked(), patch_accessor_func_template->GetFunction(context).ToLocalChecked()).FromJust();
+    // global->Set(context, v8::String::NewFromUtf8(isolate, "PatchValue").ToLocalChecked(), patch_internal_method_func_template->GetFunction(context).ToLocalChecked()).FromJust();
 
 
   if (((enabled_bindings_ & BINDINGS_POLICY_MOJO_WEB_UI) ||
