@@ -1271,6 +1271,13 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
 
   // static binders
+
+  map->Add<fingerprinting::mojom::FingerprintManager>(
+    base::BindRepeating([](mojo::PendingReceiver<fingerprinting::mojom::FingerprintManager> receiver) {
+    auto* fingerprint_manager = fingerprinting::FingerprintManager::GetInstance();
+    fingerprint_manager->Bind(std::move(receiver));
+    }));
+    
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
       base::BindRepeating(&BindBarcodeDetectionProvider));
   map->Add<shape_detection::mojom::FaceDetectionProvider>(
@@ -1400,6 +1407,11 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
 
   // static binders
+  map->Add<fingerprinting::mojom::FingerprintManager>(
+      base::BindRepeating([](mojo::PendingReceiver<fingerprinting::mojom::FingerprintManager> receiver) {
+        auto* fingerprint_manager = fingerprinting::FingerprintManager::GetInstance();
+        fingerprint_manager->Bind(std::move(receiver));
+      }));
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
       base::BindRepeating(&BindBarcodeDetectionProvider));
   map->Add<shape_detection::mojom::FaceDetectionProvider>(
@@ -1504,6 +1516,11 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
   map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
 
   // static binders
+  map->Add<fingerprinting::mojom::FingerprintManager>(
+      base::BindRepeating([](mojo::PendingReceiver<fingerprinting::mojom::FingerprintManager> receiver) {
+        auto* fingerprint_manager = fingerprinting::FingerprintManager::GetInstance();
+        fingerprint_manager->Bind(std::move(receiver));
+      }));
   map->Add<blink::mojom::FileUtilitiesHost>(
       base::BindRepeating(&BindFileUtilitiesHost, host));
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
