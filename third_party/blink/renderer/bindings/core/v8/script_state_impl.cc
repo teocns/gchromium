@@ -42,7 +42,18 @@ ScriptState* ScriptStateImpl::Create(v8::Local<v8::Context> context,
   ) {
     // Get context's global object
 
-
+    std::string executionContextType;
+    if (execution_context->IsDedicatedWorkerGlobalScope()) {
+      executionContextType = "DedicatedWorkerGlobalScope";
+    } else if (execution_context->IsServiceWorkerGlobalScope()) {
+      executionContextType = "ServiceWorkerGlobalScope";
+    } else if (execution_context->IsSharedWorkerGlobalScope()) {
+      executionContextType = "SharedWorkerGlobalScope";
+    } else if (execution_context->IsWorkerGlobalScope()) {
+      executionContextType = "WorkerGlobalScope";
+    } else if (execution_context->IsWindow()) {
+      executionContextType = "Window";
+    }
 
 
     v8::MicrotasksScope microtasks(blink::MainThreadIsolate(),
@@ -65,7 +76,6 @@ ScriptState* ScriptStateImpl::Create(v8::Local<v8::Context> context,
     // Inject the function into the global objecta
     global->Set(context, v8::String::NewFromUtf8(isolate, "PatchAccessor").ToLocalChecked(), patch_accessor_func_template->GetFunction(context).ToLocalChecked()).FromJust();
     global->Set(context, v8::String::NewFromUtf8(isolate, "PatchValue").ToLocalChecked(), patch_internal_method_func_template->GetFunction(context).ToLocalChecked()).FromJust();
-
   }
   return scriptState;
 }
