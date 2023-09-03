@@ -734,6 +734,8 @@ component("base") {
     "synchronization/condition_variable.h",
     "synchronization/lock.cc",
     "synchronization/lock.h",
+    "synchronization/rlock.cc",
+    "synchronization/rlock.h",
     "synchronization/lock_impl.h",
     "synchronization/waitable_event.cc",
     "synchronization/waitable_event.h",

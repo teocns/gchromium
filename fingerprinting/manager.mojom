@@ -1,0 +1,20 @@
+module fingerprinting.mojom;
+
+import "mojo/public/mojom/base/file_path.mojom";
+
+import "mojo/public/mojom/base/values.mojom";
+
+import "third_party/blink/public/mojom/user_agent/user_agent_metadata.mojom";
+
+
+// Deprecate:
+//  - GetUserAgentClientHints
+
+interface FingerprintManager {
+  [Sync]
+  Enabled() => (bool enabled);
+  [Sync]
+  GetUserAgentClientHints() => (mojo_base.mojom.Value client_hints);
+  [Sync]
+  GetUserAgentMetadata() => (blink.mojom.UserAgentMetadata? metadata);
+};
