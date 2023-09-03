@@ -21,6 +21,7 @@
 
 namespace base {
 class Lock;
+class RLock;
 class ConditionVariable;
 
 namespace win {
@@ -41,6 +42,7 @@ class BASE_EXPORT LockImpl {
 
  private:
   friend class base::Lock;
+  friend class base::RLock;
   friend class base::ConditionVariable;
   friend class base::win::internal::AutoNativeLock;
   friend class base::win::internal::ScopedHandleVerifier;

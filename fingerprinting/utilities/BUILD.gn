@@ -1,0 +1,44 @@
+import("//build/config/chrome_build.gni")
+
+
+
+shared_library("user_agent") {
+  output_name = "fingerprinting_utils_user_agent"
+  sources = [
+    "user_agent.h",
+    "user_agent.cc",
+    "export.h",
+  ]
+
+  defines = [
+    "FINGERPRINTING_UTILITY_IMPLEMENTATION",
+  ]
+
+  deps = [
+    "//base",
+  ]
+
+
+  # Needed by the //fingerprinting module, otherwise it won't be able to access it.
+
+  public_deps = [
+    "//third_party/blink/public/common:common",
+  ]
+}
+
+source_set("v8") {
+  output_name = "fingerprinting_utils_v8"
+  defines = [
+    "FINGERPRINTING_UTILITY_IMPLEMENTATION"
+  ]
+  sources = [
+    "v8.h",
+    "v8.cc",
+    "export.h",
+  ]
+
+  deps = [
+    "//base",
+    "//v8",
+  ]
+}
