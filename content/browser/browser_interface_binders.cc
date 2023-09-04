@@ -82,6 +82,8 @@
 #include "device/gamepad/public/mojom/gamepad.mojom.h"
 #include "device/vr/buildflags/buildflags.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
+#include "fingerprinting/manager.mojom.h"
+#include "fingerprinting/manager_impl.h"
 #include "media/capture/mojom/image_capture.mojom.h"
 #include "media/capture/mojom/video_capture.mojom.h"
 #include "media/midi/midi_service.h"
@@ -249,7 +251,7 @@ shape_detection::mojom::ShapeDetectionService* GetShapeDetectionService() {
     auto* gpu = GpuProcessHost::Get();
     if (gpu)
       gpu->RunService(remote->BindNewPipeAndPassReceiver());
-#endif
+    #endif
     remote->reset_on_disconnect();
   }
 
@@ -435,7 +437,7 @@ BindWorkerReceiver(
             static_cast<RenderProcessHostImpl*>(host->GetProcessHost());
         if (process_host)
           (process_host->*method)(std::move(receiver));
-      },
+              },
       base::Unretained(host), method);
 }
 
@@ -471,7 +473,7 @@ BindWorkerReceiverForOrigin(
             static_cast<RenderProcessHostImpl*>(host->GetProcessHost());
         if (process_host)
           (process_host->*method)(origin, std::move(receiver));
-      },
+              },
       base::Unretained(host), method);
 }
 
@@ -490,7 +492,7 @@ BindWorkerReceiverForStorageKey(
             static_cast<RenderProcessHostImpl*>(host->GetProcessHost());
         if (process_host)
           (process_host->*method)(host->GetStorageKey(), std::move(receiver));
-      },
+              },
       base::Unretained(host), method);
 }
 
@@ -515,7 +517,7 @@ BindWorkerReceiverForStorageKeyAndRenderFrameHostId(
           (process_host->*method)(host->GetStorageKey(),
                                   host->GetAssociatedRenderFrameHostId(),
                                   std::move(receiver));
-      },
+              },
       base::Unretained(host), method);
 }
 
@@ -535,7 +537,7 @@ BindServiceWorkerReceiver(
             RenderProcessHost::FromID(host->worker_process_id()));
         if (!process_host)
           return;
-        (process_host->*method)(std::move(receiver));
+                (process_host->*method)(std::move(receiver));
       },
       base::Unretained(host), method);
 }
@@ -560,7 +562,7 @@ BindServiceWorkerReceiverForOrigin(
             RenderProcessHost::FromID(host->worker_process_id()));
         if (!process_host)
           return;
-        (process_host->*method)(origin, std::move(receiver));
+                (process_host->*method)(origin, std::move(receiver));
       },
       base::Unretained(host), method);
 }
@@ -584,7 +586,7 @@ BindServiceWorkerReceiverForStorageKey(
             RenderProcessHost::FromID(host->worker_process_id()));
         if (!process_host)
           return;
-        (process_host->*method)(info.storage_key, std::move(receiver));
+                (process_host->*method)(info.storage_key, std::move(receiver));
       },
       base::Unretained(host), method);
 }
@@ -610,7 +612,7 @@ BindServiceWorkerReceiverForStorageKeyAndRenderFrameHostId(
             RenderProcessHost::FromID(host->worker_process_id()));
         if (!process_host)
           return;
-        (process_host->*method)(info.storage_key,
+                (process_host->*method)(info.storage_key,
                                 host->GetAssociatedRenderFrameHostId(),
                                 std::move(receiver));
       },
@@ -645,7 +647,7 @@ void BindBatteryMonitor(
     binder.Run(std::move(receiver));
   else
     GetDeviceService().BindBatteryMonitor(std::move(receiver));
-}
+  }
 
 void BindPressureManager(
     RenderFrameHostImpl* host,
@@ -690,10 +692,10 @@ void BindDevicePostureProvider(
   const auto& binder = GetDevicePostureProviderBinderOverride();
   if (binder)
     binder.Run(std::move(receiver));
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN)
+  #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN)
   else if (base::FeatureList::IsEnabled(features::kDevicePosture))
     GetDeviceService().BindDevicePostureProvider(std::move(receiver));
-#endif
+  #endif
 }
 
 VibrationManagerBinder& GetVibrationManagerBinderOverride() {
@@ -708,7 +710,7 @@ void BindVibrationManager(
     binder.Run(std::move(receiver));
   else
     GetDeviceService().BindVibrationManager(std::move(receiver));
-}
+  }
 
 void BindMediaPlayerObserverClientHandler(
     RenderFrameHost* frame_host,
@@ -1108,6 +1110,13 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
       base::BindRepeating(&RenderProcessHost::BindMediaCodecProvider,
                           base::Unretained(host->GetProcess())));
 #endif
+
+  map->Add<fingerprinting::mojom::FingerprintManager>(base::BindRepeating(
+      [](mojo::PendingReceiver<fingerprinting::mojom::FingerprintManager>
+             receiver) {
+        // Do not allow initialization of fingerprinting::manager() here.
+        fingerprinting::manager()->Bind(std::move(receiver));
+      }));
 }
 
 void PopulateBinderMapWithContext(
@@ -1260,6 +1269,14 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
 
   // static binders
+
+  map->Add<fingerprinting::mojom::FingerprintManager>(base::BindRepeating(
+      [](mojo::PendingReceiver<fingerprinting::mojom::FingerprintManager>
+             receiver) {
+        // Do not allow initialization of fingerprinting::manager() here
+        fingerprinting::manager()->Bind(std::move(receiver));
+      }));
+
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
       base::BindRepeating(&BindBarcodeDetectionProvider));
   map->Add<shape_detection::mojom::FaceDetectionProvider>(
@@ -1389,6 +1406,12 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
 
   // static binders
+  map->Add<fingerprinting::mojom::FingerprintManager>(base::BindRepeating(
+      [](mojo::PendingReceiver<fingerprinting::mojom::FingerprintManager>
+             receiver) {
+        // Do not allow initialization of fingerprinting::manager() here.
+        fingerprinting::manager()->Bind(std::move(receiver));
+      }));
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
       base::BindRepeating(&BindBarcodeDetectionProvider));
   map->Add<shape_detection::mojom::FaceDetectionProvider>(
@@ -1493,6 +1516,12 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
   map->Add<blink::mojom::ContentSecurityNotifier>(base::DoNothing());
 
   // static binders
+  map->Add<fingerprinting::mojom::FingerprintManager>(base::BindRepeating(
+      [](mojo::PendingReceiver<fingerprinting::mojom::FingerprintManager>
+             receiver) {
+        // Do not allow initialization of fingerprinting::manager() here.
+        fingerprinting::manager()->Bind(std::move(receiver));
+      }));
   map->Add<blink::mojom::FileUtilitiesHost>(
       base::BindRepeating(&BindFileUtilitiesHost, host));
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
