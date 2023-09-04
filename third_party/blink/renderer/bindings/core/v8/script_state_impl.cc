@@ -23,7 +23,7 @@ void ScriptStateImpl::Init() {
 ScriptState* ScriptStateImpl::Create(v8::Local<v8::Context> context,
                                      scoped_refptr<DOMWrapperWorld> world,
                                      ExecutionContext* execution_context) {
-  return MakeGarbageCollected<ScriptStateImpl>(context, std::move(world),
+  ScriptState* scriptState = MakeGarbageCollected<ScriptStateImpl>(context, std::move(world),
                                                execution_context);
 
 
