@@ -31,6 +31,8 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 
+#include "fingerprinting/manager_impl.h"
+
 #if BUILDFLAG(IS_WIN)
 #include <windows.h>
 
@@ -389,6 +391,19 @@ absl::optional<std::string> GetUserAgentFromCommandLine() {
 std::string GetUserAgent(
     ForceMajorVersionToMinorPosition force_major_to_minor,
     UserAgentReductionEnterprisePolicyState user_agent_reduction) {
+  if (fingerprinting::manager()->Loaded()){
+    // Fingerprint patch!
+    absl::optional<std::string> patched_ua =
+        fingerprinting::manager()->GetUserAgent_();
+    if (patched_ua.has_value()){
+      DLOG(INFO) << "GetUserAgent mock enabled for embedder_support.";
+      return patched_ua.value();
+    }
+    else{
+      LOG(ERROR) << "Couldn't patch GetUserAgent internal - fingerprint "
+                    "returned no UA.";
+    }
+  }
   absl::optional<std::string> custom_ua = GetUserAgentFromCommandLine();
   if (custom_ua.has_value()) {
     return custom_ua.value();
@@ -547,6 +562,21 @@ blink::UserAgentMetadata GetUserAgentMetadata() {
 
 blink::UserAgentMetadata GetUserAgentMetadata(const PrefService* pref_service) {
   blink::UserAgentMetadata metadata;
+
+  if (fingerprinting::manager()->Loaded()){
+    absl::optional<blink::UserAgentMetadata> patched_ua_metadata =
+        fingerprinting::manager()->GetUserAgentMetadata_();
+    if (patched_ua_metadata.has_value()){
+      DLOG(INFO) << "UACH mock enabled for embedder_support.";
+      return patched_ua_metadata.value();
+    }
+    else{
+      LOG(WARNING) << "UACH internal mock disabled: fingerprint has no UACH.";
+    }
+  }
+
+
+
   // If users provide valid user-agent in the command line, return an default
   // blank UserAgentMetadata values.
   absl::optional<std::string> custom_ua = GetUserAgentFromCommandLine();
