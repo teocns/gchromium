@@ -1,0 +1,120 @@
+#!/usr/bin/env node
+
+const puppeteer = require('puppeteer');
+const process = require('process');
+// Get WS_URL from env variable
+
+const CHROMIUM_BIN=process.env.CHROMIUM_BIN;
+
+
+if (!CHROMIUM_BIN){
+  console.error('CHROMIUM_BIN not set. It should point to your chromium binary')
+  process.exit(1)
+}
+
+const randnr=()=>Math.floor(Math.random()*1000000000)
+
+// Hash directory of the target directory
+
+const opts = async () => {
+  // Connect to existing Chrome instance
+  const browser = await puppeteer.launch({ 
+    executablePath: CHROMIUM_BIN,
+    headless:false, 
+    defaultViewport:null,
+    dumpio:true,
+    args:[
+      `--user-data-dir=/tmp/.chromium.data.${randnr}`, // Needed in case switching between chrome versions
+      //"--enable-logging=stderr",
+      //"--vmodule=*/network_service/*=2",
+    ]
+  });
+
+  // // Run get-cdp-ws bash script to get the websocket url
+  // const { execSync } = require('child_process');
+
+  // const WS_URL = execSync(`./get-cdp-ws`).toString().trim();
+  
+  // // Connect to existing Chrome instance
+  // const browser = await puppeteer.connect({ 
+  //   browserWSEndpoint: WS_URL,
+  //   defaultViewport:null,
+  // });
+
+  //const page = await browser.newPage();
+  const pages = await browser.pages();
+
+  console.log(pages.length)
+  let page;
+  if (!page){
+    page = await browser.newPage();
+  }
+
+
+  
+  var username_ = 'brd-customer-hl_7964838f-zone-test_usa_limited';
+  var password = '1g1owm15ehx5';
+  var hostname = "brd.superproxy.io";
+  var port = 22225;
+  var session_id = (1000000 * Math.random())|0;
+  var username = `${username_}--session-${session_id}`;
+  
+  const proxy = `http://${username}:${password}@${hostname}:${port}`;
+  
+
+  await page.setRequestInterception(true);
+  
+  page.on('request', async (request) => {
+    // continue
+    // Ensure that the request is a valid http scheme
+    if (!request.url().startsWith('http')) {
+      return request.continue();
+    }
+    
+    // If this is a mime type that we don't want to proxy, continue
+    const mime = request.resourceType();
+    if (mime === 'image' || mime === 'media' || mime === 'font' || mime === 'stylesheet') {
+      return request.continue();
+    }
+    
+    console.warn(request.url())
+    await request.continue({
+      headers: {
+        "Stealthium-Proxy": `https=${proxy};http=${proxy}`
+      }
+    });
+  });  
+  
+  const urls = [
+    'https://api.ipify.org?format=json',
+    'https://bing.com',
+  ];
+  
+  const wait = (seconds) =>
+    new Promise((resolve) =>
+    setTimeout(() => resolve(true), seconds * 1000)
+  );
+  
+  for (const url of urls) {
+    console.log(`Navigating to: ${url}`);
+    await page.goto(url);
+    console.log(`Test this with curl:
+curl -I -x ${hostname}:${port} -U ${username}:${password} ${url}
+`)
+    console.log(`Waiting for 3 seconds...`);
+    await wait(3);
+    console.log(`Finished waiting.`);
+  }
+  
+  
+
+  console.log('Finished navigating')
+
+};
+
+
+opts().then().catch(console.error);
+
+
+
+
