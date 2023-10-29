@@ -2,7 +2,7 @@ import("//build/config/chrome_build.gni")
 
 
 
-shared_library("user_agent") {
+source_set("user_agent") {
   output_name = "fingerprinting_utils_user_agent"
   sources = [
     "user_agent.h",
@@ -17,7 +17,6 @@ shared_library("user_agent") {
   deps = [
     "//base",
   ]
-
 
   # Needed by the //fingerprinting module, otherwise it won't be able to access it.
 
@@ -39,6 +38,9 @@ source_set("v8") {
 
   deps = [
     "//base",
+  ]
+
+  public_deps = [
     "//v8",
   ]
 }
