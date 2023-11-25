@@ -56,10 +56,10 @@ mojom("mojom") {
     # "//third_party/blink/public/mojom:mojom_platform",
   ]
 
-  # export_class_attribute = "FINGERPRINTING_EXPORT"
-  # export_define = "FINGERPRINTING_IMPLEMENTATION=1"
-  # export_header = "fingerprinting/export.h"
-  #
+  export_class_attribute = "FINGERPRINTING_EXPORT"
+  export_define = "FINGERPRINTING_IMPLEMENTATION=1"
+  export_header = "fingerprinting/export.h"
+
 
   # if (is_component_build) {
   #   overridden_deps = [ "//third_party/blink/public/mojom:mojom_platform" ]

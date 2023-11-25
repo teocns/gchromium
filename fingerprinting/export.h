@@ -2,8 +2,6 @@
 #define FINGERPRINTING_EXPORT_H_
 
 // Existing Class Export Logic
-
-#if defined(COMPONENT_BUILD)
 #if defined(WIN32)
 
 #if defined(FINGERPRINTING_IMPLEMENTATION)
@@ -19,9 +17,6 @@
 #define FINGERPRINTING_EXPORT
 #endif
 
-#endif
-#else  // defined(COMPONENT_BUILD)
-#define FINGERPRINTING_EXPORT
 #endif
 
 #endif  // FINGERPRINTING_EXPORT_H_
