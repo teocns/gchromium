@@ -40,9 +40,8 @@ void IFingerprintManager::Init() {
   }
 
 #ifndef NDEBUG
-  DLOG(INFO) << std::format("Initializing fingerprint from: {}\n{}\n{}",
-                            fingerprint_file_path,
-                            get_debug_info(this));
+  DLOG(INFO) << std::format("Initializing fingerprint from: {}\n{}",
+                            fingerprint_file_path, get_debug_info(this));
 #endif
   initialized_ = true;
   LoadFingerprint(fingerprint_file_path);
