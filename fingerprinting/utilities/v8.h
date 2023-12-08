@@ -13,19 +13,36 @@ namespace fingerprinting {
 
 namespace utilities {
 
-FINGERPRINTING_UTILITY_EXPORT void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs);
+namespace v8_patcher {
 
-FINGERPRINTING_UTILITY_EXPORT void ThrowAndLogError(v8::Isolate* isolate, const char* message);
+void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs);
 
-FINGERPRINTING_UTILITY_EXPORT void CopyOwnPropertiesDescriptors(v8::Local<v8::Object> source,
+void ThrowAndLogError(v8::Isolate* isolate, const char* message);
+
+void CopyOwnPropertiesDescriptors(v8::Local<v8::Object> source,
                                   v8::Local<v8::Object> target,
                                   v8::Local<v8::Context> context,
                                   v8::Isolate* isolate);
 
-FINGERPRINTING_UTILITY_EXPORT void PatchAccessor(const v8::FunctionCallbackInfo<v8::Value>& args);
 
-FINGERPRINTING_UTILITY_EXPORT void PatchValue(const v8::FunctionCallbackInfo<v8::Value>& args);
+void PatchAccessor(const v8::FunctionCallbackInfo<v8::Value>& args);
 
+void PatchValue(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+
+
+class ExecutionContext {
+ public:
+  ExecutionContext(v8::Local<v8::Context> context, v8::Isolate* isolate)
+      : context(context), isolate(isolate) {}
+
+  v8::Local<v8::Context> context;
+  v8::Isolate* isolate;
+};
+
+FINGERPRINTING_UTILITY_EXPORT void RunWithUtils(v8::Local<v8::Context> context, std::string source_code);
+
+}  // namespace v8_patcher
 }  // namespace utilities
 
 }  // namespace fingerprinting

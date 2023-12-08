@@ -3,10 +3,10 @@
 #include <string>
 #include "base/logging.h"
 
-
 namespace fingerprinting {
 
-namespace utilities {
+namespace evasions {
+namespace v8utils {
 
 void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {
   v8::Isolate* isolate = innerArgs.GetIsolate();
@@ -44,7 +44,8 @@ void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {
     argv[i] = innerArgs[i];
   }
 
-  v8::Local<v8::Function> handler = v8::Local<v8::Function>::Cast(valueOverride);
+  v8::Local<v8::Function> handler =
+      v8::Local<v8::Function>::Cast(valueOverride);
 
   v8::MaybeLocal<v8::Value> maybeResult =
       handler->Call(context, innerArgs.Holder(), argc, argv);
@@ -282,8 +283,8 @@ Navigator.prototype,
 
   v8::PropertyDescriptor newDescriptor(patchedGetterFn, patchedSetterFn);
 
-  newDescriptor.set_enumerable((srcPropAttrs & v8::PropertyAttribute::DontEnum) ==
-                               0);
+  newDescriptor.set_enumerable(
+      (srcPropAttrs & v8::PropertyAttribute::DontEnum) == 0);
   newDescriptor.set_configurable(
       (srcPropAttrs & v8::PropertyAttribute::DontDelete) == 0);
 
@@ -400,8 +401,52 @@ PatchValue(
   (void)holder->DefineOwnProperty(
       context, propName, fnWrapped,
       (v8::PropertyAttribute)(targetPropertyAttributes |
-                          v8::PropertyAttribute::Patched));
+                              v8::PropertyAttribute::Patched));
 }
 
-}  // namespace utilities
+/*
+  Runs JavaScript in a sandboxed scope that exposes the Patch utilities
+
+  (function(PatchAccessor, PatchValue) {
+      // Your JavaScript code that should only be able to access PatchAccessor
+  and PatchValue goes here.
+      // It has access to the real navigator object and can perform operations
+  on it. PatchAccessor(navigator, 'propertyName', { get: function() { ... },
+  set: function(value) { ... } }); PatchValue(navigator, 'propertyName',
+  'newValue');
+  })
+ */
+void RunWithUtils(v8::Local<v8::Context> context, std::string source_code) {
+  v8::Isolate* isolate = context->GetIsolate();
+
+  // Begin a new scope for handles.
+  v8::HandleScope handle_scope(isolate);
+
+  // Enter context with a new microtasks scope if you want to run microtasks
+  // after the script execution.
+  v8::MicrotasksScope microtasks(isolate, v8::MicrotasksScope::kRunMicrotasks);
+  v8::Context::Scope context_scope(context);
+
+  v8::Local<v8::String> source =
+      v8::String::NewFromUtf8(isolate, source_code.c_str()).ToLocalChecked();
+  v8::Local<v8::Script> script =
+      v8::Script::Compile(context, source).ToLocalChecked();
+
+  // Bind Patch functions to the context, without exposing them to the global
+  // scope
+  v8::Local<v8::Function> fnPatchAccessor =
+      v8::Function::New(context, PatchAccessor).ToLocalChecked();
+  v8::Local<v8::Function> fnPatchValue =
+      v8::Function::New(context, PatchValue).ToLocalChecked();
+
+  // Run the `source` code within a function scoped into the global context
+  v8::Local<v8::Object> global = context->Global();
+  v8::Local<v8::Value> args[2] = {fnPatchAccessor, fnPatchValue};
+  // Todo: error management
+  (void)script->Run(context).ToLocalChecked().As<v8::Function>()->Call(
+      context, global, 2, args);
+}
+
+}  // namespace v8utils
+}  // namespace evasions
 }  // namespace fingerprinting
