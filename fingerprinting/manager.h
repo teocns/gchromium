@@ -79,7 +79,8 @@ class FINGERPRINTING_EXPORT IFingerprintManager
     return false;  // Key not found in cache
   }
 
-  static std::string get_debug_info(IFingerprintManager* manager, bool with_stack_trace = true) {
+  static std::string get_debug_info(IFingerprintManager* manager,
+                                    bool with_stack_trace = true) {
     // std::string process_type =
     //     base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII("type");
 
@@ -87,7 +88,8 @@ class FINGERPRINTING_EXPORT IFingerprintManager
 
     Fingerprint* fp = manager->GetFingerprint();
 
-    std::string fp_mem_addr = std::format("0x{:x}", reinterpret_cast<uintptr_t>(fp));
+    std::string fp_mem_addr =
+        std::format("0x{:x}", reinterpret_cast<uintptr_t>(fp));
 
     std::string stack;
 
@@ -95,9 +97,9 @@ class FINGERPRINTING_EXPORT IFingerprintManager
       stack = get_stack_trace();
     }
 
-    return std::format("PID: {} | PTR: {} | loaded {} | mojom: {}\n{}",
-                       std::move(pid), std::move(fp_mem_addr), manager->Loaded(), is_mojom(stack),
-                       std::move(stack));
+    return std::format("PID: {} | PTR: {} | loaded {} | mojom: {}",
+                       std::move(pid), std::move(fp_mem_addr),
+                       manager->Loaded(), is_mojom(stack));
   }
 
   static std::string get_stack_trace(int n = 15) {
