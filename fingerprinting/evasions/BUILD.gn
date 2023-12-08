@@ -1,0 +1,25 @@
+import("//build/config/chrome_build.gni")
+
+source_set("evasions"){
+  output_name = "fingerprinting_evasions"
+  sources = [
+    "hook.h",
+    "hook.cc",
+    "hooks/webgl.cc",
+    "packer.h",
+    "packer.cc",
+    "export.h",
+    "v8.h",
+    "v8.cc"
+  ]
+
+  defines = [
+    "FINGERPRINTING_EVASIONS_IMPLEMENTATION",
+  ]
+
+  deps = [
+    "//base"
+    "//fingerprinting/utilities:v8"
+    "//v8"
+  ]
+}
