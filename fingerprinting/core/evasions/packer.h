@@ -5,7 +5,7 @@
 namespace fingerprinting {
 namespace evasions {
 
-struct FINGERPRINTING_EXPORT Package {
+struct FINGERPRINTING_CORE_EXPORT Package {
   /*
    * Represents a packed collection of evasions ready to run as-a-script
    */

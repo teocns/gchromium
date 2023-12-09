@@ -2,7 +2,7 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 
-#include "fingerprinting/fingerprint_impl.h"
+#include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 
 namespace fingerprinting {
 

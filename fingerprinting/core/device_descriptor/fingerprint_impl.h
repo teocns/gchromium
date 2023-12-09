@@ -2,17 +2,14 @@
 #define FINGERPRINTING_FINGERPRINT_IMPL_H_
 
 #include <vector>
-
-#include "base/values.h"
-
 #include "fingerprinting/export.h"
 
-#include "fingerprinting/fingerprint.h"
-#include "fingerprinting/mixins/user-agent.h"
+#include "fingerprinting/core/device_descriptor/fingerprint.h"
+#include "fingerprinting/core/device_descriptor/mixins/user-agent.h"
 
 namespace fingerprinting {
 
-class FINGERPRINTING_EXPORT Fingerprint final : public UAMixin,
+class FINGERPRINTING_CORE_EXPORT Fingerprint final : public UAMixin,
                                                 protected virtual IFingerprint {
  public:
   Fingerprint& operator=(Fingerprint&& other);
@@ -20,9 +17,9 @@ class FINGERPRINTING_EXPORT Fingerprint final : public UAMixin,
 
   // Destructor
   ~Fingerprint();
-  Fingerprint(Val& value);
+  explicit Fingerprint(Val& value);
 
-  Fingerprint(Val&& value);
+  explicit Fingerprint(Val&& value);
 
   bool Find(std::vector<std::string>&& keys, Val*& out) override;
   bool Find(std::vector<std::string>&& keys) override;

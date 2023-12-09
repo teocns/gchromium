@@ -3,7 +3,7 @@
 
 
 #include "fingerprinting/export.h"
-#include "fingerprinting/manager.h"
+#include "fingerprinting/manager/manager.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 namespace blink{
   struct UserAgentMetadata;
@@ -22,7 +22,7 @@ class GetUserAgentClientHintsCallback;
 
 
 
-class FINGERPRINTING_EXPORT UAMixinMojom : virtual public IFingerprintManager{
+class FINGERPRINTING_EXPORT UAMixinMojom : virtual public FingerprintManagerCore{
 public:
 
   void GetUserAgentClientHints(GetUserAgentClientHintsCallback callback) override;

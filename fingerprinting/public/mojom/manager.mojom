@@ -18,7 +18,7 @@ enum HookTargetType {
 
 
 
-interface FingerprintManager {
+interface Manager {
   [Sync]
   Enabled() => (bool enabled);
   [Sync]

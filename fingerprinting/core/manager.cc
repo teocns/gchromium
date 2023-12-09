@@ -1,4 +1,4 @@
-#include "fingerprinting/manager.h"
+#include "fingerprinting/core/manager.h"
 #include <format>
 #include <string>
 #include "base/command_line.h"
@@ -9,8 +9,7 @@
 #include "base/synchronization/lock.h"
 #include "base/synchronization/rlock.h"
 #include "base/values.h"
-#include "fingerprinting/fingerprint_impl.h"
-#include "fingerprinting/manager.mojom.h"
+#include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"  // Add this line
 #include "mojo/public/cpp/bindings/receiver_set.h"
@@ -18,10 +17,10 @@
 
 namespace fingerprinting {
 
-IFingerprintManager::IFingerprintManager() = default;
-IFingerprintManager::~IFingerprintManager() = default;
+FingerprintManagerCore::FingerprintManagerCore() = default;
+FingerprintManagerCore::~FingerprintManagerCore() = default;
 
-void IFingerprintManager::Init() {
+void FingerprintManagerCore::Init() {
   base::AutoLock auto_lock(lock_);
   if (!CanBeInitialized()) {
     return;
@@ -47,7 +46,7 @@ void IFingerprintManager::Init() {
   LoadFingerprint(fingerprint_file_path);
 }
 
-void IFingerprintManager::LoadFingerprint(
+void FingerprintManagerCore::LoadFingerprint(
     const std::string& fingerprint_file_path) {
   std::string fingerprint_str;
 
@@ -70,7 +69,7 @@ void IFingerprintManager::LoadFingerprint(
   LOG(INFO) << "Loaded --fingerprint " << fingerprint_file_path;
 }
 
-Fingerprint* IFingerprintManager::GetFingerprint() {
+Fingerprint* FingerprintManagerCore::GetFingerprint() {
   return fingerprint_.get();
 }
 

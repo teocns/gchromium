@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "fingerprinting/utilities/user_agent.h"
+#include "fingerprinting/utility/user_agent.h"
 #include <map>
 #include <regex>
 #include <string>
@@ -13,7 +13,7 @@
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 
 namespace fingerprinting {
-namespace utilities {
+namespace utility {
 namespace user_agent {
 namespace {
 
@@ -173,5 +173,5 @@ bool MakeUserAgentMetadata(base::Value::Dict& in,
 }
 
 }  // namespace user_agent
-}  // namespace utilities
+}  // namespace utility
 }  // namespace fingerprinting

@@ -3,14 +3,14 @@
 
 #include "fingerprinting/evasions/packer.h"
 #include "fingerprinting/export.h"
-#include "fingerprinting/manager.h"
+#include "fingerprinting/manager/manager.h"
 
 namespace fingerprinting {
 
 class GetEvasionsCallback;
 
 class FINGERPRINTING_EXPORT EvasionsMixinMojom
-    : virtual public IFingerprintManager {
+    : virtual public FingerprintManagerCore {
  public:
   void GetEvasions(const evasions::HookTargetType target, GetEvasionsCallback callback) override;
 

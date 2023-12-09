@@ -7,7 +7,7 @@
 
 #include <set>
 #include <string>
-#include "fingerprinting/utilities/export.h"
+#include "fingerprinting/utility/export.h"
 
 namespace fingerprinting {
 

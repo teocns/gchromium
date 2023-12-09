@@ -405,7 +405,7 @@ PatchValue(
 }
 
 /*
-  Runs JavaScript in a sandboxed scope that exposes the Patch utilities
+  Runs JavaScript in a sandboxed scope that exposes the Patch utility
 
   (function(PatchAccessor, PatchValue) {
       // Your JavaScript code that should only be able to access PatchAccessor

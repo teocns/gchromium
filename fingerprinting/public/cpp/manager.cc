@@ -9,9 +9,9 @@
 #include "mojo/public/cpp/bindings/receiver.h"  // Add this line
 
 #include "base/process/process_handle.h"
-#include "fingerprinting/fingerprint_impl.h"
-#include "fingerprinting/manager.mojom.h"
-#include "fingerprinting/manager_impl.h"
+#include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
+#include "fingerprinting/manager/manager.mojom.h"
+#include "fingerprinting/core/manager.h"
 
 namespace fingerprinting {
 

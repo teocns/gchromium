@@ -2,15 +2,13 @@
 #define FINGERPRINTING_UA_MIXIN_H_
 
 #include "base/values.h"
+#include "fingerprinting/core/device_descriptor/fingerprint.h"
 #include "fingerprinting/export.h"
-#include "fingerprinting/fingerprint.h"
-#include "fingerprinting/utilities/user_agent.h"
+#include "fingerprinting/utility/user_agent.h"
 
-
-namespace blink{
-  struct UserAgentMetadata;
+namespace blink {
+struct UserAgentMetadata;
 }
-
 
 namespace fingerprinting {
 
@@ -20,8 +18,7 @@ const uint32_t kVersion =
          // third_party/blink/common/user_agent/user_agent_metadata.cc
 }
 
-
-class FINGERPRINTING_EXPORT UAMixin : protected virtual IFingerprint {
+class FINGERPRINTING_CORE_EXPORT UAMixin : protected virtual IFingerprint {
   /**
    "highEntropyValues": {
 "architecture": "arm",
@@ -41,7 +38,6 @@ class FINGERPRINTING_EXPORT UAMixin : protected virtual IFingerprint {
 "platformVersion": "13.3.1"
 }
   */
-
 
  public:
   bool GetUserAgent(std::string* out) {
@@ -84,7 +80,6 @@ class FINGERPRINTING_EXPORT UAMixin : protected virtual IFingerprint {
     return false;
   }
 
-
   bool GetUserAgent(std::string& out) {
     /**
      * Returns user agent.
@@ -96,7 +91,6 @@ class FINGERPRINTING_EXPORT UAMixin : protected virtual IFingerprint {
     }
     return false;
   }
-
 };
 
 }  // namespace fingerprinting

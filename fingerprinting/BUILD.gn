@@ -1,67 +1,45 @@
 import("//build/config/chrome_build.gni")
-import("//mojo/public/tools/bindings/mojom.gni")
 
 
-component("fingerprinting") {
-  sources = [
-    "fingerprint.h",
-    "fingerprint_impl.h",
-    "fingerprint_impl.cc",
-    "mixins/user-agent.h",
-    "mixins/user-agent.mojom.h",
-    "mixins/user-agent.mojom.cc",
-    "mixins/evasions.mojom.h",
-    "mixins/evasions.mojom.cc",
-    "evasions/hook.cc",
-    "evasions/hook.h",
-    "evasions/hooks/webgl.cc",
-    "evasions/packer.cc",
-    "evasions/packer.h",
-    "manager.h",
-    "manager.cc",
-    "manager_impl.h",
-    "manager_impl.cc",
-    "export.h",
-  ]
+group("fingerprinting") {
+  # sources = [
+  #   "fingerprint.h",
+  #   "fingerprint_impl.h",
+  #   "fingerprint_impl.cc",
+  #   "mixins/user-agent.h",
+  #   "mixins/user-agent.mojom.h",
+  #   "mixins/user-agent.mojom.cc",
+  #   "mixins/evasions.mojom.h",
+  #   "mixins/evasions.mojom.cc",
+  #   "evasions/hook.cc",
+  #   "evasions/hook.h",
+  #   "evasions/hooks",
+  #   "evasions/packer.cc",
+  #   "evasions/packer.h",
+  #   "manager.h",,
+  #   "manager.cc",
+  #   "manager_impl.h",
+  #   "manager_impl.cc",
+  #   "export.h",
+  # ]
 
   visibility = [ "*" ]
 
-  defines = [ "FINGERPRINTING_IMPLEMENTATION" ]
+  # defines = [ "FINGERPRINTING_IMPLEMENTATION" ]
 
 
   deps = [
-    "//base",
-    "//mojo/public/mojom/base",
-    "//fingerprinting/utilities:user_agent",
+    # "//base",
+    # "//mojo/public/mojom/base",
+    "//fingerprinting/utility",
+    # "//fingerprinting/evasions"
   ]
 
 
 
   public_deps = [
-    ":mojom",
+    # ":mojom",
     "//third_party/abseil-cpp:absl",
   ]
 }
 
-mojom("mojom") {
-  disable_variants = true
-  sources = [
-    "manager.mojom",
-  ]
-
-  visibility = [ "*" ]
-  # Since this is now a shared library and we make use of third_party/blink/public/mojom/user_agent/user_agent_metadata.mojom,
-  # we need to add the appropriate dependencies
-  public_deps = [
-    "//mojo/public/mojom/base",
-    "//third_party/blink/public/mojom:mojom_core",
-    "//third_party/blink/public/mojom:mojom_modules",
-    "//third_party/blink/public/mojom:mojom_platform",
-  ]
-
-  export_class_attribute = "FINGERPRINTING_EXPORT"
-  export_define = "FINGERPRINTING_IMPLEMENTATION=1"
-  export_header = "fingerprinting/export.h"
-
-
-}

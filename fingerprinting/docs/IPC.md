@@ -20,8 +20,8 @@ Since many of the Chromium's ends run on different processes, we have implemente
 #include "base/synchronization/lock.h"
 #include "base/values.h"
 #include "fingerprinting/export.h"
-#include "fingerprinting/manager.mojom.h"
-#include "fingerprinting/fingerprint.h"
+#include "fingerprinting/manager/manager.mojom.h"
+#include "fingerprinting/core/device_descriptor/fingerprint.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 
@@ -81,7 +81,7 @@ class FINGERPRINTING_EXPORT FingerprintManager : public fingerprinting::mojom::F
 fingerprint_manager.cc
 ```
 #include <string>
-#include "fingerprinting/manager.h"
+#include "fingerprinting/manager/manager.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -197,9 +197,9 @@ Then, we needed to create a Service so that it could be consumed by other proces
 #include "base/synchronization/lock.h"
 #include "base/values.h"
 #include "fingerprinting/export.h"
-#include "fingerprinting/fingerprint.h"
-#include "fingerprinting/manager.h"
-#include "fingerprinting/manager.mojom.h"
+#include "fingerprinting/core/device_descriptor/fingerprint.h"
+#include "fingerprinting/manager/manager.h"
+#include "fingerprinting/manager/manager.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"  // Add this line
 #include "mojo/public/cpp/bindings/receiver_set.h"

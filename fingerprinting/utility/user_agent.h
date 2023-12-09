@@ -9,7 +9,7 @@
 #include <regex>
 #include <string>
 #include "base/values.h"
-#include "fingerprinting/utilities/export.h"
+#include "fingerprinting/utility/export.h"
 
 
 
@@ -20,7 +20,7 @@ namespace blink{
 
 namespace fingerprinting {
 
-namespace utilities {
+namespace utility {
 namespace user_agent {
 
 
@@ -31,6 +31,6 @@ FINGERPRINTING_UTILITY_EXPORT bool MakeUserAgentMetadata(base::Value::Dict& in, 
 
 
 }  // namespace user_agent
-}  // namespace utilities
+}  // namespace utility
 }  // namespace fingerprinting
 #endif  // FINGERPRINTING_USER_AGENT_UTILITIES_H

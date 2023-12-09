@@ -15,8 +15,8 @@
 #include "base/synchronization/rlock.h"
 #include "base/values.h"
 #include "fingerprinting/export.h"
-#include "fingerprinting/fingerprint_impl.h"
-#include "fingerprinting/manager.mojom.h"
+#include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
+// #include "fingerprinting/manager/manager.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include "base/command_line.h"
@@ -25,8 +25,8 @@
 
 namespace fingerprinting {
 
-class FINGERPRINTING_EXPORT IFingerprintManager
-    : virtual public fingerprinting::mojom::FingerprintManager {
+class FINGERPRINTING_CORE_EXPORT FingerprintManagerCore {
+    // : virtual public fingerprinting::mojom::FingerprintManager {
  public:
   void Init();
 
@@ -38,9 +38,8 @@ class FINGERPRINTING_EXPORT IFingerprintManager
   Fingerprint* GetFingerprint();
 
  protected:
-  IFingerprintManager();
+  FingerprintManagerCore();
 
-  ~IFingerprintManager() override;
   void LoadFingerprint(const std::string& fingerprint_file_path);
   bool CanBeInitialized() { return !initialized_ && can_be_initialized_; }
   Fingerprint* fingerprint() { return fingerprint_.get(); }
@@ -81,7 +80,7 @@ class FINGERPRINTING_EXPORT IFingerprintManager
     return false;  // Key not found in cache
   }
 
-  static std::string get_debug_info(IFingerprintManager* manager,
+  static std::string get_debug_info(FingerprintManagerCore* manager,
                                     bool with_stack_trace = true) {
     // std::string process_type =
     //     base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII("type");

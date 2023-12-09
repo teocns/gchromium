@@ -1,9 +1,20 @@
 import("//build/config/chrome_build.gni")
 
 
+group("utility") {
+  deps = [
+    ":user_agent",
+    ":v8",
+  ]
+
+  # By default, targets are private. To allow the parent module to access this group,
+  # you must set the visibility accordingly. If you want this to be visible to all
+  # targets within the build, you would set it as follows:
+  visibility = [ "//fingerprinting" ]  # Or specify a more restricted set of targets if necessary.
+}
 
 source_set("user_agent") {
-  output_name = "fingerprinting_utils_user_agent"
+  output_name = "fingerprinting_utility_user_agent"
   sources = [
     "user_agent.h",
     "user_agent.cc",
@@ -26,7 +37,7 @@ source_set("user_agent") {
 }
 
 source_set("v8") {
-  output_name = "fingerprinting_utils_v8"
+  output_name = "fingerprinting_utility_v8"
   defines = [
     "FINGERPRINTING_UTILITY_IMPLEMENTATION"
   ]
@@ -43,4 +54,7 @@ source_set("v8") {
   public_deps = [
     "//v8",
   ]
+
+  visibility = [ "*" ]
+
 }
