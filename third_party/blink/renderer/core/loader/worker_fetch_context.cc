@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/loader/worker_fetch_context.h"
 
 #include "base/task/single_thread_task_runner.h"
+// #include "fingerprinting/manager.mojom.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -174,6 +175,38 @@ bool WorkerFetchContext::ShouldBlockFetchAsCredentialedSubresource(
   return false;
 }
 
+// void WorkerFetchContext::AddClientHintsIfNecessary(
+//     const ClientHintsPreferences& hints_preferences,
+//     const url::Origin& resource_origin,
+//     bool is_1p_origin,
+//     absl::optional<UserAgentMetadata> ua,
+//     const PermissionsPolicy* policy,
+//     const absl::optional<ClientHintImageInfo>& image_info,
+//     const absl::optional<WTF::AtomicString>& prefers_color_scheme,
+//     const absl::optional<WTF::AtomicString>& prefers_reduced_motion,
+//     ResourceRequest& request) {
+//   // call super
+
+//   mojo::Remote<fingerprinting::mojom::FingerprintManager> fp;
+
+//   global_scope_->GetBrowserInterfaceBroker().GetInterface(
+//       fp.BindNewPipeAndPassReceiver());
+
+//   bool fp_uach_enabled = false;
+//   if (fp->Enabled(&fp_uach_enabled) && fp_uach_enabled) {
+//     if (!fp->GetUserAgentMetadata(&ua)) {
+//       DLOG(INFO) << "UACH fetch mock disabled for worker - couldn't get "
+//                     "fingerprint's client hints";
+//       return;
+//     }
+//     DLOG(INFO) << "UACH fetch mock enabled for worker";
+//   }
+
+//   BaseFetchContext::AddClientHintsIfNecessary(
+//       hints_preferences, resource_origin, is_1p_origin, ua, policy, image_info,
+//       prefers_color_scheme, prefers_reduced_motion, request);
+// }
+
 const KURL& WorkerFetchContext::Url() const {
   return GetResourceFetcherProperties()
       .GetFetchClientSettingsObject()
@@ -215,8 +248,9 @@ void WorkerFetchContext::PrepareRequest(
 
 void WorkerFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request) {
   // The remaining modifications are only necessary for HTTP and HTTPS.
-  if (!request.Url().IsEmpty() && !request.Url().ProtocolIsInHTTPFamily())
+  if (!request.Url().IsEmpty() && !request.Url().ProtocolIsInHTTPFamily()) {
     return;
+  }
 
   // TODO(crbug.com/1315612): WARNING: This bypasses the permissions policy.
   // Unfortunately, workers lack a permissions policy and to derive proper hints
@@ -224,8 +258,9 @@ void WorkerFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request) {
   // Save-Data was previously included in hints for workers, thus we cannot
   // remove it for the time being. If you're reading this, consider building
   // permissions policies for workers and/or deprecating this inclusion.
-  if (save_data_enabled_)
+  if (save_data_enabled_) {
     request.SetHttpHeaderField(http_names::kSaveData, AtomicString("on"));
+  }
 }
 
 void WorkerFetchContext::AddResourceTiming(
@@ -239,16 +274,18 @@ void WorkerFetchContext::PopulateResourceRequest(
     const absl::optional<float> resource_width,
     ResourceRequest& out_request,
     const ResourceLoaderOptions& options) {
-  if (!GetResourceFetcherProperties().IsDetached())
+  if (!GetResourceFetcherProperties().IsDetached()) {
     probe::SetDevToolsIds(Probe(), out_request, options.initiator_info);
+  }
   MixedContentChecker::UpgradeInsecureRequest(
       out_request,
       &GetResourceFetcherProperties().GetFetchClientSettingsObject(),
       global_scope_, mojom::RequestContextFrameType::kNone,
       global_scope_->ContentSettingsClient());
   SetFirstPartyCookie(out_request);
-  if (!out_request.TopFrameOrigin())
+  if (!out_request.TopFrameOrigin()) {
     out_request.SetTopFrameOrigin(GetTopFrameOrigin());
+  }
 }
 
 std::unique_ptr<ResourceLoadInfoNotifierWrapper>
@@ -257,8 +294,9 @@ WorkerFetchContext::CreateResourceLoadInfoNotifierWrapper() {
 }
 
 void WorkerFetchContext::SetFirstPartyCookie(ResourceRequest& out_request) {
-  if (out_request.SiteForCookies().IsNull())
+  if (out_request.SiteForCookies().IsNull()) {
     out_request.SetSiteForCookies(GetSiteForCookies());
+  }
 }
 
 WorkerSettings* WorkerFetchContext::GetWorkerSettings() const {
@@ -266,11 +304,11 @@ WorkerSettings* WorkerFetchContext::GetWorkerSettings() const {
   return scope ? scope->GetWorkerSettings() : nullptr;
 }
 
-bool WorkerFetchContext::AllowRunningInsecureContent(
-    bool enabled_per_settings,
-    const KURL& url) const {
-  if (!global_scope_->ContentSettingsClient())
+bool WorkerFetchContext::AllowRunningInsecureContent(bool enabled_per_settings,
+                                                     const KURL& url) const {
+  if (!global_scope_->ContentSettingsClient()) {
     return enabled_per_settings;
+  }
   return global_scope_->ContentSettingsClient()->AllowRunningInsecureContent(
       enabled_per_settings, url);
 }

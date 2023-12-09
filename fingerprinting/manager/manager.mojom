@@ -10,6 +10,14 @@ import "third_party/blink/public/mojom/user_agent/user_agent_metadata.mojom";
 // Deprecate:
 //  - GetUserAgentClientHints
 
+enum HookTargetType {
+  PAGE,
+  WORKER,
+  SHARED_WORKER,
+};
+
+
+
 interface FingerprintManager {
   [Sync]
   Enabled() => (bool enabled);
@@ -17,4 +25,6 @@ interface FingerprintManager {
   GetUserAgentClientHints() => (mojo_base.mojom.Value client_hints);
   [Sync]
   GetUserAgentMetadata() => (blink.mojom.UserAgentMetadata? metadata);
+  [Sync]
+  GetEvasions(HookTargetType target) => (string js);
 };

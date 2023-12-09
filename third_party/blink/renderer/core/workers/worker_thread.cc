@@ -71,6 +71,10 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/threading.h"
 
+// Custom
+#include "fingerprinting/manager.mojom.h"
+#include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
+
 namespace blink {
 
 using ExitCode = WorkerThread::ExitCode;
@@ -278,8 +282,9 @@ void WorkerThread::Terminate() {
   DCHECK_CALLED_ON_VALID_THREAD(parent_thread_checker_);
   {
     base::AutoLock locker(lock_);
-    if (requested_to_terminate_)
+    if (requested_to_terminate_) {
       return;
+    }
     requested_to_terminate_ = true;
   }
 
@@ -450,8 +455,9 @@ void WorkerThread::ChildThreadStartedOnWorkerThread(WorkerThread* child) {
 void WorkerThread::ChildThreadTerminatedOnWorkerThread(WorkerThread* child) {
   DCHECK(IsCurrentThread());
   child_threads_.erase(child);
-  if (child_threads_.empty() && CheckRequestedToTerminate())
+  if (child_threads_.empty() && CheckRequestedToTerminate()) {
     PerformShutdownOnWorkerThread();
+  }
 }
 
 WorkerThread::WorkerThread(WorkerReportingProxy& worker_reporting_proxy)
@@ -624,7 +630,13 @@ void WorkerThread::InitializeOnWorkerThread(
     global_scope_ =
         CreateWorkerGlobalScope(std::move(global_scope_creation_params));
     worker_scheduler_->InitializeOnWorkerThread(global_scope_);
+
+    // By this point the script context has been created.
+    // Apply fingerprinting logic here.
+
     worker_reporting_proxy_.DidCreateWorkerGlobalScope(GlobalScope());
+
+    // Put something in the dom
 
     // `url_for_debugger` can be null for out-of-process worklet (e.g. shared
     // storage worklet). Tentatively skip creating the
@@ -641,16 +653,63 @@ void WorkerThread::InitializeOnWorkerThread(
     // about the new worker thread separately, so that it can resolve it by id
     // at any moment.
     if (WorkerThreadDebugger* debugger =
-            WorkerThreadDebugger::From(GetIsolate()))
+            WorkerThreadDebugger::From(GetIsolate())) {
       debugger->WorkerThreadCreated(this);
+    }
 
     GlobalScope()->ScriptController()->Initialize(url_for_debugger);
     GlobalScope()->WillBeginLoading();
-    v8::HandleScope handle_scope(GetIsolate());
-    Platform::Current()->WorkerContextCreated(
-        GlobalScope()->ScriptController()->GetContext());
 
+    v8::HandleScope handle_scope(GetIsolate());
+    v8::Local<v8::Context> context =
+        GlobalScope()->ScriptController()->GetContext();
+
+    Platform::Current()->WorkerContextCreated(context);
     inspector_task_runner_->InitIsolate(GetIsolate());
+
+    {
+      mojo::Remote<fingerprinting::mojom::FingerprintManager>
+          fingerprint_manager;
+
+      GlobalScope()->GetBrowserInterfaceBroker().GetInterface(
+          fingerprint_manager.BindNewPipeAndPassReceiver());
+
+      bool enabled = false;
+      fingerprint_manager->Enabled(&enabled);
+      LOG(INFO) << "fingerprinting enabled: " << enabled;
+      if (enabled) {
+        // std::string evasions_js;
+        // fingerprint_manager->GetEvasions(&evasions_js);
+        LOG(INFO) << "worker_thread: fingerprint enabled";
+      }
+      v8::MicrotasksScope microtasks(GetIsolate(), context->GetMicrotaskQueue(),
+                                     v8::MicrotasksScope::kDoNotRunMicrotasks);
+
+      v8::Context::Scope context_scope(
+          context);  // Enter the context for compiling and running.
+
+      // Create a string containing the JavaScript source code you want to
+      // execute.
+      v8::Local<v8::String> source =
+          v8::String::NewFromUtf8(GetIsolate(),
+                                  "console.log('hello world from worker')",
+                                  v8::NewStringType::kNormal)
+              .ToLocalChecked();
+
+      // Compile the source code.
+      v8::Local<v8::Script> script =
+          v8::Script::Compile(context, source).ToLocalChecked();
+
+      // Run the script to get the result.
+      v8::Local<v8::Value> result = script->Run(context).ToLocalChecked();
+
+      // Convert the result to a string and print it (this is optional and only
+      // for demonstration purposes).
+      v8::String::Utf8Value utf8(GetIsolate(), result);
+
+      LOG(INFO) << "worker_thread: injection result: " << *utf8;
+    }
+
     SetThreadState(ThreadState::kRunning);
   }
 
@@ -754,8 +813,9 @@ void WorkerThread::PrepareForShutdownOnWorkerThread() {
   DCHECK(IsCurrentThread());
   {
     base::AutoLock locker(lock_);
-    if (thread_state_ == ThreadState::kReadyToShutdown)
+    if (thread_state_ == ThreadState::kReadyToShutdown) {
       return;
+    }
     SetThreadState(ThreadState::kReadyToShutdown);
   }
 
@@ -767,8 +827,10 @@ void WorkerThread::PrepareForShutdownOnWorkerThread() {
   }
   pause_handle_.reset();
 
-  if (WorkerThreadDebugger* debugger = WorkerThreadDebugger::From(GetIsolate()))
+  if (WorkerThreadDebugger* debugger =
+          WorkerThreadDebugger::From(GetIsolate())) {
     debugger->WorkerThreadDestroyed(this);
+  }
 
   GetWorkerReportingProxy().WillDestroyWorkerGlobalScope();
 
@@ -792,16 +854,18 @@ void WorkerThread::PerformShutdownOnWorkerThread() {
     base::AutoLock locker(lock_);
     DCHECK(requested_to_terminate_);
     DCHECK_EQ(ThreadState::kReadyToShutdown, thread_state_);
-    if (exit_code_ == ExitCode::kNotTerminated)
+    if (exit_code_ == ExitCode::kNotTerminated) {
       SetExitCode(ExitCode::kGracefullyTerminated);
+    }
   }
 
   // When child workers are present, wait for them to shutdown before shutting
   // down this thread. ChildThreadTerminatedOnWorkerThread() is responsible
   // for completing shutdown on the worker thread after the last child shuts
   // down.
-  if (!child_threads_.empty())
+  if (!child_threads_.empty()) {
     return;
+  }
 
   inspector_task_runner_->Dispose();
   if (worker_inspector_controller_) {
@@ -815,8 +879,9 @@ void WorkerThread::PerformShutdownOnWorkerThread() {
   console_message_storage_.Clear();
   inspector_issue_storage_.Clear();
 
-  if (IsOwningBackingThread())
+  if (IsOwningBackingThread()) {
     GetWorkerBackingThread().ShutdownOnBackingThread();
+  }
   // We must not touch GetWorkerBackingThread() from now on.
 
   // Keep the reference to the shutdown event in a local variable so that the
@@ -903,8 +968,9 @@ void WorkerThread::PauseOrFreezeOnWorkerThread(
   // Ensure we aren't trying to pause a worker that should be terminating.
   {
     base::AutoLock locker(lock_);
-    if (thread_state_ != ThreadState::kRunning)
+    if (thread_state_ != ThreadState::kRunning) {
       return;
+    }
   }
 
   pause_or_freeze_count_++;
@@ -914,8 +980,9 @@ void WorkerThread::PauseOrFreezeOnWorkerThread(
       GlobalScope()->GetLoaderFreezeMode());
 
   // If already paused return early.
-  if (pause_or_freeze_count_ > 1)
+  if (pause_or_freeze_count_ > 1) {
     return;
+  }
 
   pause_handle_ = GetScheduler()->Pause();
   {
@@ -946,8 +1013,9 @@ void WorkerThread::ResumeOnWorkerThread() {
   if (pause_or_freeze_count_ > 0) {
     DCHECK(nested_runner_);
     pause_or_freeze_count_--;
-    if (pause_or_freeze_count_ == 0)
+    if (pause_or_freeze_count_ == 0) {
       nested_runner_->QuitNow();
+    }
   }
 }
 

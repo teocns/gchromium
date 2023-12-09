@@ -1,15 +1,13 @@
 #include "fingerprinting/evasions/packer.h"
 #include <vector>
 #include "fingerprinting/evasions/hook.h"
-#include "fingerprinting/evasions/hooks/utilities.cc"
 #include "fingerprinting/evasions/hooks/webgl.cc"
-#include "fingerprinting/utilities/v8.h"
-#include "v8/include/v8.h"
 
 namespace fingerprinting {
 namespace evasions {
 
-std::unique_ptr<Package> Package::Pack(HookTargetType target, std::set<std::string>& filters) {
+std::unique_ptr<Package> Package::Pack(HookTargetType target,
+                                       std::set<std::string>& filters) {
   // Returns a compiled, ready-to-inject JS function string
   // Filters are the evasions to disable
   auto pack = std::make_unique<Package>(target);
@@ -27,13 +25,12 @@ std::unique_ptr<Package> Package::Pack(HookTargetType target, std::set<std::stri
     if (hook == nullptr) {
       continue;
     }
-    
-    pack->Register(hook);
+
+    pack->Register(std::move(hook));
   }
 
   return pack;
 }
-
 
 }  // namespace evasions
 

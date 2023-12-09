@@ -4,7 +4,6 @@ namespace fingerprinting {
 namespace evasions {
 
 
-typedef std::function<std::unique_ptr<Hook>> HookConstructor;
 
 std::string Hook::get_definition() {
   /*

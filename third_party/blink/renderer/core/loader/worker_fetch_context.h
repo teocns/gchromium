@@ -105,6 +105,17 @@ class WorkerFetchContext final : public BaseFetchContext {
 
   ExecutionContext* GetExecutionContext() const override;
 
+  // void AddClientHintsIfNecessary(
+  //     const ClientHintsPreferences& hints_preferences,
+  //     const url::Origin& resource_origin,
+  //     bool is_1p_origin,
+  //     absl::optional<UserAgentMetadata> ua,
+  //     const PermissionsPolicy* policy,
+  //     const absl::optional<ClientHintImageInfo>& image_info,
+  //     const absl::optional<WTF::AtomicString>& prefers_color_scheme,
+  //     const absl::optional<WTF::AtomicString>& prefers_reduced_motion,
+  //     ResourceRequest& request);
+
  private:
   void SetFirstPartyCookie(ResourceRequest&);
 

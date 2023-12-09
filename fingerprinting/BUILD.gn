@@ -2,7 +2,6 @@ import("//build/config/chrome_build.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 
-
 component("fingerprinting") {
   sources = [
     "fingerprint.h",
@@ -11,13 +10,19 @@ component("fingerprinting") {
     "mixins/user-agent.h",
     "mixins/user-agent.mojom.h",
     "mixins/user-agent.mojom.cc",
+    "mixins/evasions.mojom.h",
+    "mixins/evasions.mojom.cc",
+    "evasions/hook.cc",
+    "evasions/hook.h",
+    "evasions/hooks/webgl.cc",
+    "evasions/packer.cc",
+    "evasions/packer.h",
     "manager.h",
     "manager.cc",
     "manager_impl.h",
     "manager_impl.cc",
     "export.h",
   ]
-
 
   visibility = [ "*" ]
 
@@ -27,7 +32,6 @@ component("fingerprinting") {
   deps = [
     "//base",
     "//mojo/public/mojom/base",
-    #"//third_party/blink/public/common",
     "//fingerprinting/utilities:user_agent",
   ]
 
@@ -53,24 +57,11 @@ mojom("mojom") {
     "//third_party/blink/public/mojom:mojom_core",
     "//third_party/blink/public/mojom:mojom_modules",
     "//third_party/blink/public/mojom:mojom_platform",
-    # "//third_party/blink/public/mojom:mojom_platform",
   ]
 
   export_class_attribute = "FINGERPRINTING_EXPORT"
   export_define = "FINGERPRINTING_IMPLEMENTATION=1"
   export_header = "fingerprinting/export.h"
 
-
-  # if (is_component_build) {
-  #   overridden_deps = [ "//third_party/blink/public/mojom:mojom_platform" ]
-  #   component_deps = [ "//third_party/blink/public/common" ]
-  # }
-
-  # overridden_deps = [
-  #   "//third_party/blink/public/mojom:mojom_core",
-  #   "//third_party/blink/public/mojom:mojom_modules",
-  #   "//third_party/blink/public/mojom:mojom_platform",
-  # ]
-  # component_deps = [ "//third_party/blink/public/common" ]
 
 }

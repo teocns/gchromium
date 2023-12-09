@@ -4,8 +4,8 @@
 #include <format>
 #include <random>
 #include <string>
+#include <functional>
 #include <map>
-#include "v8/include/v8.h"
 
 namespace fingerprinting {
 namespace evasions {
@@ -17,19 +17,6 @@ enum HookTargetType {
   SHARED_WORKER,
 };
 
-struct HookTarget {
-  // Where the hook will inject / bound
-  HookTargetType type;
-
-  // We are safe to store a reference since this is ephemeral
-  v8::Local<v8::Context> context;
-
-  HookTarget(HookTargetType type, v8::Local<v8::Context> context) {
-    this->type = type;
-    this->context = context;
-  }
-};
-
 class Hook {
   /*
    * Each hook represents a patch for a specific JS feature API
@@ -38,7 +25,7 @@ class Hook {
    */
  public:
 
-  explicit Hook(HookTarget target)
+  explicit Hook(HookTargetType target)
       : signature("f" + std::to_string(rand() % 1000000000000 + 100000000000)),
         target(target) {}
   Hook() = default;
@@ -49,7 +36,7 @@ class Hook {
    */
   std::string signature;
 
-  HookTarget target;
+  HookTargetType target;
 
   // Returns the definition, but not the invocation
   std::string get_definition();

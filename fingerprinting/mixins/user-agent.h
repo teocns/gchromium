@@ -1,5 +1,5 @@
-#ifndef FINGERPRINTING_UAMIXIN_H_
-#define FINGERPRINTING_UAMIXIN_H_
+#ifndef FINGERPRINTING_UA_MIXIN_H_
+#define FINGERPRINTING_UA_MIXIN_H_
 
 #include "base/values.h"
 #include "fingerprinting/export.h"
@@ -101,4 +101,4 @@ class FINGERPRINTING_EXPORT UAMixin : protected virtual IFingerprint {
 
 }  // namespace fingerprinting
 
-#endif  // FINGERPRINTING_UAMIXIN_H_
+#endif  // FINGERPRINTING_UA_MIXIN_H_

@@ -1,5 +1,5 @@
-#ifndef FINGERPRINTING_MOJOM_UAMIXIN_H
-#define FINGERPRINTING_MOJOM_UAMIXIN_H
+#ifndef FINGERPRINTING_UA_MIXIN_MOJOM_H
+#define FINGERPRINTING_UA_MIXIN_MOJOM_H
 
 
 #include "fingerprinting/export.h"
@@ -33,4 +33,4 @@ public:
 
 }  // namespace fingerprinting
 
-#endif  // FINGERPRINTING_MOJOM_UAMIXIN_H
+#endif  // FINGERPRINTING_UA_MIXIN_MOJOM_H

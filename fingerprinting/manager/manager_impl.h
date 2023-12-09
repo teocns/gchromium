@@ -14,8 +14,8 @@
 #include "fingerprinting/export.h"
 #include "fingerprinting/fingerprint_impl.h"
 #include "fingerprinting/manager.mojom.h"
-#include "fingerprinting/manager_impl.h"
 #include "fingerprinting/mixins/user-agent.mojom.h"
+#include "fingerprinting/mixins/evasions.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"  // Add this line
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -24,7 +24,8 @@ namespace fingerprinting {
 
 class FINGERPRINTING_EXPORT FingerprintManager
     : virtual public IFingerprintManager,
-      public UAMixinMojom {
+      public UAMixinMojom, 
+      public EvasionsMixinMojom {
  public:
   static FingerprintManager* GetInstance(bool try_init = false);
 
@@ -32,7 +33,6 @@ class FINGERPRINTING_EXPORT FingerprintManager
                 receiver);
 
   void Enabled(EnabledCallback callback) override;
-
 
  private:
   FingerprintManager();

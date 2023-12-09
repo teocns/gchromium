@@ -118,6 +118,9 @@
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
+
+// #include "fingerprinting/manager.mojom.h"
+
 namespace blink {
 
 namespace {
@@ -447,7 +450,30 @@ void FrameFetchContext::AddClientHintsIfNecessary(
       SecurityOrigin::Create(request.Url())->ToUrlOrigin();
   bool is_1p_origin = IsFirstPartyOrigin(request.Url());
 
-  absl::optional<UserAgentMetadata> ua = GetUserAgentMetadata();
+
+
+  // // Ensure fingerprinting allows client hints
+
+  // mojo::Remote<fingerprinting::mojom::FingerprintManager> fp;
+
+  // GetFrame()->GetBrowserInterfaceBroker().GetInterface(
+  //     fp.BindNewPipeAndPassReceiver()
+  // );
+    absl::optional<UserAgentMetadata> ua = GetUserAgentMetadata();
+
+  // absl::optional<UserAgentMetadata> ua;
+
+  // bool fp_uach_enabled = false;
+  // // if (fp->Enabled(&fp_uach_enabled) && fp_uach_enabled){
+  // //   if (!fp->GetUserAgentMetadata(&ua)){
+  // //     DLOG(INFO) << "UACH fetch mock disabled for frame - couldn't get fingerprint's client hints";
+  // //     return;
+  // //   }
+  // //   DLOG(INFO) << "fingerprinting: UACH enabled for frame";
+  // // }
+
+  // if (!fp_uach_enabled)
+  //   ua = GetUserAgentMetadata();
 
   absl::optional<ClientHintImageInfo> image_info;
   absl::optional<WTF::AtomicString> prefers_color_scheme;
@@ -570,7 +596,7 @@ bool FrameFetchContext::IsFirstPartyOrigin(const KURL& url) const {
       ->IsSameOriginWith(SecurityOrigin::Create(url).get());
 }
 
-bool FrameFetchContext::ShouldBlockRequestByInspector(const KURL& url) const {
+  bool FrameFetchContext::ShouldBlockRequestByInspector(const KURL& url) const {
   if (GetResourceFetcherProperties().IsDetached())
     return false;
   bool should_block_request = false;

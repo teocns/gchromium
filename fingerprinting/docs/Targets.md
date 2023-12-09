@@ -1,10 +1,5 @@
 Targets can be of types:
 
-
-
-
-
-[26237:259:0822/150736.097939:ERROR:script_state_impl.cc(33)] Stack trace: 0   libbase.dylib                       0x0000000103241510 base::debug::CollectStackTrace(void**, unsigned long) + 48
 1   libbase.dylib                       0x00000001031f0120 base::debug::StackTrace::StackTrace(unsigned long) + 92
 2   libbase.dylib                       0x00000001031f01b0 base::debug::StackTrace::StackTrace(unsigned long) + 36
 3   libblink_core.dylib                 0x00000002f3e6aa68 blink::logtrace() + 76

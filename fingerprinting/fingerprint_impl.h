@@ -12,13 +12,9 @@
 
 namespace fingerprinting {
 
-
 class FINGERPRINTING_EXPORT Fingerprint final : public UAMixin,
-                                          protected virtual IFingerprint {
-  public:
-
-
-
+                                                protected virtual IFingerprint {
+ public:
   Fingerprint& operator=(Fingerprint&& other);
   Fingerprint(Fingerprint&& other);
 
@@ -28,12 +24,10 @@ class FINGERPRINTING_EXPORT Fingerprint final : public UAMixin,
 
   Fingerprint(Val&& value);
 
-
   bool Find(std::vector<std::string>&& keys, Val*& out) override;
   bool Find(std::vector<std::string>&& keys) override;
-  static bool FromString(const std::string& fingerprint_str, std::unique_ptr<Fingerprint>& out );
-
-
+  static bool FromString(const std::string& fingerprint_str,
+                         std::unique_ptr<Fingerprint>& out);
 
  private:
   Val value_;

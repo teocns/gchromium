@@ -52,28 +52,30 @@ class FINGERPRINTING_EXPORT IFingerprintManager
 
   // Definition of the CacheValue template function
   template <typename T>
-  void CacheValue(const std::string& key, T& value) {
+  void CacheValue(const std::string& key, const std::shared_ptr<T>& value) {
     std::unique_lock<std::mutex> map_lock(key_mutexes_map_mutex_);
     auto& key_mutex = key_mutexes_[key];
-    map_lock.unlock();  // unlock as soon as possible
+    map_lock.unlock();  // unlock map mutex as soon as possible
 
     std::unique_lock<std::mutex> key_lock(key_mutex);  // lock for specific key
     cache_[key] = value;
   }
 
   template <typename T>
-  bool GetFromCache(const std::string& key, T& value) {
+  bool GetFromCache(const std::string& key, std::shared_ptr<T>& value) {
     std::unique_lock<std::mutex> map_lock(key_mutexes_map_mutex_);
     auto it = key_mutexes_.find(key);
     if (it == key_mutexes_.end()) {
-      return false;  // Key not found in mutex map
+      // Key not found in the mutex map; maybe it should be created here?
+      return false;
     }
     std::mutex& key_mutex = it->second;
     map_lock.unlock();  // unlock as soon as possible
 
     std::unique_lock<std::mutex> key_lock(key_mutex);  // lock for specific key
-    if (cache_.find(key) != cache_.end()) {
-      value = std::any_cast<T>(cache_[key]);
+    auto cache_it = cache_.find(key);
+    if (cache_it != cache_.end()) {
+      value = std::dynamic_pointer_cast<T>(cache_it->second);
       return true;
     }
     return false;  // Key not found in cache

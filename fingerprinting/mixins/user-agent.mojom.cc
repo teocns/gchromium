@@ -1,5 +1,3 @@
-
-
 #include "fingerprinting/mixins/user-agent.mojom.h"
 #include "base/logging.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
