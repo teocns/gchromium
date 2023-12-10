@@ -13,11 +13,10 @@ mojom("mojom") {
   # we need to add the appropriate dependencies
   public_deps = [
     "//mojo/public/mojom/base",
+    "//third_party/blink/public/mojom:mojom_core",
+    "//third_party/blink/public/mojom:mojom_modules",
+    "//third_party/blink/public/mojom:mojom_platform",
   ]
-  #   "//third_party/blink/public/mojom:mojom_core",
-  #   "//third_party/blink/public/mojom:mojom_modules",
-  #   "//third_party/blink/public/mojom:mojom_platform",
-  # ]
 
   # export_class_attribute = "FINGERPRINTING_EXPORT"
   # export_define = "FINGERPRINTING_IMPLEMENTATION=1"

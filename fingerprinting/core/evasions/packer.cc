@@ -1,10 +1,15 @@
-#include "fingerprinting/evasions/packer.h"
+#include "fingerprinting/core/evasions/packer.h"
 #include <vector>
-#include "fingerprinting/evasions/hook.h"
-#include "fingerprinting/evasions/hooks/webgl.cc"
+#include "fingerprinting/core/evasions/hook.h"
+#include "fingerprinting/core/evasions/hooks/webgl.h"
 
-namespace fingerprinting {
-namespace evasions {
+namespace fingerprinting::evasions {
+
+
+void Package::Register(std::unique_ptr<Hook> hook) {
+  this->hooks.push_back(std::move(hook));
+}
+
 
 std::unique_ptr<Package> Package::Pack(HookTargetType target,
                                        std::set<std::string>& filters) {
@@ -31,7 +36,5 @@ std::unique_ptr<Package> Package::Pack(HookTargetType target,
 
   return pack;
 }
-
-}  // namespace evasions
 
 }  // namespace fingerprinting

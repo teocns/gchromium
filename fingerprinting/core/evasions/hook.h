@@ -2,14 +2,12 @@
 #define FINGERPRINTING_EVASIONS_HOOK_H_
 
 #include <format>
-#include <random>
-#include <string>
 #include <functional>
 #include <map>
+#include <random>
+#include <string>
 
-namespace fingerprinting {
-namespace evasions {
-
+namespace fingerprinting::evasions {
 
 enum HookTargetType {
   PAGE,
@@ -23,12 +21,11 @@ class Hook {
    * (e.g. WebGL, Canvas, etc.) A hook instance binds with a
    * specific target (e.g. Worker, Window, etc.)
    */
- public:
 
-  explicit Hook(HookTargetType target)
-      : signature("f" + std::to_string(rand() % 1000000000000 + 100000000000)),
-        target(target) {}
-  Hook() = default;
+ public:
+  explicit Hook()
+      : signature("f" + std::to_string(rand() % 1000000000000 + 100000000000)) {}
+  virtual ~Hook() = default;
   /*
    * An ephemeral function name that will represent the hook
    * No parameters are defined: in JavaScript, arguments can be referenced via
@@ -36,28 +33,23 @@ class Hook {
    */
   std::string signature;
 
-  HookTargetType target;
-
   // Returns the definition, but not the invocation
-  std::string get_definition();
-
+  std::string get_definition(HookTargetType target);
 
   // Returns immediately-invoked function expression (IIFE)
-  std::string get_iife();
+  std::string get_iife(HookTargetType target);
 
-  virtual std::string codename();
+  virtual std::string codename() = 0;
 
   /*
    * The implementation [body inner part] of the the hook function definition
    * (aka routine) This is where the actual patch logic is defined by
    * implementors of `Hook` (subclasses)
    */
-  virtual std::string get_impl();
+  virtual std::string get_impl(HookTargetType target) = 0;
 };
 
-
 typedef std::function<std::unique_ptr<Hook>()> HookConstructor;
-
 
 /*
  * HookFactory is a factory class that creates Hook instances
@@ -67,20 +59,20 @@ typedef std::function<std::unique_ptr<Hook>()> HookConstructor;
  * Yeah, I mixed factory & model in the same file, so what?
  */
 class HookFactory {
-public:
+ public:
+  static void Register(const std::string& key, HookConstructor constructor);
 
-    static void Register(const std::string& key, HookConstructor constructor);
-    static std::unique_ptr<Hook> Create(const std::string& key);
-    static std::map<std::string, HookConstructor>& GetRegistry();
+  static std::unique_ptr<Hook> Create(const std::string& key);
 
+  static std::map<std::string, HookConstructor>& GetRegistry();
 };
+
 // Macro to define a self-registering hook
-#define REGISTER_HOOK(name, type) \
-    static bool _hook_##name##_registered = \
-        (HookFactory::Register(#name, []{ return std::make_unique<type>(); }), true);
+#define REGISTER_HOOK(name, type)                                              \
+  static bool _hook_##name##_registered =                                      \
+      (HookFactory::Register(#name, [] { return std::make_unique<type>(); }),  \
+       true);
 
-
-}  // namespace evasions
-}  // namespace fingerprinting
+}  // namespace fingerprinting::evasions
 
 #endif  // FINGERPRINTING_EVASIONS_HOOK_H_

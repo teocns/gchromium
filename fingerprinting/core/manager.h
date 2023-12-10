@@ -1,6 +1,6 @@
 // fingerprint_manager.h
-#ifndef FINGERPRINTING_MANAGER_IFACE_H_
-#define FINGERPRINTING_MANAGER_IFACE_H_
+#ifndef FINGERPRINTING_MANAGER_CORE_H
+#define FINGERPRINTING_MANAGER_CORE_H
 
 #include <any>
 #include <format>
@@ -14,8 +14,8 @@
 #include "base/strings/string_util.h"
 #include "base/synchronization/rlock.h"
 #include "base/values.h"
-#include "fingerprinting/export.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
+#include "fingerprinting/core/export.h"
 // #include "fingerprinting/manager/manager.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -26,7 +26,7 @@
 namespace fingerprinting {
 
 class FINGERPRINTING_CORE_EXPORT FingerprintManagerCore {
-    // : virtual public fingerprinting::mojom::FingerprintManager {
+  // : virtual public fingerprinting::mojom::FingerprintManager {
  public:
   void Init();
 
@@ -39,6 +39,7 @@ class FINGERPRINTING_CORE_EXPORT FingerprintManagerCore {
 
  protected:
   FingerprintManagerCore();
+  ~FingerprintManagerCore();
 
   void LoadFingerprint(const std::string& fingerprint_file_path);
   bool CanBeInitialized() { return !initialized_ && can_be_initialized_; }

@@ -1,7 +1,7 @@
 
 
-#ifndef FINGERPRINTING_UTILITIES_V8_H_
-#define FINGERPRINTING_UTILITIES_V8_H_
+#ifndef FINGERPRINTING_UTILITY_V8_H_
+#define FINGERPRINTING_UTILITY_V8_H_
 
 #include "v8/include/v8.h"
 
@@ -11,7 +11,7 @@
 
 namespace fingerprinting {
 
-namespace utilities {
+namespace utility {
 
 namespace v8_patcher {
 
@@ -43,8 +43,8 @@ class ExecutionContext {
 FINGERPRINTING_UTILITY_EXPORT void RunWithUtils(v8::Local<v8::Context> context, std::string source_code);
 
 }  // namespace v8_patcher
-}  // namespace utilities
+}  // namespace utility
 
 }  // namespace fingerprinting
 
-#endif  // FINGERPRINTING_UTILITIES_V8_H_
+#endif  // FINGERPRINTING_UTILITY_V8_H_

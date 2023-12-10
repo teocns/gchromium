@@ -32,6 +32,9 @@ group("fingerprinting") {
     # "//base",
     # "//mojo/public/mojom/base",
     "//fingerprinting/utility",
+    "//fingerprinting/core",
+    "//fingerprinting/public/mojom",
+    "//fingerprinting/public/cpp",
     # "//fingerprinting/evasions"
   ]
 

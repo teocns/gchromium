@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef FINGERPRINTING_USER_AGENT_UTILITIES_H
-#define FINGERPRINTING_USER_AGENT_UTILITIES_H
+#ifndef FINGERPRINTING_USER_AGENT_UTILITY_H
+#define FINGERPRINTING_USER_AGENT_UTILITY_H
 
 #include <map>
 #include <regex>
@@ -33,4 +33,4 @@ FINGERPRINTING_UTILITY_EXPORT bool MakeUserAgentMetadata(base::Value::Dict& in, 
 }  // namespace user_agent
 }  // namespace utility
 }  // namespace fingerprinting
-#endif  // FINGERPRINTING_USER_AGENT_UTILITIES_H
+#endif  // FINGERPRINTING_USER_AGENT_UTILITY_H

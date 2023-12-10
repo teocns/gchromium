@@ -74,7 +74,7 @@ class FINGERPRINTING_CORE_EXPORT UAMixin : protected virtual IFingerprint {
      */
     base::Value* in = nullptr;
     if (GetUserAgentClientHints(in)) {
-      return fingerprinting::utilities::user_agent::MakeUserAgentMetadata(
+      return fingerprinting::utility::user_agent::MakeUserAgentMetadata(
           in->GetDict(), out);
     }
     return false;

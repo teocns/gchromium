@@ -9,7 +9,7 @@ component("core") {
     "device_descriptor/fingerprint_impl.cc",
     "evasions/hook.cc",
     "evasions/hook.h",
-    "evasions/hooks/webgl.cc",
+    # "evasions/hooks/webgl.cc",
     "evasions/packer.cc",
     "evasions/packer.h",
     "manager.h",
