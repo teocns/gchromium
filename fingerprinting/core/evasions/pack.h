@@ -12,8 +12,6 @@ struct FINGERPRINTING_CORE_EXPORT Package {
    * Represents a packed collection of evasions ready to run as-a-script
    */
 
-
-
   explicit Package(HookTargetType target) : target(target) {}
   HookTargetType target;
   void Register(std::unique_ptr<Hook> hook);

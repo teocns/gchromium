@@ -1,4 +1,4 @@
-#include "fingerprinting/core/evasions/packer.h"
+#include "fingerprinting/core/evasions/pack.h"
 #include <vector>
 #include "fingerprinting/core/evasions/hook.h"
 #include "fingerprinting/core/evasions/hooks/webgl.h"

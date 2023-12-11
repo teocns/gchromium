@@ -1,7 +1,7 @@
 #ifndef FINGERPRINTING_EVASIONS_MIXIN_MOJOM_H
 #define FINGERPRINTING_EVASIONS_MIXIN_MOJOM_H
 
-#include "fingerprinting/core/evasions/packer.h"
+#include "fingerprinting/core/evasions/pack.h"
 #include "fingerprinting/public/cpp/common.h"
 #include "fingerprinting/public/cpp/export.h"
 
