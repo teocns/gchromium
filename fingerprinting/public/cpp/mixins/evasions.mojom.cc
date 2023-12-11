@@ -1,20 +1,22 @@
-#include "fingerprinting/mixins/evasions.mojom.h"
+#include "fingerprinting/public/cpp/mixins/evasions.mojom.h"
+#include <string>
 
-namespace fingerprinting {
+
+namespace fingerprinting::internal {
 
 void EvasionsMixinMojom::GetEvasions(
-    const evasions::HookTargetType target,
-    GetEvasionsCallback callback) {
+    mojom::HookTargetType target,
+    mojom::FingerprintManager::GetEvasionsCallback callback) {
 
 
   // Compute cache key based on the target
-  std::string cache_key = "GetEvasions_" + std::to_string(target);
+  std::string cache_key = "GetEvasions_" + std::to_string(std::hash<mojom::HookTargetType>{}(target));
 
   // First, attempt to retrieve from cache.
   std::shared_ptr<evasions::Package> ptr;
   
   if (this->GetFromCache<evasions::Package>(cache_key, ptr)) {
-    std::move(callback).Run(ptr);
+    std::move(callback).Run(*ptr);
     return;
   }
 

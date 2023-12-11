@@ -10,7 +10,7 @@ group("utility") {
   # By default, targets are private. To allow the parent module to access this group,
   # you must set the visibility accordingly. If you want this to be visible to all
   # targets within the build, you would set it as follows:
-  visibility = [ "//fingerprinting" ]  # Or specify a more restricted set of targets if necessary.
+  visibility = [ "//fingerprinting:*" ]  # Or specify a more restricted set of targets if necessary.
 }
 
 source_set("user_agent") {

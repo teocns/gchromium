@@ -11,23 +11,26 @@
 #include "base/strings/string_util.h"
 
 #include "base/values.h"
-#include "fingerprinting/core/manager.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
-#include "fingerprinting/export.h"
+#include "fingerprinting/core/manager.h"
+#include "fingerprinting/public/cpp/export.h"
+// #include "fingerprinting/public/cpp/mixins/evasions.mojom.h"
+#include "fingerprinting/public/cpp/mixins/evasions.mojom.h"
+#include "fingerprinting/public/cpp/mixins/user-agent.mojom.h"
 #include "fingerprinting/public/mojom/manager.mojom.h"
-#include "fingerprinting/public/mojom/mixins/evasions.mojom.h"
-#include "fingerprinting/public/mojom/mixins/user-agent.mojom.h"
+// #include "fingerprinting/public/cpp/mixins/user-agent.mojom.h"
+
 #include "mojo/public/cpp/bindings/receiver.h"  // Add this line
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+#include "fingerprinting/public/cpp/common.h"
 namespace fingerprinting {
 
-class FINGERPRINTING_EXPORT FingerprintManager
-    : virtual public FingerprintManagerCore,
-      public mojom::FingerprintManager {
-      // public UAMixinMojom,
-      // public EvasionsMixinMojom {
+class FINGERPRINTING_PUBLIC_EXPORT FingerprintManager
+    : virtual public internal::FingerprintManagerBase,
+      public internal::UAMixinMojom,
+      public internal::EvasionsMixinMojom {
  public:
   static FingerprintManager* GetInstance(bool try_init = false);
 
@@ -45,7 +48,7 @@ class FINGERPRINTING_EXPORT FingerprintManager
   mojo::ReceiverSet<fingerprinting::mojom::FingerprintManager> receivers_;
 };
 
-FINGERPRINTING_EXPORT FingerprintManager* manager(bool try_init = false);
+FINGERPRINTING_PUBLIC_EXPORT FingerprintManager* manager(bool try_init = false);
 
 }  // namespace fingerprinting
 

@@ -1,11 +1,11 @@
-#include "fingerprinting/mixins/user-agent.mojom.h"
+#include "fingerprinting/public/cpp/mixins/user-agent.mojom.h"
 #include "base/logging.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 
 // Include absl
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace fingerprinting {
+namespace fingerprinting::internal {
 
 namespace {
 constexpr char kUserAgentMetadata[] = "user_agent_metadata";
@@ -65,6 +65,5 @@ absl::optional<std::string> UAMixinMojom::GetUserAgent_() {
     return absl::nullopt;
   }
 }
-
 
 }  // namespace fingerprinting

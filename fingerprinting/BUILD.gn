@@ -2,47 +2,12 @@ import("//build/config/chrome_build.gni")
 
 
 group("fingerprinting") {
-  # sources = [
-  #   "fingerprint.h",
-  #   "fingerprint_impl.h",
-  #   "fingerprint_impl.cc",
-  #   "mixins/user-agent.h",
-  #   "mixins/user-agent.mojom.h",
-  #   "mixins/user-agent.mojom.cc",
-  #   "mixins/evasions.mojom.h",
-  #   "mixins/evasions.mojom.cc",
-  #   "evasions/hook.cc",
-  #   "evasions/hook.h",
-  #   "evasions/hooks",
-  #   "evasions/packer.cc",
-  #   "evasions/packer.h",
-  #   "manager.h",,
-  #   "manager.cc",
-  #   "manager_impl.h",
-  #   "manager_impl.cc",
-  #   "export.h",
-  # ]
-
   visibility = [ "*" ]
 
-  # defines = [ "FINGERPRINTING_IMPLEMENTATION" ]
-
-
   deps = [
-    # "//base",
-    # "//mojo/public/mojom/base",
     "//fingerprinting/utility",
-    "//fingerprinting/core",
-    "//fingerprinting/public/mojom",
-    "//fingerprinting/public/cpp",
-    # "//fingerprinting/evasions"
+    "//fingerprinting/public/cpp:manager",
   ]
 
-
-
-  public_deps = [
-    # ":mojom",
-    "//third_party/abseil-cpp:absl",
-  ]
 }
 

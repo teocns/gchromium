@@ -16,14 +16,13 @@
 #include "base/values.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "fingerprinting/core/export.h"
-// #include "fingerprinting/manager/manager.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include "base/command_line.h"
 #include "base/debug/stack_trace.h"
 #include "base/process/process_handle.h"
 
-namespace fingerprinting {
+namespace fingerprinting::core {
 
 class FINGERPRINTING_CORE_EXPORT FingerprintManagerCore {
   // : virtual public fingerprinting::mojom::FingerprintManager {

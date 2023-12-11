@@ -16,9 +16,7 @@ enum HookTargetType {
   SHARED_WORKER,
 };
 
-
-
-interface Manager {
+interface FingerprintManager {
   [Sync]
   Enabled() => (bool enabled);
   [Sync]

@@ -1,18 +1,17 @@
 #ifndef FINGERPRINTING_EVASIONS_MIXIN_MOJOM_H
 #define FINGERPRINTING_EVASIONS_MIXIN_MOJOM_H
 
-#include "fingerprinting/evasions/packer.h"
-#include "fingerprinting/export.h"
-#include "fingerprinting/manager/manager.h"
+#include "fingerprinting/core/evasions/packer.h"
+#include "fingerprinting/public/cpp/common.h"
+#include "fingerprinting/public/cpp/export.h"
 
-namespace fingerprinting {
+namespace fingerprinting::internal {
 
-class GetEvasionsCallback;
 
-class FINGERPRINTING_EXPORT EvasionsMixinMojom
-    : virtual public FingerprintManagerCore {
+class FINGERPRINTING_PUBLIC_EXPORT EvasionsMixinMojom
+    : virtual public internal::FingerprintManagerBase {
  public:
-  void GetEvasions(const evasions::HookTargetType target, GetEvasionsCallback callback) override;
+  void GetEvasions(mojom::HookTargetType target, mojom::FingerprintManager::GetEvasionsCallback callback) override;
 
  private:
   // TODO: Evasions codenames to disable, passed by --disable-evasions launch flag

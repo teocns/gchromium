@@ -10,8 +10,7 @@
 
 #include "base/process/process_handle.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
-#include "fingerprinting/manager/manager.mojom.h"
-#include "fingerprinting/core/manager.h"
+#include "fingerprinting/public/cpp/manager.h"
 
 namespace fingerprinting {
 

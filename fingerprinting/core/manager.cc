@@ -15,7 +15,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace fingerprinting {
+namespace fingerprinting::core {
 
 FingerprintManagerCore::FingerprintManagerCore() = default;
 FingerprintManagerCore::~FingerprintManagerCore() = default;
