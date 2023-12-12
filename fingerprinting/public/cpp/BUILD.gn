@@ -1,6 +1,6 @@
 import("//build/config/chrome_build.gni")
 
-component("manager") {
+shared_library("manager") {
   sources = [
     "mixins/user-agent.h",
     "mixins/user-agent.mojom.h",
@@ -9,17 +9,18 @@ component("manager") {
     "mixins/evasions.mojom.cc",
     "manager.h",
     "manager.cc",
-    "export.h",
   ]
 
   visibility = [ "*" ]
 
-  defines = [ "FINGERPRINTING_PUBLIC_IMPL" ]
+  defines = [ "IS_FINGERPRINTING_MANAGER_IMPL" ]
 
 
   deps = [
     "//base",
-    "//fingerprinting/public/mojom"
+    "//fingerprinting/core",
+    "//fingerprinting/public/mojom",
+    "//fingerprinting/utility:user_agent"
   ]
 
   public_deps = [

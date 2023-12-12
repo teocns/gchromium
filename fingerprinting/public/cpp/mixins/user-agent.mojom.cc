@@ -31,12 +31,12 @@ absl::optional<blink::UserAgentMetadata> UAMixinMojom::GetUserAgentMetadata_() {
   /**
    * Non-mojom version, same-process callable
    */
-  if (this->GetFromCache<blink::UserAgentMetadata>(kUserAgentMetadata, out)) {
+  if (this->cache.Get<blink::UserAgentMetadata>(kUserAgentMetadata, out)) {
     return absl::optional<blink::UserAgentMetadata>(std::move(out));
   }
 
   if (GetFingerprint()->GetUserAgentMetadata(out)) {
-    this->CacheValue<blink::UserAgentMetadata>(kUserAgentMetadata, out);
+    this->cache.Set<blink::UserAgentMetadata>(kUserAgentMetadata, out);
     DLOG(WARNING)
         << "Computing same-process GetUserAgentMetadata without cache";
     return absl::optional<blink::UserAgentMetadata>(std::move(out));
@@ -55,11 +55,11 @@ void UAMixinMojom::GetUserAgentMetadata(GetUserAgentMetadataCallback callback) {
 
 absl::optional<std::string> UAMixinMojom::GetUserAgent_() {
   std::string out;
-  if (this->GetFromCache<std::string>(kUserAgent, out)) {
+  if (this->cache.Get<std::string>(kUserAgent, out)) {
     return absl::optional<std::string>(std::move(out));
   }
   if (GetFingerprint()->GetUserAgent(out)) {
-    this->CacheValue<std::string>(kUserAgent, out);
+    this->cache.Set<std::string>(kUserAgent, out);
     return absl::optional<std::string>(std::move(out));
   } else {
     return absl::nullopt;

@@ -9,28 +9,19 @@
 #include <regex>
 #include <string>
 #include "base/values.h"
-#include "fingerprinting/utility/export.h"
 
+#include "base/component_export.h"
 
-
-namespace blink{
-  struct UserAgentMetadata;
+namespace blink {
+struct UserAgentMetadata;
 }
 
-
-namespace fingerprinting {
-
-namespace utility {
-namespace user_agent {
-
-
-
+namespace fingerprinting::utility::user_agent {
 
 // bool PickleUserAgentMetadata(base::Value::Dict& in, std::string& out);
-FINGERPRINTING_UTILITY_EXPORT bool MakeUserAgentMetadata(base::Value::Dict& in, blink::UserAgentMetadata& out);
+COMPONENT_EXPORT(FINGERPRINTING_UTILITY_UA)
+bool MakeUserAgentMetadata(base::Value::Dict& in,
+                           blink::UserAgentMetadata& out);
 
-
-}  // namespace user_agent
-}  // namespace utility
 }  // namespace fingerprinting
 #endif  // FINGERPRINTING_USER_AGENT_UTILITY_H

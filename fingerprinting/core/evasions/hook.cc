@@ -1,6 +1,6 @@
 #include "fingerprinting/core/evasions/hook.h"
 #include "v8/include/v8-context.h"
-namespace fingerprinting::evasions {
+namespace fingerprinting::core::evasions {
 
 std::string Hook::get_definition(HookTargetType target) {
   /*
@@ -15,8 +15,8 @@ std::string Hook::get_iife(HookTargetType target) {
   return std::format("({})()", this->get_definition(target));
 }
 
-std::unique_ptr<Hook> HookFactory::Create(const std::string& key) {
-  auto it = GetRegistry().find(key);
+std::shared_ptr<Hook> HookFactory::Create(const std::string& codename) {
+  auto it = GetRegistry().find(codename);
   if (it != GetRegistry().end()) {
     return it->second();
   }
@@ -33,4 +33,4 @@ std::map<std::string, HookConstructor>& HookFactory::GetRegistry() {
   return registry;
 }
 
-}  // namespace fingerprinting::evasions
+}  // namespace fingerprinting::core::evasions

@@ -7,15 +7,15 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include "base/component_export.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
-#include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/rlock.h"
 #include "base/values.h"
+#include "fingerprinting/core/cache.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
-#include "fingerprinting/core/export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include "base/command_line.h"
@@ -24,8 +24,7 @@
 
 namespace fingerprinting::core {
 
-class FINGERPRINTING_CORE_EXPORT FingerprintManagerCore {
-  // : virtual public fingerprinting::mojom::FingerprintManager {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE) FingerprintManagerCore {
  public:
   void Init();
 
@@ -43,42 +42,6 @@ class FINGERPRINTING_CORE_EXPORT FingerprintManagerCore {
   void LoadFingerprint(const std::string& fingerprint_file_path);
   bool CanBeInitialized() { return !initialized_ && can_be_initialized_; }
   Fingerprint* fingerprint() { return fingerprint_.get(); }
-
-  std::unordered_map<std::string, std::any> cache_;
-  std::unordered_map<std::string, std::mutex> key_mutexes_;
-  std::mutex
-      key_mutexes_map_mutex_;  // To protect access to key_mutexes_ itself
-
-  // Definition of the CacheValue template function
-  template <typename T>
-  void CacheValue(const std::string& key, const std::shared_ptr<T>& value) {
-    std::unique_lock<std::mutex> map_lock(key_mutexes_map_mutex_);
-    auto& key_mutex = key_mutexes_[key];
-    map_lock.unlock();  // unlock map mutex as soon as possible
-
-    std::unique_lock<std::mutex> key_lock(key_mutex);  // lock for specific key
-    cache_[key] = value;
-  }
-
-  template <typename T>
-  bool GetFromCache(const std::string& key, std::shared_ptr<T>& value) {
-    std::unique_lock<std::mutex> map_lock(key_mutexes_map_mutex_);
-    auto it = key_mutexes_.find(key);
-    if (it == key_mutexes_.end()) {
-      // Key not found in the mutex map; maybe it should be created here?
-      return false;
-    }
-    std::mutex& key_mutex = it->second;
-    map_lock.unlock();  // unlock as soon as possible
-
-    std::unique_lock<std::mutex> key_lock(key_mutex);  // lock for specific key
-    auto cache_it = cache_.find(key);
-    if (cache_it != cache_.end()) {
-      value = std::dynamic_pointer_cast<T>(cache_it->second);
-      return true;
-    }
-    return false;  // Key not found in cache
-  }
 
   static std::string get_debug_info(FingerprintManagerCore* manager,
                                     bool with_stack_trace = true) {
@@ -116,6 +79,7 @@ class FINGERPRINTING_CORE_EXPORT FingerprintManagerCore {
     return false;
   }
 
+  Cache cache;
  private:
   void SetCanBeInitialized(bool can_be) { can_be_initialized_ = can_be; }
 
@@ -131,6 +95,9 @@ class FINGERPRINTING_CORE_EXPORT FingerprintManagerCore {
 
   // Usually set to false when switch isn't present
   bool can_be_initialized_ = true;
+
+
+
 };
 
 }  // namespace fingerprinting

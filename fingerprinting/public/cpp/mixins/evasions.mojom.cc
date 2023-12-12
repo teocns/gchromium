@@ -1,29 +1,35 @@
 #include "fingerprinting/public/cpp/mixins/evasions.mojom.h"
 #include <string>
-
+#include "fingerprinting/public/mojom/manager.mojom.h"
 
 namespace fingerprinting::internal {
 
 void EvasionsMixinMojom::GetEvasions(
     mojom::HookTargetType target,
     mojom::FingerprintManager::GetEvasionsCallback callback) {
-
-
   // Compute cache key based on the target
-  std::string cache_key = "GetEvasions_" + std::to_string(std::hash<mojom::HookTargetType>{}(target));
+  std::string cache_key =
+      "GetEvasions_" +
+      std::to_string(std::hash<mojom::HookTargetType>{}(target));
 
   // First, attempt to retrieve from cache.
-  std::shared_ptr<evasions::Package> ptr;
-  
-  if (this->GetFromCache<evasions::Package>(cache_key, ptr)) {
-    std::move(callback).Run(*ptr);
-    return;
-  }
+  core::evasions::Package* pack = nullptr;
 
-  // If not in cache, compute the value and cache it.
-  ptr = evasions::Package::Pack(target, _disable_evasions);
-  this->CacheValue<evasions::Package>(cache_key, ptr);
-  std::move(callback).Run(*ptr);
+  if (!this->cache.Get<core::evasions::Package>(cache_key, *pack)) {
+    // Create the package and cache it
+    *pack = core::evasions::Package::Pack(
+        static_cast<core::evasions::HookTargetType>(target), _disable_evasions);
+
+    this->cache.Set<core::evasions::Package>(cache_key, *pack);
+  }
+  
+  std::move(callback).Run(pack->get_iife());
+  //
+  // std::move(callback).Run(cpack);
+  // Create the package and cache it
+  // pack = core::evasions::Package::Pack(to_mojom(target), _disable_evasions);
+  // this->cache.Value<mojom::EvasionsPack>(cache_key, ptr);
+  // std::move(callback).Run(*ptr);
 }
 
-}  // namespace fingerprinting
+}  // namespace fingerprinting::internal

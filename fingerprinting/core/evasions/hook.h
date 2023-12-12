@@ -6,8 +6,9 @@
 #include <map>
 #include <random>
 #include <string>
+#include "base/component_export.h"
 
-namespace fingerprinting::evasions {
+namespace fingerprinting::core::evasions {
 
 enum HookTargetType {
   PAGE,
@@ -15,7 +16,7 @@ enum HookTargetType {
   SHARED_WORKER,
 };
 
-class Hook {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE) Hook {
   /*
    * Each hook represents a patch for a specific JS feature API
    * (e.g. WebGL, Canvas, etc.) A hook instance binds with a
@@ -24,7 +25,8 @@ class Hook {
 
  public:
   explicit Hook()
-      : signature("f" + std::to_string(rand() % 1000000000000 + 100000000000)) {}
+      : signature("f" + std::to_string(rand() % 1000000000000 + 100000000000)) {
+  }
   virtual ~Hook() = default;
   /*
    * An ephemeral function name that will represent the hook
@@ -49,7 +51,7 @@ class Hook {
   virtual std::string get_impl(HookTargetType target) = 0;
 };
 
-typedef std::function<std::unique_ptr<Hook>()> HookConstructor;
+typedef std::function<std::shared_ptr<Hook>()> HookConstructor;
 
 /*
  * HookFactory is a factory class that creates Hook instances
@@ -62,17 +64,17 @@ class HookFactory {
  public:
   static void Register(const std::string& key, HookConstructor constructor);
 
-  static std::unique_ptr<Hook> Create(const std::string& key);
+  static std::shared_ptr<Hook> Create(const std::string& key);
 
   static std::map<std::string, HookConstructor>& GetRegistry();
 };
 
 // Macro to define a self-registering hook
-#define REGISTER_HOOK(name, type)                                              \
-  static bool _hook_##name##_registered =                                      \
-      (HookFactory::Register(#name, [] { return std::make_unique<type>(); }),  \
+#define REGISTER_HOOK(name, type)                                             \
+  static bool _hook_##name##_registered =                                     \
+      (HookFactory::Register(#name, [] { return std::make_shared<type>(); }), \
        true);
 
-}  // namespace fingerprinting::evasions
+}  // namespace fingerprinting::core::evasions
 
 #endif  // FINGERPRINTING_EVASIONS_HOOK_H_

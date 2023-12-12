@@ -2,24 +2,23 @@ import("//build/config/chrome_build.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
 
-component("core") {
+source_set("core") {
   sources = [
     "device_descriptor/fingerprint.h",
     "device_descriptor/fingerprint_impl.h",
     "device_descriptor/fingerprint_impl.cc",
     "evasions/hook.cc",
     "evasions/hook.h",
-    # "evasions/hooks/webgl.cc",
+    "evasions/hooks/webgl.h",
     "evasions/pack.cc",
     "evasions/pack.h",
     "manager.h",
     "manager.cc",
-    "export.h",
   ]
 
   visibility = [ "*" ]
 
-  defines = [ "FINGERPRINTING_IMPLEMENTATION" ]
+  defines = [ "IS_FINGERPRINTING_CORE_IMPL" ]
 
 
   deps = [

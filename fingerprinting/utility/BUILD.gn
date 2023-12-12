@@ -18,11 +18,10 @@ source_set("user_agent") {
   sources = [
     "user_agent.h",
     "user_agent.cc",
-    "export.h",
   ]
 
   defines = [
-    "FINGERPRINTING_UTILITY_IMPLEMENTATION",
+    "IS_FINGERPRINTING_UTILITY_UA_IMPL",
   ]
 
   deps = [
@@ -39,12 +38,11 @@ source_set("user_agent") {
 source_set("v8") {
   output_name = "fingerprinting_utility_v8"
   defines = [
-    "FINGERPRINTING_UTILITY_IMPLEMENTATION"
+    "IS_FINGERPRINTING_UTILITY_V8_IMPL"
   ]
   sources = [
     "v8.h",
     "v8.cc",
-    "export.h",
   ]
 
   deps = [

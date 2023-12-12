@@ -16,6 +16,7 @@ enum HookTargetType {
   SHARED_WORKER,
 };
 
+
 interface FingerprintManager {
   [Sync]
   Enabled() => (bool enabled);
@@ -24,5 +25,5 @@ interface FingerprintManager {
   [Sync]
   GetUserAgentMetadata() => (blink.mojom.UserAgentMetadata? metadata);
   [Sync]
-  GetEvasions(HookTargetType target) => (string js);
+  GetEvasions(HookTargetType target) => (string iife);
 };

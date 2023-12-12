@@ -2,14 +2,14 @@
 #define FINGERPRINTING_FINGERPRINT_IMPL_H_
 
 #include <vector>
-#include "fingerprinting/export.h"
 
+#include "base/component_export.h"
 #include "fingerprinting/core/device_descriptor/fingerprint.h"
 #include "fingerprinting/core/device_descriptor/mixins/user-agent.h"
 
 namespace fingerprinting {
 
-class FINGERPRINTING_CORE_EXPORT Fingerprint final : public UAMixin,
+class COMPONENT_EXPORT(FINGERPRINTING_CORE) Fingerprint final : public UAMixin,
                                                 protected virtual IFingerprint {
  public:
   Fingerprint& operator=(Fingerprint&& other);

@@ -3,17 +3,13 @@
 #ifndef FINGERPRINTING_UTILITY_V8_H_
 #define FINGERPRINTING_UTILITY_V8_H_
 
+#include "base/component_export.h"
 #include "v8/include/v8.h"
 
 #include <set>
 #include <string>
-#include "fingerprinting/utility/export.h"
 
-namespace fingerprinting {
-
-namespace utility {
-
-namespace v8_patcher {
+namespace fingerprinting::utility::v8_patcher {
 
 void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs);
 
@@ -24,12 +20,9 @@ void CopyOwnPropertiesDescriptors(v8::Local<v8::Object> source,
                                   v8::Local<v8::Context> context,
                                   v8::Isolate* isolate);
 
-
 void PatchAccessor(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 void PatchValue(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-
 
 class ExecutionContext {
  public:
@@ -40,11 +33,9 @@ class ExecutionContext {
   v8::Isolate* isolate;
 };
 
-FINGERPRINTING_UTILITY_EXPORT void RunWithUtils(v8::Local<v8::Context> context, std::string source_code);
+COMPONENT_EXPORT(FINGERPRINTING_UTILITY_V8)
+void RunWithUtils(v8::Local<v8::Context> context, std::string source_code);
 
-}  // namespace v8_patcher
-}  // namespace utility
-
-}  // namespace fingerprinting
+}  // namespace fingerprinting::utility::v8_patcher
 
 #endif  // FINGERPRINTING_UTILITY_V8_H_

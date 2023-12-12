@@ -3,10 +3,7 @@
 #include <string>
 #include "base/logging.h"
 
-namespace fingerprinting {
-
-namespace evasions {
-namespace v8utils {
+namespace fingerprinting::evasions::v8utils {
 
 void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {
   v8::Isolate* isolate = innerArgs.GetIsolate();
@@ -447,6 +444,4 @@ void RunWithUtils(v8::Local<v8::Context> context, std::string source_code) {
       context, global, 2, args);
 }
 
-}  // namespace v8utils
-}  // namespace evasions
 }  // namespace fingerprinting

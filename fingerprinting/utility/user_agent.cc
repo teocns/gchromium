@@ -12,9 +12,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 
-namespace fingerprinting {
-namespace utility {
-namespace user_agent {
+namespace fingerprinting::utility::user_agent {
 namespace {
 
 /**
@@ -172,6 +170,4 @@ bool MakeUserAgentMetadata(base::Value::Dict& in,
   return true;
 }
 
-}  // namespace user_agent
-}  // namespace utility
 }  // namespace fingerprinting

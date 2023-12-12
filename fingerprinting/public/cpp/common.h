@@ -7,7 +7,7 @@
 
 namespace fingerprinting::internal {
 
-class FingerprintManagerBase
+class COMPONENT_EXPORT(FINGERPRINTING_MANAGER) FingerprintManagerBase
     : public fingerprinting::core::FingerprintManagerCore,
       virtual public fingerprinting::mojom::FingerprintManager {};
 

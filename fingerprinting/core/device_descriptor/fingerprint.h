@@ -3,14 +3,14 @@
 
 #include <vector>
 
+#include "base/component_export.h"
 #include "base/values.h"
-#include "fingerprinting/core/export.h"
 
 namespace fingerprinting {
 
 using Val = base::Value;
 
-class FINGERPRINTING_CORE_EXPORT IFingerprint {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE) IFingerprint {
  public:
   virtual bool Find(std::vector<std::string>&& keys, Val*& out) = 0;
   virtual bool Find(std::vector<std::string>&& keys) = 0;

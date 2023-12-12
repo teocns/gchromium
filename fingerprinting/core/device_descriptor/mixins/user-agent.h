@@ -3,7 +3,6 @@
 
 #include "base/values.h"
 #include "fingerprinting/core/device_descriptor/fingerprint.h"
-#include "fingerprinting/export.h"
 #include "fingerprinting/utility/user_agent.h"
 
 namespace blink {
@@ -18,7 +17,7 @@ const uint32_t kVersion =
          // third_party/blink/common/user_agent/user_agent_metadata.cc
 }
 
-class FINGERPRINTING_CORE_EXPORT UAMixin : protected virtual IFingerprint {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE)  UAMixin : protected virtual IFingerprint {
   /**
    "highEntropyValues": {
 "architecture": "arm",

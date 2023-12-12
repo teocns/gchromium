@@ -3,19 +3,25 @@
 #include "fingerprinting/core/evasions/hook.h"
 #include "fingerprinting/core/evasions/hooks/webgl.h"
 
-namespace fingerprinting::evasions {
+namespace fingerprinting::core::evasions {
 
-
-void Package::Register(std::unique_ptr<Hook> hook) {
-  this->hooks.push_back(std::move(hook));
+void Package::Register(std::shared_ptr<Hook> hook) {
+  this->hooks.push_back(hook);
 }
 
+std::string Package::get_iife() {
+  std::string iife = "(function(){";
+  for (auto& hook : this->hooks) {
+    iife += hook->get_definition(this->target);
+  }
+  iife += "})();";
+  return iife;
+}
 
-std::unique_ptr<Package> Package::Pack(HookTargetType target,
-                                       std::set<std::string>& filters) {
+Package Package::Pack(HookTargetType target, std::set<std::string>& filters) {
   // Returns a compiled, ready-to-inject JS function string
   // Filters are the evasions to disable
-  auto pack = std::make_unique<Package>(target);
+  Package pack(target);
 
   for (auto& hook_descriptor : HookFactory::GetRegistry()) {
     const std::string& name = hook_descriptor.first;
@@ -25,16 +31,15 @@ std::unique_ptr<Package> Package::Pack(HookTargetType target,
       continue;
     }
 
-    std::unique_ptr<Hook> hook = HookFactory::Create(name);
+    std::shared_ptr<Hook> hook = HookFactory::Create(name);
 
-    if (hook == nullptr) {
-      continue;
+    if (hook != nullptr) {
+      pack.Register(hook);
     }
 
-    pack->Register(std::move(hook));
   }
 
   return pack;
 }
 
-}  // namespace fingerprinting
+}  // namespace fingerprinting::core::evasions
