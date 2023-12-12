@@ -1,5 +1,4 @@
 import("//build/config/chrome_build.gni")
-import("//mojo/public/tools/bindings/mojom.gni")
 
 
 source_set("core") {

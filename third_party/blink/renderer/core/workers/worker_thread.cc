@@ -72,7 +72,7 @@
 #include "third_party/blink/renderer/platform/wtf/threading.h"
 
 // Custom
-#include "fingerprinting/public/mojom/manager.mojom.h"
+#include "fingerprinting/public/cpp/manager.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
 
 namespace blink {

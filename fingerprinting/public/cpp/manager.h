@@ -4,7 +4,6 @@
 
 #include <string>
 
-#include "base/component_export.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -14,6 +13,7 @@
 #include "base/values.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "fingerprinting/core/manager.h"
+#include "fingerprinting/public/cpp/export.h"
 #include "fingerprinting/public/cpp/mixins/evasions.mojom.h"
 #include "fingerprinting/public/cpp/mixins/user-agent.mojom.h"
 #include "fingerprinting/public/mojom/manager.mojom.h"
@@ -25,7 +25,7 @@
 #include "fingerprinting/public/cpp/common.h"
 namespace fingerprinting {
 
-class COMPONENT_EXPORT(FINGERPRINTING_MANAGER) FingerprintManager
+class FINGERPRINTING_PUBLIC_EXPORT FingerprintManager
     : virtual public internal::FingerprintManagerBase,
       public internal::UAMixinMojom,
       public internal::EvasionsMixinMojom {
@@ -46,7 +46,7 @@ class COMPONENT_EXPORT(FINGERPRINTING_MANAGER) FingerprintManager
   mojo::ReceiverSet<fingerprinting::mojom::FingerprintManager> receivers_;
 };
 
-COMPONENT_EXPORT(FINGERPRINTING_MANAGER) FingerprintManager* manager(bool try_init = false);
+FINGERPRINTING_PUBLIC_EXPORT FingerprintManager* manager(bool try_init = false);
 
 }  // namespace fingerprinting
 

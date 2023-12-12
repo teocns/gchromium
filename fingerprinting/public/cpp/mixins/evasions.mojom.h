@@ -3,11 +3,12 @@
 
 #include "fingerprinting/core/evasions/pack.h"
 #include "fingerprinting/public/cpp/common.h"
+#include "fingerprinting/public/cpp/export.h"
 #include "fingerprinting/public/mojom/manager.mojom.h"
 
 namespace fingerprinting::internal {
 
-class COMPONENT_EXPORT(FINGERPRINTING_MANAGER) EvasionsMixinMojom
+class FINGERPRINTING_PUBLIC_EXPORT EvasionsMixinMojom
     : virtual public internal::FingerprintManagerBase {
  public:
   void GetEvasions(

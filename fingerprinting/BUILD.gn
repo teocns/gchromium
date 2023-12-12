@@ -5,8 +5,8 @@ group("fingerprinting") {
   visibility = [ "*" ]
 
   deps = [
-    "//fingerprinting/utility",
-    "//fingerprinting/public/cpp:manager",
+      "//fingerprinting/utility",
+      "//fingerprinting/public/cpp:manager",
   ]
 
 }

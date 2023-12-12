@@ -31,7 +31,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 
-#include "fingerprinting/manager_impl.h"
+#include "fingerprinting/public/cpp/manager.h"
 
 #if BUILDFLAG(IS_WIN)
 #include <windows.h>
