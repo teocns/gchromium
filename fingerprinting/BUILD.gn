@@ -6,7 +6,7 @@ group("fingerprinting") {
 
   deps = [
       "//fingerprinting/utility",
-      "//fingerprinting/public/cpp:manager",
+      "//fingerprinting/public/cpp",
   ]
 
 }

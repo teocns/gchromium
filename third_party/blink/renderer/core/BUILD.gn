@@ -371,7 +371,7 @@ component("core") {
     "//ui/base/dragdrop/mojom:mojom_blink",
     "//ui/gfx/geometry",
     "//ui/gfx/geometry:geometry_skia",
-    "//fingerprinting"
+    "//fingerprinting/public/cpp"
   ]
 
   if (is_mac) {
