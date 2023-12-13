@@ -3,7 +3,7 @@
 #include <string>
 #include "base/logging.h"
 
-namespace fingerprinting::evasions::v8utils {
+namespace fingerprinting::utility::v8_patcher{
 
 void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {
   v8::Isolate* isolate = innerArgs.GetIsolate();
