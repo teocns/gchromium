@@ -662,19 +662,20 @@ void WorkerThread::InitializeOnWorkerThread(
     v8::Local<v8::Context> context =
         GlobalScope()->ScriptController()->GetContext();
 
+    {
+      mojo::Remote<fingerprinting::mojom::FingerprintManager>
+          fingerprint_manager;
 
-    mojo::Remote<fingerprinting::mojom::FingerprintManager>
-        fingerprint_manager;
+      GlobalScope()->GetBrowserInterfaceBroker().GetInterface(
+          fingerprint_manager.BindNewPipeAndPassReceiver());
 
-    GlobalScope()->GetBrowserInterfaceBroker().GetInterface(
-        fingerprint_manager.BindNewPipeAndPassReceiver());
-
-    bool fingerprinting_enabled = false;
-    std::string fingerprint_evasions;
-    fingerprint_manager->Enabled(&fingerprinting_enabled);
-    if (fingerprinting_enabled) {
-      fingerprint_manager->GetEvasions(fingerprinting::mojom::HookTargetType::WORKER,&fingerprint_evasions);
-      fingerprinting::utility::RunWithUtils(context, fingerprint_evasions);
+      bool fingerprinting_enabled = false;
+      std::string fingerprint_evasions;
+      fingerprint_manager->Enabled(&fingerprinting_enabled);
+      if (fingerprinting_enabled) {
+        fingerprint_manager->GetEvasions(fingerprinting::mojom::HookTargetType::WORKER,&fingerprint_evasions);
+        fingerprinting::utility::RunWithUtils(context, fingerprint_evasions);
+      }
     }
 
 
