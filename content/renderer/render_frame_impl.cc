@@ -239,6 +239,10 @@
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-microtask-queue.h"
 
+
+#include "fingerprinting/public/cpp/manager.h"
+#include "fingerprinting/utility/v8.h"
+
 #if BUILDFLAG(ENABLE_PPAPI)
 #include "content/renderer/pepper/pepper_browser_connection.h"
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
@@ -4433,6 +4437,25 @@ void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
     blink::WebV8Features::EnableMojoJSAndUseBroker(
         context, std::move(mojo_js_interface_broker_));
   }
+  
+
+  {
+    mojo::Remote<fingerprinting::mojom::FingerprintManager>
+        fingerprint_manager;
+
+    GetBrowserInterfaceBroker()->GetInterface(
+        fingerprint_manager.BindNewPipeAndPassReceiver());
+
+    bool fingerprinting_enabled = false;
+    std::string fingerprint_evasions;
+    fingerprint_manager->Enabled(&fingerprinting_enabled);
+    if (fingerprinting_enabled) {
+      fingerprint_manager->GetEvasions(fingerprinting::mojom::HookTargetType::PAGE,&fingerprint_evasions);
+      fingerprinting::utility::RunWithUtils(context, fingerprint_evasions);
+    }
+  }
+
+
 
   for (auto& observer : observers_)
     observer.DidCreateScriptContext(context, world_id);
