@@ -1,0 +1,38 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Chromium",
+            "type": "lldb",
+            "request": "launch",
+            "targetArchitecture": "arm64",
+            "program": "${workspaceFolder}/out/debug_plain/Chromium.app/Contents/MacOS/Chromium",
+            "args": [
+                "--no-sandbox",
+                "--single-process",
+                "--fingerprint=${workspaceFolder}/fingerprinting/fp_chromium.json"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/out/debug_plain",
+            "environment": [],
+            "externalConsole": false,
+            "integratedTerminal": false,
+            "MIMode": "lldb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for lldb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Load Chromium lldb configuration",
+                    "text": "command script import ${workspaceFolder}/tools/lldb/lldbinit.py"
+                },
+                {
+                    "description": "Load Blink lldb configuration",
+                    "text": "command script import ${workspaceFolder}/third_party/blink/tools/lldb/lldb_blink.py"
+                }
+            ]
+        }
+    ]
+}

@@ -1,0 +1,8 @@
+# So that lldbinit.py takes precedence.
+command script import /Users/beyond/.gchromium/fingerprinting/src/tools/lldb/lldbinit.py
+
+# Now import third_party/blink/tools/lldb/lldb_blink.py too
+command script import /Users/beyond/.gchromium/fingerprinting/src/third_party/blink/tools/lldb/lldb_blink.py
+
+# /Users/beyond/.gchromium/fingerprinting/src/v8/tools/lldb_commands.py
+command script import /Users/beyond/.gchromium/fingerprinting/src/v8/tools/lldb_commands.py
