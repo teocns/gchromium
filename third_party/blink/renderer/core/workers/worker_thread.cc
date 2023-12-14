@@ -73,6 +73,7 @@
 
 // Custom
 #include "fingerprinting/public/cpp/manager.h"
+#include "fingerprinting/utility/v8.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
 
 namespace blink {
@@ -678,36 +679,38 @@ void WorkerThread::InitializeOnWorkerThread(
       fingerprint_manager->Enabled(&enabled);
       LOG(INFO) << "fingerprinting enabled: " << enabled;
       if (enabled) {
-        // std::string evasions_js;
-        // fingerprint_manager->GetEvasions(&evasions_js);
-        LOG(INFO) << "worker_thread: fingerprint enabled";
+        std::string evasions_js;
+        fingerprint_manager->GetEvasions(fingerprinting::mojom::HookTargetType::WORKER,&evasions_js);
+        fingerprinting::utility::RunWithUtils(context, evasions_js);
       }
-      v8::MicrotasksScope microtasks(GetIsolate(), context->GetMicrotaskQueue(),
-                                     v8::MicrotasksScope::kDoNotRunMicrotasks);
 
-      v8::Context::Scope context_scope(
-          context);  // Enter the context for compiling and running.
-
-      // Create a string containing the JavaScript source code you want to
-      // execute.
-      v8::Local<v8::String> source =
-          v8::String::NewFromUtf8(GetIsolate(),
-                                  "console.log('hello world from worker')",
-                                  v8::NewStringType::kNormal)
-              .ToLocalChecked();
-
-      // Compile the source code.
-      v8::Local<v8::Script> script =
-          v8::Script::Compile(context, source).ToLocalChecked();
-
-      // Run the script to get the result.
-      v8::Local<v8::Value> result = script->Run(context).ToLocalChecked();
-
-      // Convert the result to a string and print it (this is optional and only
-      // for demonstration purposes).
-      v8::String::Utf8Value utf8(GetIsolate(), result);
-
-      LOG(INFO) << "worker_thread: injection result: " << *utf8;
+      //
+      // v8::MicrotasksScope microtasks(GetIsolate(), context->GetMicrotaskQueue(),
+      //                                v8::MicrotasksScope::kDoNotRunMicrotasks);
+      //
+      // v8::Context::Scope context_scope(
+      //     context);  // Enter the context for compiling and running.
+      //
+      // // Create a string containing the JavaScript source code you want to
+      // // execute.
+      // v8::Local<v8::String> source =
+      //     v8::String::NewFromUtf8(GetIsolate(),
+      //                             "console.log('hello world from worker')",
+      //                             v8::NewStringType::kNormal)
+      //         .ToLocalChecked();
+      //
+      // // Compile the source code.
+      // v8::Local<v8::Script> script =
+      //     v8::Script::Compile(context, source).ToLocalChecked();
+      //
+      // // Run the script to get the result.
+      // v8::Local<v8::Value> result = script->Run(context).ToLocalChecked();
+      //
+      // // Convert the result to a string and print it (this is optional and only
+      // // for demonstration purposes).
+      // v8::String::Utf8Value utf8(GetIsolate(), result);
+      //
+      // LOG(INFO) << "worker_thread: injection result: " << *utf8;
     }
 
     SetThreadState(ThreadState::kRunning);
