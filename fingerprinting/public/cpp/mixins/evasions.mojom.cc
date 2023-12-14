@@ -13,14 +13,14 @@ void EvasionsMixinMojom::GetEvasions(
       std::to_string(std::hash<mojom::HookTargetType>{}(target));
 
   // First, attempt to retrieve from cache.
-  core::evasions::Package* pack = nullptr;
+  absl::optional<core::evasions::Package> pack;
 
-  if (!this->cache.Get<core::evasions::Package>(cache_key, *pack)) {
+  if (!this->cache.Get<core::evasions::Package>(cache_key, pack)) {
     // Create the package and cache it
-    *pack = core::evasions::Package::Pack(
+    pack = core::evasions::Package::Pack(
         static_cast<core::evasions::HookTargetType>(target), _disable_evasions);
 
-    this->cache.Set<core::evasions::Package>(cache_key, *pack);
+    this->cache.Set<core::evasions::Package>(cache_key, pack.value());
   }
   
   std::move(callback).Run(pack->get_iife());
