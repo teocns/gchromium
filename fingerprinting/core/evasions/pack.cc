@@ -12,7 +12,7 @@ void Package::Register(std::shared_ptr<Hook> hook) {
 std::string Package::get_iife() {
   std::string iife = "(function(){";
   for (auto& hook : this->hooks) {
-    iife += hook->get_definition(this->target);
+    iife += hook->get_iife(this->target);
   }
   iife += "})();";
   return iife;

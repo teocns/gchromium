@@ -1,9 +1,11 @@
 #include "v8/include/v8.h"
+#include <format>
 #include <set>
 #include <string>
 #include "base/logging.h"
 
-namespace fingerprinting::utility::v8_patcher{
+namespace fingerprinting::utility {
+using v8::Local;
 
 void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {
   v8::Isolate* isolate = innerArgs.GetIsolate();
@@ -424,24 +426,42 @@ void RunWithUtils(v8::Local<v8::Context> context, std::string source_code) {
   v8::MicrotasksScope microtasks(isolate, v8::MicrotasksScope::kRunMicrotasks);
   v8::Context::Scope context_scope(context);
 
-  v8::Local<v8::String> source =
-      v8::String::NewFromUtf8(isolate, source_code.c_str()).ToLocalChecked();
-  v8::Local<v8::Script> script =
-      v8::Script::Compile(context, source).ToLocalChecked();
+  // Createa an IIFE
+  v8::Local<v8::String> js_src =
+      v8::String::NewFromUtf8(
+          isolate,
+          std::format("(function (PatchAccessor,PatchValue){{ {} }})",
+                      source_code)
+              .c_str())
+          .ToLocalChecked();
 
-  // Bind Patch functions to the context, without exposing them to the global
-  // scope
-  v8::Local<v8::Function> fnPatchAccessor =
-      v8::Function::New(context, PatchAccessor).ToLocalChecked();
-  v8::Local<v8::Function> fnPatchValue =
-      v8::Function::New(context, PatchValue).ToLocalChecked();
+  v8::Local<v8::Script> script =
+      v8::Script::Compile(isolate->GetCurrentContext(), js_src)
+          .ToLocalChecked();
+
+  v8::TryCatch try_catch(isolate);
+
+  if (!v8::Script::Compile(isolate->GetCurrentContext(), js_src)
+           .ToLocal(&script)) {
+    v8::String::Utf8Value error(isolate, try_catch.Exception());
+    LOG(ERROR) << "Failed compiling evasions script" << *error;
+    return;
+  }
+
+  v8::Local<v8::Value> args[2];
+
+  args[0] = v8::FunctionTemplate::New(isolate, PatchAccessor)
+                ->GetFunction(context)
+                .ToLocalChecked();
+
+  args[1] = v8::FunctionTemplate::New(isolate, PatchAccessor)
+                ->GetFunction(context)
+                .ToLocalChecked();
 
   // Run the `source` code within a function scoped into the global context
-  v8::Local<v8::Object> global = context->Global();
-  v8::Local<v8::Value> args[2] = {fnPatchAccessor, fnPatchValue};
-  // Todo: error management
   (void)script->Run(context).ToLocalChecked().As<v8::Function>()->Call(
-      context, global, 2, args);
+      context, context->Global(), 2, args);
+
 }
 
-}  // namespace fingerprinting
+}  // namespace fingerprinting::utility

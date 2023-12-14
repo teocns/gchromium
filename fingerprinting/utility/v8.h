@@ -9,7 +9,7 @@
 #include <set>
 #include <string>
 
-namespace fingerprinting::utility::v8_patcher {
+namespace fingerprinting::utility{
 
 void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs);
 

@@ -13,11 +13,17 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE) hWebGL : public Hook {
     return R"(
         console.info("WebGL patch enabled for target. Argumets: ",
         arguments);
+      try{
+  console.log([PatchValue,PatchAccessor])
+  }catch(e){
+    console.error(e)
+  }
     )";
   }
 };
 
-// REGISTER_HOOK(webgl, hWebGL)
+
+REGISTER_HOOK(webgl, hWebGL)
 
 }  // namespace fingerprinting::core::evasions
 #endif  // FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H

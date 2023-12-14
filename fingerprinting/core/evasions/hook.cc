@@ -12,7 +12,7 @@ std::string Hook::get_definition(HookTargetType target) {
 }
 
 std::string Hook::get_iife(HookTargetType target) {
-  return std::format("({})()", this->get_definition(target));
+  return std::format("(function(){{ {} }})()", this->get_impl(target));
 }
 
 std::shared_ptr<Hook> HookFactory::Create(const std::string& codename) {
