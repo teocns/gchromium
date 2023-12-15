@@ -571,7 +571,8 @@ blink::UserAgentMetadata GetUserAgentMetadata(const PrefService* pref_service) {
       return patched_ua_metadata.value();
     }
     else{
-      LOG(WARNING) << "UACH internal mock disabled: fingerprint has no UACH.";
+      LOG(WARNING) << "Fingerprint provided no UACH. Disabling globally";
+      return metadata;
     }
   }
 
