@@ -2,23 +2,37 @@
 #include "v8/include/v8-context.h"
 namespace fingerprinting::core::evasions {
 
-std::string Hook::get_definition(HookTargetType target) {
+std::string Hook::get_definition() {
   /*
    * Geneerates the JavaScript definition of the "hook" function
    * A random name will be generated for
    */
-  return std::format("{} = function(){{ {} }};", this->signature,
-                     this->get_impl(target));
+  return std::format("{} = function(){{ {} }};", this->codename,
+                     this->get_impl());
 }
 
-std::string Hook::get_iife(HookTargetType target) {
-  return std::format("(function(){{ {} }})()", this->get_impl(target));
+std::string Hook::get_iife() {
+#ifdef NDEBUG
+  return std::format("(function(){{ {} }})()", get_impl(target));
+#else
+  return std::format("(function(){{ console.info('Running hook {}'); {} }})()", codename, get_impl());
+#endif
 }
 
-std::shared_ptr<Hook> HookFactory::Create(const std::string& codename) {
+std::unique_ptr<Hook> HookFactory::Create(const std::string& codename) {
   auto it = GetRegistry().find(codename);
   if (it != GetRegistry().end()) {
     return it->second();
+  }
+  return nullptr;
+}
+
+
+std::unique_ptr<Hook> HookFactory::Create(const std::string& codename, const std::string impl) {
+  auto it = GetRegistry().find(codename);
+  if (it != GetRegistry().end()) {
+    auto hook = it->second();
+    hook->impl = impl;
   }
   return nullptr;
 }

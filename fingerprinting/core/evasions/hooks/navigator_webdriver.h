@@ -6,26 +6,23 @@
 
 namespace fingerprinting::core::evasions {
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE) hWebGL : public Hook {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE) hNavigatorWebdriver : public Hook {
  public:
-  std::string codename = "webgl";
-
+  std::string codename = "navigator_webdriver";
   std::string impl = R"(
-      try{
-console.log([PatchValue,PatchAccessor])
-
-
-
-globalThis.PatchAccessor = PatchAccessor;
-globalThis.PatchValue = PatchValue;
-
-  }catch(e){
-    console.error(e)
-  }
+PatchAccessor(
+ Navigator.prototype,
+ 'webdriver',
+ {
+   get: function(target,thisArg,...args){
+     return false;
+   }
+ }
+)
     )";
 };
 
-REGISTER_HOOK(webgl, hWebGL)
+REGISTER_HOOK(navigator_webdriver, hNavigatorWebdriver)
 
 }  // namespace fingerprinting::core::evasions
 #endif  // FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H

@@ -1,0 +1,22 @@
+module fingerprinting.mojom;
+
+import "mojo/public/mojom/base/values.mojom";
+
+enum HookTargetType {
+  PAGE,
+  WORKER,
+  SHARED_WORKER,
+};
+
+struct Hook {
+  string body;
+  string codename;
+};
+
+struct EvasionsPackage {
+  array<Hook> hooks;
+  HookTargetType target;
+  mojo_base.mojom.Value fingerprint;
+};
+
+

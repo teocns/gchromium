@@ -15,11 +15,17 @@ struct COMPONENT_EXPORT(FINGERPRINTING_CORE) Package {
 public:
   explicit Package(HookTargetType target) : target(target) {}
   HookTargetType target;
-  void Register(std::shared_ptr<Hook>);
+  void Register(std::unique_ptr<Hook> hook) {
+    this->hooks.push_back(std::move(*hook));
+  }
+
+  void Register(Hook&& hook) {
+    this->hooks.push_back(std::move(hook));
+  }
 
   static Package Pack(HookTargetType, std::set<std::string>&);
 
-  std::vector<std::shared_ptr<Hook>> hooks;
+  std::vector<Hook> hooks;
 
   std::string get_iife();
 };

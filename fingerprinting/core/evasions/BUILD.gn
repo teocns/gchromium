@@ -1,0 +1,21 @@
+
+source_set("evasions") {
+  defines = [
+    "IS_FINGERPRINTING_EVASIONS_IMPL"
+  ]
+  sources = [
+    "v8.h",
+    "v8.cc",
+  ]
+
+  deps = [
+    "//base",
+  ]
+
+  public_deps = [
+    "//v8",
+  ]
+
+  visibility = [ "*" ]
+
+}

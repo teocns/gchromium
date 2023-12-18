@@ -9,6 +9,7 @@ source_set("core") {
     "evasions/hook.cc",
     "evasions/hook.h",
     "evasions/hooks/webgl.h",
+    "evasions/hooks/navigator_webdriver.h",
     "evasions/pack.cc",
     "evasions/pack.h",
     "manager.h",

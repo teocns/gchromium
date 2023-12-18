@@ -5,14 +5,11 @@
 
 namespace fingerprinting::core::evasions {
 
-void Package::Register(std::shared_ptr<Hook> hook) {
-  this->hooks.push_back(hook);
-}
 
 std::string Package::get_iife() {
   std::string iife = "(function(){";
   for (auto& hook : this->hooks) {
-    iife += hook->get_iife(this->target);
+    iife += hook.get_iife();
   }
   iife += "})();";
   return iife;
@@ -31,12 +28,10 @@ Package Package::Pack(HookTargetType target, std::set<std::string>& filters) {
       continue;
     }
 
-    std::shared_ptr<Hook> hook = HookFactory::Create(name);
-
+    std::unique_ptr<Hook> hook = HookFactory::Create(name);
     if (hook != nullptr) {
-      pack.Register(hook);
+      pack.Register(std::move(hook));
     }
-
   }
 
   return pack;
