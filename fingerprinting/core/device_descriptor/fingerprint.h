@@ -8,11 +8,10 @@
 
 namespace fingerprinting {
 
-using Val = base::Value;
 
 class COMPONENT_EXPORT(FINGERPRINTING_CORE) IFingerprint {
  public:
-  virtual bool Find(std::vector<std::string>&& keys, Val*& out) = 0;
+  virtual bool Find(std::vector<std::string>&& keys, base::Value*& out) = 0;
   virtual bool Find(std::vector<std::string>&& keys) = 0;
 };
 

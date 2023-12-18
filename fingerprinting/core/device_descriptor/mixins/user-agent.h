@@ -40,7 +40,7 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE)  UAMixin : protected virtual IFinger
 
  public:
   bool GetUserAgent(std::string* out) {
-    Val* val = nullptr;
+    base::Value* val = nullptr;
     if (Find({"navigator", "userAgent"}, val) && val->is_string()) {
       *out = val->GetString();
       return true;

@@ -9,32 +9,33 @@
 
 namespace fingerprinting {
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE) Fingerprint final : public UAMixin,
-                                                protected virtual IFingerprint {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE) Fingerprint final
+    : public UAMixin,
+      protected virtual IFingerprint {
  public:
   Fingerprint& operator=(Fingerprint&& other);
   Fingerprint(Fingerprint&& other);
 
   // Destructor
   ~Fingerprint();
-  explicit Fingerprint(Val& value);
+  explicit Fingerprint(base::Value& value);
 
-  explicit Fingerprint(Val&& value);
+  explicit Fingerprint(base::Value&& value);
 
-  bool Find(std::vector<std::string>&& keys, Val*& out) override;
+  bool Find(std::vector<std::string>&& keys, base::Value*& out) override;
   bool Find(std::vector<std::string>&& keys) override;
   static bool FromString(const std::string& fingerprint_str,
                          std::unique_ptr<Fingerprint>& out);
 
  private:
-  Val value_;
-  std::unordered_map<std::size_t, Val*> cache_;
+  base::Value value_;
+  std::unordered_map<std::size_t, base::Value*> cache_;
 
   std::size_t hash_keys(std::vector<std::string>& keys);
 
-  bool find_in_cache(const std::size_t& hash, Val*& out);
+  bool find_in_cache(const std::size_t& hash, base::Value*& out);
 
-  bool find_(std::vector<std::string>& keys, Val*&);
+  bool find_(std::vector<std::string>& keys, base::Value*&);
 };
 
 }  // namespace fingerprinting
