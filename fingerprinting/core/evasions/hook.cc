@@ -1,5 +1,4 @@
 #include "fingerprinting/core/evasions/hook.h"
-#include "v8/include/v8-context.h"
 namespace fingerprinting::core::evasions {
 
 std::string Hook::get_definition() {
