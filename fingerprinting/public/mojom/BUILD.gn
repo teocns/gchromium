@@ -13,6 +13,8 @@ component("evasions_traits") {
 
   public_deps = [
     ":mojom_shared",
+    "//fingerprinting/public/cpp/evasions",
+    "//fingerprinting/core",
     "//base",
   ]
 }
@@ -42,7 +44,7 @@ mojom("mojom") {
     {
       types = [
         {
-          mojom = "fingerprinting.mojom.evasions.Package"
+          mojom = "fingerprinting.mojom.EvasionsPackage"
           cpp = "::fingerprinting::core::evasions::Package"
         },
       ]
@@ -52,7 +54,17 @@ mojom("mojom") {
     {
       types = [
         {
-          mojom = "fingerprinting.mojom.evasions.Hook"
+          mojom = "fingerprinting.mojom.HookTargetType"
+          cpp = "::fingerprinting::core::evasions::HookTargetType"
+        },
+      ]
+      traits_headers = [ "evasions_traits.h" ]
+      traits_public_deps = [ ":evasions_traits" ]
+    },
+    {
+      types = [
+        {
+          mojom = "fingerprinting.mojom.Hook"
           cpp = "::fingerprinting::core::evasions::Hook"
         },
       ]

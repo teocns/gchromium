@@ -1,12 +1,6 @@
 #include "fingerprinting/public/mojom/evasions_traits.h"
-#include "fingerprinting/core/evasions/hook.h"
 #include "fingerprinting/public/mojom/evasions.mojom-shared.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
-
-// Forward declaration of the `Package` structure, if not already included
-// namespace ::fingerprinting::core::evasions {
-// struct Package;
-// }
 
 // Mojo traits specialization for the `Package` structure
 namespace mojo {
@@ -23,6 +17,10 @@ bool StructTraits<::fingerprinting::mojom::EvasionsPackageDataView,
   if (!data_view.ReadTarget(&out->target)) {
     return false;
   }
+
+  // if (!data_view.ReadFingerprint(&out->fingerprint)) {
+  //   return false;
+  // }
 
   return true;
 }

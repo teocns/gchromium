@@ -12,7 +12,7 @@ class FINGERPRINTING_PUBLIC_EXPORT EvasionsMixinMojom
     : virtual public internal::FingerprintManagerBase {
  public:
   void GetEvasions(
-      mojom::HookTargetType target,
+      core::evasions::HookTargetType target,
       mojom::FingerprintManager::GetEvasionsCallback callback) override;
  private:
   // TODO: Evasions codenames to disable, passed by --disable-evasions launch
@@ -24,10 +24,10 @@ class FINGERPRINTING_PUBLIC_EXPORT EvasionsMixinMojom
 
 namespace mojo{
 
-// template<> struct mojo::EnumTraits<::fingerprinting::mojomPack, ::fingerprinting::core::evasions::Package> {
+// template<> struct mojo::EnumTraits<::fingerprinting::mojom::EvasionsPack, ::fingerprinting::core::evasions::Package> {
 //
-//   static ::fingerprinting::mojomPack ToMojom(::fingerprinting::core::evasions::Package package) {
-//     return ::fingerprinting::mojomPack(
+//   static ::fingerprinting::mojom::EvasionsPack ToMojom(::fingerprinting::core::evasions::Package package) {
+//     return ::fingerprinting::mojom::EvasionsPack(
 //         package.target,
 //         mojo::ConvertTo<std::map<std::string, std::string>>(package.hooks)
 //     );
@@ -49,16 +49,16 @@ namespace mojo{
 // };
 //
 // template <>
-// struct StructTraits<fingerprinting::mojomPackDataView, fingerprinting::mojomPack> {
-//   static fingerprinting::mojom::HookTargetType target(const fingerprinting::mojomPack& pack) {
+// struct StructTraits<fingerprinting::mojom::EvasionsPackDataView, fingerprinting::mojom::EvasionsPack> {
+//   static fingerprinting::mojom::HookTargetType target(const fingerprinting::mojom::EvasionsPack& pack) {
 //     return pack.target;
 //   }
 //
-//   static const mojo_base::mojom::Value& hooks(const fingerprinting::mojomPack& pack) {
+//   static const mojo_base::mojom::Value& hooks(const fingerprinting::mojom::EvasionsPack& pack) {
 //     return pack.hooks;
 //   }
 //
-//   static bool Read(fingerprinting::mojomPackDataView data_view, fingerprinting::mojomPack* out);
+//   static bool Read(fingerprinting::mojom::EvasionsPackDataView data_view, fingerprinting::mojom::EvasionsPack* out);
 // };
 
 }  // namespace mojo

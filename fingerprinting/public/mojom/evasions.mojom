@@ -14,9 +14,14 @@ struct Hook {
 };
 
 struct EvasionsPackage {
-  array<Hook> hooks;
-  HookTargetType target;
+  array<fingerprinting.mojom.Hook> hooks;
+  fingerprinting.mojom.HookTargetType target;
   mojo_base.mojom.Value fingerprint;
 };
+
+
+
+
+
 
 

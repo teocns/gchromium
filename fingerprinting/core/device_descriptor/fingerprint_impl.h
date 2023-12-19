@@ -9,7 +9,7 @@
 
 namespace fingerprinting {
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE) Fingerprint final
+class COMPONENT_EXPORT(FINGERPRINTING_CORE_DEVICE_DESCRIPTOR) Fingerprint final
     : public UAMixin,
       protected virtual IFingerprint {
  public:

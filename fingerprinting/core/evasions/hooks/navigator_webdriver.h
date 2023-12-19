@@ -6,7 +6,7 @@
 
 namespace fingerprinting::core::evasions {
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE) hNavigatorWebdriver : public Hook {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hNavigatorWebdriver : public Hook {
  public:
   std::string codename = "navigator_webdriver";
   std::string impl = R"(

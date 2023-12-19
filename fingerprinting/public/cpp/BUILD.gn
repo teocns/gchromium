@@ -20,6 +20,7 @@ shared_library("cpp") {
   deps = [
     "//base",
     "//fingerprinting/utility:user_agent",
+    "//fingerprinting/utility:v8",
     "//fingerprinting/core",
   ]
 

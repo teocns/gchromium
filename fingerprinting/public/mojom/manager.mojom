@@ -19,5 +19,5 @@ interface FingerprintManager {
   [Sync]
   GetUserAgentMetadata() => (blink.mojom.UserAgentMetadata? metadata);
   [Sync]
-  GetEvasions(HookTargetType target) => (string iife);
+  GetEvasions(fingerprinting.mojom.HookTargetType target) => (fingerprinting.mojom.EvasionsPackage pack);
 };

@@ -17,7 +17,7 @@ const uint32_t kVersion =
          // third_party/blink/common/user_agent/user_agent_metadata.cc
 }
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE)  UAMixin : protected virtual IFingerprint {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS_DEVICE_DESCRIPTOR)  UAMixin : protected virtual IFingerprint {
   /**
    "highEntropyValues": {
 "architecture": "arm",

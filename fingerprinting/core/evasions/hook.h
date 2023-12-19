@@ -17,7 +17,7 @@ enum HookTargetType {
   SHARED_WORKER,
 };
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE) Hook {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Hook {
   /*
    * Each hook represents a patch for a specific JS feature API
    * (e.g. WebGL, Canvas, etc.) A hook instance binds with a

@@ -6,7 +6,7 @@
 
 namespace fingerprinting::core::evasions {
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE) hWebGL : public Hook {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hWebGL : public Hook {
  public:
   std::string codename = "webgl";
 
