@@ -1,5 +1,6 @@
 #include "fingerprinting/public/mojom/evasions_traits.h"
 #include "fingerprinting/core/evasions/hook_factory.h"
+#include "fingerprinting/core/evasions/pack.h"
 #include "fingerprinting/public/mojom/evasions.mojom-shared.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 
@@ -7,9 +8,9 @@
 namespace mojo {
 
 bool StructTraits<::fingerprinting::mojom::EvasionsPackageDataView,
-                  std::unique_ptr<::fingerprinting::core::evasions::Package>>::
+                  std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>>::
     Read(::fingerprinting::mojom::EvasionsPackageDataView data_view,
-         std::unique_ptr<::fingerprinting::core::evasions::Package>* out) {
+         std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>* out) {
   // The deserialization logic would be here, for example:
   if (!data_view.ReadHooks(&(*out)->hooks)) {
     return false;

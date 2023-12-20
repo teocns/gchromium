@@ -44,8 +44,7 @@ mojom("mojom") {
       types = [
         {
           mojom = "fingerprinting.mojom.EvasionsPackage"
-          cpp = "::std::unique_ptr<::fingerprinting::core::evasions::Package>"
-          move_only = true
+          cpp = "::std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>"
         },
       ]
       traits_headers = [ "evasions_traits.h" ]

@@ -8,25 +8,30 @@
 #include "fingerprinting/core/evasions/hook.h"
 namespace fingerprinting::core::evasions {
 
-struct COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Package {
+struct COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) EvasionsPackage {
   /*
    * Represents a packed collection of evasions ready to run as-a-script
    */
 
  public:
-  Package() = default;
+  EvasionsPackage() = default;
 
-  Package(const Package& other);
-  Package& operator=(const Package&) = delete;
+  EvasionsPackage(const EvasionsPackage& other) = default;
 
-  explicit Package(HookTargetType target) : target(target) {}
+  // Other constructors default
+  EvasionsPackage(EvasionsPackage &&other) = default;
+  EvasionsPackage &operator=(const EvasionsPackage &other) = default;
+  EvasionsPackage &operator=(EvasionsPackage &&other) = default;
+
+  explicit EvasionsPackage(HookTargetType target) : target(target) {}
+
   HookTargetType target;
 
   void Register(std::unique_ptr<Hook> hook) {
     this->hooks.push_back(std::move(hook));
   }
-
-  static std::unique_ptr<Package> Pack(HookTargetType,
+ 
+  static std::shared_ptr<EvasionsPackage> Pack(HookTargetType,
                       Fingerprint*,
                       std::set<std::string> = std::set<std::string>());
 

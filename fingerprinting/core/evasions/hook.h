@@ -35,8 +35,9 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Hook {
  public:
   Hook() = default;
   Hook(const Hook& other);
-  Hook& operator=(const Hook&) = delete;
-
+  Hook(Hook &&other) = default;
+  Hook &operator=(const Hook &other) = default;
+  Hook &operator=(Hook &&other) = default;
   // Hook(const Hook& other);
   // Hook& operator=(const Hook&) = delete;
   //   explicit Hook()

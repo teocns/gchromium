@@ -7,7 +7,7 @@
 namespace fingerprinting::core::evasions {
 
 
-std::string Package::get_iife() {
+std::string EvasionsPackage::get_iife() {
   std::string iife = "(function(){";
   for (auto& hook : this->hooks) {
     iife += hook->get_iife();
@@ -16,11 +16,11 @@ std::string Package::get_iife() {
   return iife;
 }
 
-std::unique_ptr<Package> Package::Pack(HookTargetType target, Fingerprint* fingerprint, std::set<std::string> filters) {
+std::shared_ptr<EvasionsPackage> EvasionsPackage::Pack(HookTargetType target, Fingerprint* fingerprint, std::set<std::string> filters) {
   // Returns a compiled, ready-to-inject JS function string
   // Filters are the evasions to disable
 
-  auto pack = std::make_unique<Package>(target);
+  auto pack = std::make_unique<EvasionsPackage>(target);
   for (auto& hook_descriptor : HookFactory::GetRegistry()) {
     const std::string& name = hook_descriptor.first;
 
@@ -30,7 +30,6 @@ std::unique_ptr<Package> Package::Pack(HookTargetType target, Fingerprint* finge
     }
 
     std::unique_ptr<Hook> hook = HookFactory::Create(name);
-
     if (hook != nullptr) {
       pack->Register(std::move(hook));
     }
