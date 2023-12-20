@@ -15,10 +15,10 @@ std::string Package::get_iife() {
   return iife;
 }
 
-Package Package::Pack(HookTargetType target, std::set<std::string>& filters) {
+Package Package::Pack(HookTargetType target, std::shared_ptr<Fingerprint> fingerprint, std::set<std::string> filters) {
   // Returns a compiled, ready-to-inject JS function string
   // Filters are the evasions to disable
-  Package pack(target);
+  Package pack(target, fingerprint);
 
   for (auto& hook_descriptor : HookFactory::GetRegistry()) {
     const std::string& name = hook_descriptor.first;
