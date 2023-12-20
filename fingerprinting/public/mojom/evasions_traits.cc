@@ -1,4 +1,5 @@
 #include "fingerprinting/public/mojom/evasions_traits.h"
+#include "fingerprinting/core/evasions/hook_factory.h"
 #include "fingerprinting/public/mojom/evasions.mojom-shared.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 
@@ -6,15 +7,15 @@
 namespace mojo {
 
 bool StructTraits<::fingerprinting::mojom::EvasionsPackageDataView,
-                  ::fingerprinting::core::evasions::Package>::
+                  std::unique_ptr<::fingerprinting::core::evasions::Package>>::
     Read(::fingerprinting::mojom::EvasionsPackageDataView data_view,
-         ::fingerprinting::core::evasions::Package* out) {
+         std::unique_ptr<::fingerprinting::core::evasions::Package>* out) {
   // The deserialization logic would be here, for example:
-  if (!data_view.ReadHooks(&out->hooks)) {
+  if (!data_view.ReadHooks(&(*out)->hooks)) {
     return false;
   }
 
-  if (!data_view.ReadTarget(&out->target)) {
+  if (!data_view.ReadTarget(&(*out)->target)) {
     return false;
   }
 
@@ -26,20 +27,26 @@ bool StructTraits<::fingerprinting::mojom::EvasionsPackageDataView,
 }
 
 bool StructTraits<::fingerprinting::mojom::HookDataView,
-                  ::fingerprinting::core::evasions::Hook>::
+                  std::unique_ptr<::fingerprinting::core::evasions::Hook>>::
     Read(::fingerprinting::mojom::HookDataView data_view,
-         ::fingerprinting::core::evasions::Hook* out) {
-  std::string body;
-  if (!data_view.ReadBody(&body)) {
-    return false;
-  }
+         std::unique_ptr<::fingerprinting::core::evasions::Hook>* out) {
+  // std::string body;
+  // if (!data_view.ReadBody(&body)) {
+  //   return false;
+  // }
 
   std::string codename;
   if (!data_view.ReadCodename(&codename)) {
     return false;
   }
 
-  *out = ::fingerprinting::core::evasions::Hook(body, codename);
+  // auto pHook = fingerprinting::core::evasions::HookFactory::Create(codename);
+  //
+  // if (pHook == nullptr) {
+  //   return false;
+  // }
+
+  // *out = std::move(pHook);
 
   return true;
 }

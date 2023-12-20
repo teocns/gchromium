@@ -9,7 +9,6 @@ enum HookTargetType {
 };
 
 struct Hook {
-  string body;
   string codename;
 };
 

@@ -57,7 +57,7 @@ source_set("evasions"){
     "evasions/hook_factory.cc",
     "evasions/hook_factory.h",
     "evasions/hooks/webgl.h",
-    "evasions/hooks/navigator_webdriver.h",
+    # "evasions/hooks/navigator_webdriver.h",
     "evasions/pack.cc",
     "evasions/pack.h",
   ]

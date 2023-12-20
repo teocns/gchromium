@@ -25,9 +25,6 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) HookFactory {
 
   static std::unique_ptr<Hook> Create(const std::string& key);
 
-  static std::unique_ptr<Hook> Create(const std::string& key,
-                                      const std::string impl);
-
   static std::map<std::string, HookConstructor>& GetRegistry();
 };
 

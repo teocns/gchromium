@@ -9,15 +9,15 @@ std::unique_ptr<Hook> HookFactory::Create(const std::string& codename) {
   return nullptr;
 }
 
-std::unique_ptr<Hook> HookFactory::Create(const std::string& codename,
-                                          const std::string impl) {
-  auto it = GetRegistry().find(codename);
-  if (it != GetRegistry().end()) {
-    auto hook = it->second();
-    hook->impl = impl;
-  }
-  return nullptr;
-}
+// std::unique_ptr<Hook> HookFactory::Create(const std::string& codename,
+//                                           const std::string impl) {
+//   auto it = GetRegistry().find(codename);
+//   if (it != GetRegistry().end()) {
+//     auto hook = it->second();
+//     hook->impl = impl;
+//   }
+//   return nullptr;
+// }
 
 void HookFactory::Register(const std::string& key,
                            HookConstructor constructor) {

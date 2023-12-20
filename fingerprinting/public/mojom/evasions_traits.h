@@ -7,7 +7,6 @@
 
 #include "base/component_export.h"
 #include "base/values.h"
-// #include "fingerprinting/public/cpp/evasions/pack.h"
 #include "fingerprinting/core/evasions/hook.h"
 #include "fingerprinting/core/evasions/pack.h"
 #include "fingerprinting/public/mojom/evasions.mojom-shared.h"
@@ -30,29 +29,24 @@ struct COMPONENT_EXPORT(EVASIONS_TRAITS)
 template <>
 struct COMPONENT_EXPORT(EVASIONS_TRAITS)
     StructTraits<::fingerprinting::mojom::EvasionsPackageDataView,
-                 ::fingerprinting::core::evasions::Package> {
+                 std::unique_ptr<::fingerprinting::core::evasions::Package>> {
   static bool Read(::fingerprinting::mojom::EvasionsPackageDataView,
-                   ::fingerprinting::core::evasions::Package*);
+                   std::unique_ptr<::fingerprinting::core::evasions::Package>*);
 
-  static std::vector<::fingerprinting::core::evasions::Hook> hooks( const ::fingerprinting::core::evasions::Package& obj) {
-    return obj.hooks;
+  static const std::vector<
+      std::unique_ptr<::fingerprinting::core::evasions::Hook>>
+
+  hooks(const std::unique_ptr<::fingerprinting::core::evasions::Package>& obj) {
+    return std::vector<
+        std::unique_ptr<::fingerprinting::core::evasions::Hook>>();
   }
 
-  static ::fingerprinting::core::evasions::HookTargetType target(const ::fingerprinting::core::evasions::Package& obj) {
-    return obj.target;
-    //
-    // switch (type) {
-    //   case ::fingerprinting::core::evasions::HookTargetType::PAGE:
-    //     return fingerprinting::mojom::HookTargetType::PAGE;
-    //   case ::fingerprinting::core::evasions::HookTargetType::WORKER:
-    //     return fingerprinting::mojom::HookTargetType::WORKER;
-    //   case ::fingerprinting::core::evasions::HookTargetType::SHARED_WORKER:
-    //     return fingerprinting::mojom::HookTargetType::SHARED_WORKER;
-    // }
-    // NOTREACHED();
+  static::fingerprinting::core::evasions::HookTargetType target( const std::unique_ptr<::fingerprinting::core::evasions::Package>& obj) {
+    return obj->target;
   }
 
-  static base::Value fingerprint(const ::fingerprinting::core::evasions::Package&){
+  static base::Value fingerprint(
+const std::unique_ptr<::fingerprinting::core::evasions::Package>& obj) {
     return base::Value();
   }
 };
@@ -61,15 +55,13 @@ struct COMPONENT_EXPORT(EVASIONS_TRAITS)
 template <>
 struct COMPONENT_EXPORT(EVASIONS_TRAITS)
     StructTraits<::fingerprinting::mojom::HookDataView,
-                 ::fingerprinting::core::evasions::Hook> {
+                 std::unique_ptr<::fingerprinting::core::evasions::Hook>> {
   static bool Read(::fingerprinting::mojom::HookDataView,
-                   ::fingerprinting::core::evasions::Hook*);
+                   std::unique_ptr<::fingerprinting::core::evasions::Hook>*);
 
-  static std::string body(::fingerprinting::core::evasions::Hook& obj) {
-    return obj.get_impl();
-  }
-  static std::string codename(::fingerprinting::core::evasions::Hook& obj) {
-    return obj.codename;
+  static std::string codename(
+      const std::unique_ptr<::fingerprinting::core::evasions::Hook>& obj) {
+    return obj->codename();
   }
 };
 

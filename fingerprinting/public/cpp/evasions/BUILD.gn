@@ -1,23 +1,23 @@
-import("//build/config/chrome_build.gni")
-
-source_set("evasions") {
-  sources = [
-    "hook.h",
-    "hook.cc",
-    "pack.h",
-    "pack.cc",
-    "export.h",
-  ]
-
-  visibility = [ "*" ]
-
-  defines = [ "FINGERPRINTING_PUBLIC_IMPL" ]
-
-  deps = [
-    "//base",
-    "//fingerprinting/core",
-    "//v8",
-  ]
-
-}
-
+# import("//build/config/chrome_build.gni")
+#
+# source_set("evasions") {
+#   sources = [
+#     "hook.h",
+#     "hook.cc",
+#     "pack.h",
+#     "pack.cc",
+#     "export.h",
+#   ]
+#
+#   visibility = [ "*" ]
+#
+#   defines = [ "FINGERPRINTING_PUBLIC_IMPL" ]
+#
+#   deps = [
+#     "//base",
+#     "//fingerprinting/core",
+#     "//v8",
+#   ]
+#
+# }
+#

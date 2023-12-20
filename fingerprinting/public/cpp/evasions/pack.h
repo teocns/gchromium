@@ -14,6 +14,7 @@
 
 namespace fingerprinting::evasions {
 
+
 struct COMPONENT_EXPORT(FINGERPRINTING_PUBLIC_EVASIONS) Package
     : virtual ::fingerprinting::core::evasions::Package {
   /*
@@ -25,9 +26,6 @@ struct COMPONENT_EXPORT(FINGERPRINTING_PUBLIC_EVASIONS) Package
   void Inject(v8::Local<v8::Context> context);
 
   ::fingerprinting::Fingerprint fingerprint;
-
-
-  std::vector<Hook> hooks;
 
 };
 
