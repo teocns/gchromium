@@ -46,7 +46,18 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE) Cache {
 
     cache_[key] = value;
   }
+  template <typename T>
+  bool Set(const std::string& key, std::shared_ptr<T> value) {
+    // Overload for shared pointers
+    std::unique_lock<std::mutex> map_lock(key_mutexes_map_mutex_);
+    auto& key_mutex = key_mutexes_[key];
+    map_lock.unlock();  // unlock map mutex as soon as possible
 
+    std::unique_lock<std::mutex> key_lock(key_mutex);  // lock for specific key
+
+    cache_[key] = value;
+    return true;
+  }
   template <typename T>
   void Set(const std::string& key, T&& value) {
     std::unique_lock<std::mutex> map_lock(key_mutexes_map_mutex_);
@@ -76,7 +87,26 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE) Cache {
     }
     return false;  // Key not found in cache
   }
+  template <typename T>
+  bool Get(const std::string& key, std::shared_ptr<T>& value) {
+    // Overload for shared pointers
+    std::unique_lock<std::mutex> map_lock(key_mutexes_map_mutex_);
+    auto it = key_mutexes_.find(key);
+    if (it == key_mutexes_.end()) {
+      // Key not found in the mutex map; maybe it should be created here?
+      return false;
+    }
+    std::mutex& key_mutex = it->second;
+    map_lock.unlock();  // unlock as soon as possible
 
+    std::unique_lock<std::mutex> key_lock(key_mutex);  // lock for specific key
+    auto cache_it = cache_.find(key);
+    if (cache_it != cache_.end()) {
+      value = std::any_cast<std::shared_ptr<T>>(cache_[key]);
+      return true;
+    }
+    return false;  // Key not found in cache
+  }
   template <typename T>
   bool Get(const std::string& key, absl::optional<T>& value) {
     // Overload for absl::optional
