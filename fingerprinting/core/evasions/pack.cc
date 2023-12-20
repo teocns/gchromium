@@ -1,6 +1,7 @@
 #include "fingerprinting/core/evasions/pack.h"
 #include <vector>
 #include "fingerprinting/core/evasions/hook.h"
+#include "fingerprinting/core/evasions/hook_factory.h"
 #include "fingerprinting/core/evasions/hooks/webgl.h"
 
 namespace fingerprinting::core::evasions {
@@ -15,7 +16,7 @@ std::string Package::get_iife() {
   return iife;
 }
 
-Package Package::Pack(HookTargetType target, std::shared_ptr<Fingerprint> fingerprint, std::set<std::string> filters) {
+Package Package::Pack(HookTargetType target, Fingerprint* fingerprint, std::set<std::string> filters) {
   // Returns a compiled, ready-to-inject JS function string
   // Filters are the evasions to disable
   Package pack(target, fingerprint);

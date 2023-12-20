@@ -9,7 +9,10 @@
 #include "base/component_export.h"
 
 namespace fingerprinting::core::evasions {
-class HookFactory;
+
+
+
+
 
 enum HookTargetType {
   PAGE,
@@ -60,32 +63,9 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Hook {
   std::string impl;
 };
 
-typedef std::function<std::unique_ptr<Hook>()> HookConstructor;
 
-/*
- * HookFactory is a factory class that creates Hook instances
- * based on a given key (e.g. "webgl", "canvas", etc.)
- * The key is used to lookup the registry of Hook constructors
- * (i.e. HookFactory::GetRegistry())
- * Yeah, I mixed factory & model in the same file, so what?
- */
-class HookFactory {
- public:
-  static void Register(const std::string& key, HookConstructor constructor);
 
-  static std::unique_ptr<Hook> Create(const std::string& key);
 
-  static std::unique_ptr<Hook> Create(const std::string& key,
-                                      const std::string impl);
-
-  static std::map<std::string, HookConstructor>& GetRegistry();
-};
-
-// Macro to define a self-registering hook
-#define REGISTER_HOOK(name, type)                                             \
-  static bool _hook_##name##_registered =                                     \
-      (HookFactory::Register(#name, [] { return std::make_unique<type>(); }), \
-       true);
 
 }  // namespace fingerprinting::core::evasions
 

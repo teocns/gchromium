@@ -16,7 +16,7 @@ struct COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Package {
  public:
   Package() = default;
   explicit Package(HookTargetType target) : target(target) {}
-  explicit Package(HookTargetType target, std::shared_ptr<Fingerprint> dd) : target(target), fingerprint(dd) {}
+  explicit Package(HookTargetType target, Fingerprint*  dd) : target(target), fingerprint(dd) {}
   HookTargetType target;
   void Register(std::unique_ptr<Hook> hook) {
     this->hooks.push_back(std::move(*hook));
@@ -25,14 +25,14 @@ struct COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Package {
   void Register(Hook&& hook) { this->hooks.push_back(std::move(hook)); }
 
   static Package Pack(HookTargetType,
-                      std::shared_ptr<Fingerprint>,
+                      Fingerprint*,
                       std::set<std::string> = std::set<std::string>());
 
   std::vector<Hook> hooks;
 
   std::string get_iife();
 
-  std::shared_ptr<Fingerprint> fingerprint;
+  Fingerprint* fingerprint;
 };
 
 }  // namespace fingerprinting::core::evasions
