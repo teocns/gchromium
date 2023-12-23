@@ -19,21 +19,21 @@ struct COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) EvasionsPackage {
   EvasionsPackage(const EvasionsPackage& other) = default;
 
   // Other constructors default
-  EvasionsPackage(EvasionsPackage &&other) = default;
-  EvasionsPackage &operator=(const EvasionsPackage &other) = default;
-  EvasionsPackage &operator=(EvasionsPackage &&other) = default;
+  EvasionsPackage(EvasionsPackage&& other) = default;
+  EvasionsPackage& operator=(const EvasionsPackage& other) = default;
+  EvasionsPackage& operator=(EvasionsPackage&& other) = default;
 
-  explicit EvasionsPackage(HookTargetType target) : target(target) {}
+  explicit EvasionsPackage(HookTargetType target) : target_(target) {}
 
-  HookTargetType target;
+  HookTargetType target_;
 
   void Register(std::unique_ptr<Hook> hook) {
     this->hooks.push_back(std::move(hook));
   }
- 
-  static std::shared_ptr<EvasionsPackage> Pack(HookTargetType,
-                      Fingerprint*,
-                      std::set<std::string> = std::set<std::string>());
+
+  static std::unique_ptr<EvasionsPackage> Pack(
+      HookTargetType,
+      std::set<std::string> = std::set<std::string>());
 
   std::vector<std::unique_ptr<Hook>> hooks;
 

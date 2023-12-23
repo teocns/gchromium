@@ -6,11 +6,13 @@
 #include "base/component_export.h"
 #include "fingerprinting/core/device_descriptor/fingerprint.h"
 #include "fingerprinting/core/device_descriptor/mixins/user-agent.h"
+#include "fingerprinting/core/device_descriptor/mixins/webgl.h"
 
 namespace fingerprinting {
 
 class COMPONENT_EXPORT(FINGERPRINTING_CORE_DEVICE_DESCRIPTOR) Fingerprint final
     : public UAMixin,
+      public WebGLMixin,
       protected virtual IFingerprint {
  public:
   Fingerprint& operator=(Fingerprint&& other);
@@ -27,8 +29,12 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_DEVICE_DESCRIPTOR) Fingerprint final
   static bool FromString(const std::string& fingerprint_str,
                          std::unique_ptr<Fingerprint>& out);
 
+  base::Value& value() { return this->value_; }
+  std::string& str_value() { return this->str_value_; }
+
  private:
   base::Value value_;
+  std::string str_value_;
   std::unordered_map<std::size_t, base::Value*> cache_;
 
   std::size_t hash_keys(std::vector<std::string>& keys);

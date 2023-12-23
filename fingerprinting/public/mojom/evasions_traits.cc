@@ -1,4 +1,6 @@
 #include "fingerprinting/public/mojom/evasions_traits.h"
+#include <memory>
+#include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "fingerprinting/core/evasions/hook_factory.h"
 #include "fingerprinting/core/evasions/pack.h"
 #include "fingerprinting/public/mojom/evasions.mojom-shared.h"
@@ -7,56 +9,48 @@
 // Mojo traits specialization for the `Package` structure
 namespace mojo {
 
-bool StructTraits<::fingerprinting::mojom::EvasionsPackageDataView,
-                  std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>>::
-    Read(::fingerprinting::mojom::EvasionsPackageDataView data_view,
-         std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>* out) {
-  // The deserialization logic would be here, for example:
-  if (!data_view.ReadHooks(&(*out)->hooks)) {
-    return false;
-  }
-
-  if (!data_view.ReadTarget(&(*out)->target)) {
-    return false;
-  }
-
-  // if (!data_view.ReadFingerprint(&out->fingerprint)) {
-  //   return false;
-  // }
-
-  return true;
-}
-
-bool StructTraits<::fingerprinting::mojom::HookDataView,
-                  std::unique_ptr<::fingerprinting::core::evasions::Hook>>::
-    Read(::fingerprinting::mojom::HookDataView data_view,
-         std::unique_ptr<::fingerprinting::core::evasions::Hook>* out) {
-  // std::string body;
-  // if (!data_view.ReadBody(&body)) {
-  //   return false;
-  // }
-
-  std::string codename;
-  if (!data_view.ReadCodename(&codename)) {
-    return false;
-  }
-
-  // auto pHook = fingerprinting::core::evasions::HookFactory::Create(codename);
-  //
-  // if (pHook == nullptr) {
-  //   return false;
-  // }
-
-  // *out = std::move(pHook);
-
-  return true;
-}
-
-// static ::fingerprinting::mojom::HookTargetType ToMojom(
-//     ::fingerprinting::core::evasions::HookTargetType type);
+// bool StructTraits<
+//     ::fingerprinting::mojom::EvasionsPackageDataView,
+//     std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>>::
+//     Read(::fingerprinting::mojom::EvasionsPackageDataView data_view,
+//          std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>*
+//              out) {
+//   // The deserialization logic would be here, for example:
+//   *out = std::make_shared<::fingerprinting::core::evasions::EvasionsPackage>();
 //
-// static bool FromMojom(::fingerprinting::mojom::HookTargetType type,
-//                       ::fingerprinting::core::evasions::HookTargetType* out);
+//   if (!data_view.ReadHooks(&(*out)->hooks)) {
+//     return false;
+//   }
+//
+//   if (!data_view.ReadTarget(&(*out)->target)) {
+//     return false;
+//   }
+//
+//   if (!data_view.ReadFingerprint(&(*out)->fingerprint)) {
+//     return false;
+//   }
+//
+//   return true;
+// }
+//
+// bool StructTraits<::fingerprinting::mojom::HookDataView,
+//                   std::unique_ptr<::fingerprinting::core::evasions::Hook>>::
+//     Read(::fingerprinting::mojom::HookDataView data_view,
+//          std::unique_ptr<::fingerprinting::core::evasions::Hook>* out) {
+//   // std::string body;
+//   // if (!data_view.ReadBody(&body)) {
+//   //   return false;
+//   // }
+//
+//   std::string codename;
+//   if (!data_view.ReadCodename(&codename)) {
+//     return false;
+//   }
+//
+//   *out = fingerprinting::core::evasions::HookFactory::Create(codename);
+//
+//   return true;
+// }
 
 bool EnumTraits<::fingerprinting::mojom::HookTargetType,
                 ::fingerprinting::core::evasions::HookTargetType>::

@@ -7,17 +7,14 @@
 #include <random>
 #include <string>
 #include "base/component_export.h"
+#include "base/values.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 
-namespace fingerprinting::core::evasions {
-
 namespace {
-
-namespace base {
-
-class Value;
+class EvasionsPackage;
 }
-}  // namespace
+
+namespace fingerprinting::core::evasions {
 
 enum HookTargetType {
   PAGE,
@@ -25,6 +22,9 @@ enum HookTargetType {
   SHARED_WORKER,
 };
 
+// Define type alias HOOK_CODENAME for string;
+// typedef std::string HOOK_CODENAME;
+//
 class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Hook {
   /*
    * Each hook represents a patch for a specific JS feature API
@@ -35,9 +35,9 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Hook {
  public:
   Hook() = default;
   Hook(const Hook& other);
-  Hook(Hook &&other) = default;
-  Hook &operator=(const Hook &other) = default;
-  Hook &operator=(Hook &&other) = default;
+  Hook(Hook&& other) = default;
+  Hook& operator=(const Hook& other) = default;
+  Hook& operator=(Hook&& other) = default;
   // Hook(const Hook& other);
   // Hook& operator=(const Hook&) = delete;
   //   explicit Hook()
@@ -66,6 +66,8 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Hook {
    * hook
    */
   virtual base::Value* get_data(Fingerprint* fingerprint) { return nullptr; }
+
+  std::shared_ptr<EvasionsPackage> package = nullptr;
 
   friend class HookFactory;
 

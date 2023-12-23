@@ -36,6 +36,7 @@ class FINGERPRINTING_PUBLIC_EXPORT FingerprintManager
                 receiver);
 
   void Enabled(EnabledCallback callback) override;
+  void GetFingerprintString(GetFingerprintStringCallback) override;
 
  private:
   FingerprintManager();

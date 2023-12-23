@@ -73,4 +73,4 @@ Fingerprint* FingerprintManagerCore::GetFingerprint() {
   return fingerprint_.get();
 }
 
-}  // namespace fingerprinting
+}  // namespace fingerprinting::core

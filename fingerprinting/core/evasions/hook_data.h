@@ -2,7 +2,7 @@
 #ifndef FINGERPRINTING_CORE_EVASIONS_HOOK_DATA_H_
 #define FINGERPRINTING_CORE_EVASIONS_HOOK_DATA_H_
 
-#include <set>
+#include <map>
 #include "base/values.h"
 
 namespace fingerprinting::core::evasions {
@@ -13,10 +13,8 @@ class HookData : public base::Value{
 
 
 protected: 
-  std::set<base::Value*> values_;
-  
+  std::map<std::string, base::Value*> values_;
 };
-
 
 
 }

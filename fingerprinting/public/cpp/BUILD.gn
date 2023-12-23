@@ -30,3 +30,27 @@ shared_library("cpp") {
   ]
 }
 
+
+source_set("evasions") {
+  sources = [
+    "evasions/hook_execution_context.h",
+    "evasions/hook_execution_context.cc",
+    "evasions/package_execution_context.h",
+    "evasions/package_execution_context.cc",
+    "evasions/v8.h",
+    "evasions/v8.cc",
+  ]
+
+  visibility = [ "*" ]
+
+  defines = [ "IS_FINGERPRINTING_PUBLIC_EVASIONS_IMPL" ]
+
+  public_deps = [
+    "//base",
+    "//fingerprinting/core",
+    "//v8",
+  ]
+
+}
+
+

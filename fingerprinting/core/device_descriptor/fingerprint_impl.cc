@@ -104,7 +104,8 @@ bool Fingerprint::find_(std::vector<std::string>& keys, base::Value*& cur) {
 
 bool Fingerprint::FromString(const std::string& fingerprint_str,
                              std::unique_ptr<Fingerprint>& out) {
-  absl::optional<base::Value> fp_maybe = base::JSONReader::Read(fingerprint_str);
+  absl::optional<base::Value> fp_maybe =
+      base::JSONReader::Read(fingerprint_str);
 
   if (!fp_maybe.has_value()) {
     return false;
@@ -113,6 +114,7 @@ bool Fingerprint::FromString(const std::string& fingerprint_str,
   base::Value& fp_val = fp_maybe.value();
 
   out = std::make_unique<Fingerprint>(std::move(fp_val));
+  out->str_value_ = fingerprint_str;
 
   return true;
 }

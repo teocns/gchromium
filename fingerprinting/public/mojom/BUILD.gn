@@ -70,6 +70,17 @@ mojom("mojom") {
       ]
       traits_headers = [ "evasions_traits.h" ]
       traits_public_deps = [ ":evasions_traits" ]
+    },
+    {
+      types = [
+        {
+          mojom = "fingerprinting.mojom.Fingerprint"
+          cpp = "::std::unique_ptr<:Fingerprinting::core::evasions::Fingerprint>"
+          move_only = true
+        },
+      ]
+      traits_headers = [ "evasions_traits.h" ]
+      traits_public_deps = [ ":evasions_traits" ]
     }
   ]
   cpp_typemaps = shared_cpp_typemaps

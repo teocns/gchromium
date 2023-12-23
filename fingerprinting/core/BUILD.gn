@@ -44,7 +44,6 @@ source_set("device_descriptor"){
 
   public_deps = [
     "//third_party/abseil-cpp:absl",
-    ":evasions"
   ]
 
 }

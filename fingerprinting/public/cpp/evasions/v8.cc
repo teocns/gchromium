@@ -4,7 +4,7 @@
 #include <string>
 #include "base/logging.h"
 
-namespace fingerprinting::utility {
+namespace fingerprinting::evasions::utility {
 using v8::Local;
 
 void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {

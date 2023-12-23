@@ -11,8 +11,7 @@ struct UserAgentMetadata;
 
 namespace fingerprinting::internal {
 
-class SetFingerprintStrCallback;
-class GetFingerprintStrCallback;
+class GetFingerprintStringCallback;
 class GetUserAgentClientHintsCallback;
 
 class FINGERPRINTING_PUBLIC_EXPORT UAMixinMojom

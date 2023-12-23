@@ -6,7 +6,6 @@
 
 namespace fingerprinting::core::evasions {
 
-
 std::string EvasionsPackage::get_iife() {
   std::string iife = "(function(){";
   for (auto& hook : this->hooks) {
@@ -16,7 +15,9 @@ std::string EvasionsPackage::get_iife() {
   return iife;
 }
 
-std::shared_ptr<EvasionsPackage> EvasionsPackage::Pack(HookTargetType target, Fingerprint* fingerprint, std::set<std::string> filters) {
+std::unique_ptr<EvasionsPackage> EvasionsPackage::Pack(
+    HookTargetType target,
+    std::set<std::string> filters) {
   // Returns a compiled, ready-to-inject JS function string
   // Filters are the evasions to disable
 
