@@ -35,6 +35,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
+#include "fingerprinting/core/evasions/pack.h"
 #include "third_party/blink/public/common/loader/worker_main_script_load_parameters.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-shared.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -72,8 +73,9 @@
 #include "third_party/blink/renderer/platform/wtf/threading.h"
 
 // Custom
+#include "fingerprinting/core/evasions/pack.h"
+#include "fingerprinting/public/cpp/evasions/package_execution_context.h"
 #include "fingerprinting/public/cpp/manager.h"
-#include "fingerprinting/utility/v8.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
 
 namespace blink {
@@ -662,22 +664,37 @@ void WorkerThread::InitializeOnWorkerThread(
     v8::Local<v8::Context> context =
         GlobalScope()->ScriptController()->GetContext();
 
-    {
-      mojo::Remote<fingerprinting::mojom::FingerprintManager>
-          fingerprint_manager;
+    mojo::Remote<fingerprinting::mojom::FingerprintManager> fingerprint_manager;
 
-      GlobalScope()->GetBrowserInterfaceBroker().GetInterface(
-          fingerprint_manager.BindNewPipeAndPassReceiver());
+    GlobalScope()->GetBrowserInterfaceBroker().GetInterface(
+        fingerprint_manager.BindNewPipeAndPassReceiver());
 
-      bool fingerprinting_enabled = false;
-      std::string fingerprint_evasions;
-      fingerprint_manager->Enabled(&fingerprinting_enabled);
-      if (fingerprinting_enabled) {
-        fingerprint_manager->GetEvasions(fingerprinting::mojom::HookTargetType::WORKER,&fingerprint_evasions);
-        fingerprinting::utility::RunWithUtils(context, fingerprint_evasions);
+    bool fingerprinting_enabled = false;
+    // std::shared_ptr<fingerprinting::core::evasions::EvasionsPackage>
+    // evasions;
+    std::string fingerprint_str;
+    fingerprint_manager->Enabled(&fingerprinting_enabled);
+    if (fingerprinting_enabled) {
+      if (fingerprint_manager->GetFingerprintString(&fingerprint_str)) {
+        std::unique_ptr<fingerprinting::Fingerprint> fp;
+
+        if (fingerprinting::Fingerprint::FromString(fingerprint_str.c_str(),
+                                                    fp)) {
+          fingerprinting::evasions::EvasionsPackageExecutionContext evpkg(
+              fingerprinting::core::evasions::EvasionsPackage::Pack(
+                  fingerprinting::core::evasions::HookTargetType::WORKER),
+              context, std::move(fp));
+
+          evpkg.Run();
+        }
+        else{
+          LOG(ERROR) << "Failed to create fingerprint from string";
+        }
+      }
+      else{
+        LOG(ERROR) << "Failed to get fingerprint string";
       }
     }
-
 
     Platform::Current()->WorkerContextCreated(context);
     inspector_task_runner_->InitIsolate(GetIsolate());

@@ -52,7 +52,7 @@ v8::MaybeLocal<v8::Function> HookExecutionContext::GetFunction(
   v8::Local<v8::String> js_src;
   if (!v8::String::NewFromUtf8(
            isolate,
-           std::format("(function (__GCHROMIUM_HOOK_){{ {} }})", hook_->get_impl()).c_str(),
+           std::format("(function (){{ {} }})", hook_->get_impl()).c_str(),
            v8::NewStringType::kNormal)
            .ToLocal(&js_src)) {
     return v8::MaybeLocal<v8::Function>();

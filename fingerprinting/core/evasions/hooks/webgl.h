@@ -14,6 +14,7 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hWebGL : public Hook {
   std::string get_impl() override {
     return R"(
     // Print the name of the arguments in a string format
+    console.log(arguments.dd)
     return true;
     )";
   }

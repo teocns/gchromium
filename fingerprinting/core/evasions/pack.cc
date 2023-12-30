@@ -2,7 +2,10 @@
 #include <vector>
 #include "fingerprinting/core/evasions/hook.h"
 #include "fingerprinting/core/evasions/hook_factory.h"
+
+// Include all hooks here
 #include "fingerprinting/core/evasions/hooks/webgl.h"
+#include "fingerprinting/core/evasions/hooks/navigator_webdriver.h"
 
 namespace fingerprinting::core::evasions {
 

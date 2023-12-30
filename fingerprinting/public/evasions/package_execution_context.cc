@@ -67,8 +67,21 @@ v8::Local<v8::Object> EvasionsPackageExecutionContext::GetCommonArguments() {
     if (!p1 || !p2) {
       LOG(ERROR) << "Failed to set PatchAccessor or PatchValue";
     }
-  }
 
+
+    // Set dd. Fingerprint::value() returns a base::Value* object
+    bool p3 =
+        this->state_
+            ->Set(this->context(),
+                  v8::String::NewFromUtf8(isolate, "dd").ToLocalChecked(),
+                  v8::External::New(isolate, this->fingerprint_->value()))
+            .ToChecked();
+
+    if (!p3) {
+      LOG(ERROR) << "Failed to set dd";
+    }
+
+  }
   // Create a one-off fingerprint object
 
   return this->state_;

@@ -8,6 +8,7 @@
 #include "fingerprinting/core/evasions/pack.h"
 #include "fingerprinting/public/cpp/evasions/hook_execution_context.h"
 #include "v8/include/v8.h"
+#include "content/renderer/v8_value_converter_impl.h"
 
 namespace fingerprinting::evasions {
 
