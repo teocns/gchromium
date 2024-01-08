@@ -372,7 +372,7 @@ component("core") {
     "//ui/gfx/geometry",
     "//ui/gfx/geometry:geometry_skia",
     "//fingerprinting/public/cpp",
-    "//fingerprinting/public/cpp:evasions",
+    # "//fingerprinting/public/cpp:evasions",
   ]
 
   if (is_mac) {
