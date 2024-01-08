@@ -1,9 +1,9 @@
 
 
-#include "fingerprinting/public/cpp/evasions/hook_execution_context.h"
+#include "fingerprinting/public/evasions/hook_execution_context.h"
 #include <format>
-#include "fingerprinting/public/cpp/evasions/package_execution_context.h"
 #include "base/logging.h"
+#include "fingerprinting/public/evasions/package_execution_context.h"
 #include "v8-local-handle.h"
 #include "v8-object.h"
 namespace fingerprinting::evasions {
@@ -28,10 +28,10 @@ bool HookExecutionContext::Run() {
 
   v8::Local<v8::Function> function = fn.ToLocalChecked();
 
-
   v8::Local<v8::Value> args[1] = {GetArguments()};
 
-  v8::MaybeLocal<v8::Value> result = function->Call(context, context->Global(), 1, args);
+  v8::MaybeLocal<v8::Value> result =
+      function->Call(context, context->Global(), 1, args);
 
   if (try_catch.HasCaught()) {
     v8::Local<v8::Value> exception = try_catch.Exception();
@@ -40,7 +40,8 @@ bool HookExecutionContext::Run() {
     return false;
   }
   LOG(INFO) << "Hook " << this->hook_->codename() << " executed successfully";
-  LOG(INFO) << "Result: " << *v8::String::Utf8Value(isolate, result.ToLocalChecked());
+  LOG(INFO) << "Result: "
+            << *v8::String::Utf8Value(isolate, result.ToLocalChecked());
   return true;
 }
 

@@ -13,31 +13,31 @@ group("fingerprinting") {
 
 
 
-executable("demo") {
-  visibility = [ "*" ]
+# executable("demo") {
+#   visibility = [ "*" ]
+#
+#   sources = [
+#     "demo/v8.cc",
+#   ]
+#   output_name = "v8_demo"  # The actual output binary name
+#
+#   deps = [
+#       "//v8",
+#       "//fingerprinting/public/cpp:evasions",
+#   ]
+#
+# }
 
-  sources = [
-    "demo/v8.cc",
-  ]
-  output_name = "v8_demo"  # The actual output binary name
-
-  deps = [
-      "//v8",
-      "//fingerprinting/public/cpp:evasions",
-  ]
-
-}
-
-executable("demo_json") {
-  visibility = [ "*" ]
-
-  sources = [
-    "demo/json.cc",
-  ]
-  output_name = "json_demo"  # The actual output binary name
-
-  deps = [
-      "//fingerprinting/core:device_descriptor",
-  ]
-
-}
+# executable("demo_json") {
+#   visibility = [ "*" ]
+#
+#   sources = [
+#     "demo/json.cc",
+#   ]
+#   output_name = "json_demo"  # The actual output binary name
+#
+#   deps = [
+#       "//fingerprinting/core:device_descriptor",
+#   ]
+#
+# }

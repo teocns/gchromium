@@ -3,12 +3,12 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include "base/component_export.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "fingerprinting/core/evasions/pack.h"
-#include "fingerprinting/public/cpp/evasions/hook_execution_context.h"
+#include "fingerprinting/public/evasions/hook_execution_context.h"
 #include "v8/include/v8.h"
-#include "content/renderer/v8_value_converter_impl.h"
 
 namespace fingerprinting::evasions {
 
@@ -18,9 +18,10 @@ class COMPONENT_EXPORT(FINGERPRINTING_PUBLIC_EVASIONS)
 
  public:
   explicit EvasionsPackageExecutionContext(
-      std::unique_ptr<::fingerprinting::core::evasions::EvasionsPackage>,
-      v8::Local<v8::Context>,
-      std::unique_ptr<::fingerprinting::Fingerprint>);
+      std::unique_ptr<::fingerprinting::core::evasions::EvasionsPackage>
+          package,
+      v8::Local<v8::Context> context,
+      base::Value fingerprint);
 
   v8::Local<v8::Object> GetCommonArguments();
 
@@ -37,11 +38,13 @@ class COMPONENT_EXPORT(FINGERPRINTING_PUBLIC_EVASIONS)
   // A map whereas the key is the hook object (not the string) and the value is
   // the execution context
 
-  std::unordered_map<std::string, std::unique_ptr<HookExecutionContext>> hooks_;
+  // std::unordered_map<std::string, std::unique_ptr<HookExecutionContext>>
+  // hooks_;
 
+  std::unordered_map<std::string, std::unique_ptr<HookExecutionContext>> hooks_;
   v8::Local<v8::Object> state_;
   v8::Local<v8::Context> context_;
-  std::unique_ptr<::fingerprinting::Fingerprint> fingerprint_;
+  base::Value fingerprint_;
 };
 
 }  // namespace fingerprinting::evasions

@@ -1,4 +1,5 @@
-To patch anything that runs a JavaScript context (worker, frame, page, etc.), the best place to do so would be the bindings/ directory, as this is where files that use V8 APIs heavily reside.
+# Objective 
+To introduce complementary features post creation of v8::Context within all sorts of target scopes that run a JavaScript context (worker, frame, page, etc.),
 
 When you need to fetch V8 patches via a Mojo receiver that communicates with the browser process, Blink can use Mojo directly to talk to the browser process【37†source】. The specific binding location isn't explicitly mentioned in the provided documentation, but in general, blinks are linked to Mojo communication systems for such interactions.
 
@@ -8,12 +9,11 @@ Execution logic or a manager that orchestrates such a patch should be located in
 
 
 
+# Common frame renderer access point
 
-We are looking for the right place to patch global objects (Navigator, CSSStyleDeclaration, etc) of a JavaScript context (worker, frame, page, etc.).
 
-As a first step, we need to understand how these properties get created; the architecture is quite complex, and I am questioning myself about the relationship and workflow of frame, local frames, workers, etc- contexts.
+RendererResourceCoordinatorImpl::OnScriptStateCreated is responsible for handling all-script context creation, but also for managing their storage.
 
-We're ideally looking for an unique spot where we can catch the creation of said contexts and patch them before external scripts can run into it.
 
 
 # Global object proxy association

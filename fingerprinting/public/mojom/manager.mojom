@@ -6,10 +6,6 @@ import "mojo/public/mojom/base/values.mojom";
 
 import "third_party/blink/public/mojom/user_agent/user_agent_metadata.mojom";
 
-import "fingerprinting/public/mojom/evasions.mojom";
-
-// Deprecate:
-//  - GetUserAgentClientHints
 
 interface FingerprintManager {
   [Sync]
@@ -19,7 +15,9 @@ interface FingerprintManager {
   [Sync]
   GetUserAgentMetadata() => (blink.mojom.UserAgentMetadata? metadata);
   [Sync]
-  GetEvasions(fingerprinting.mojom.HookTargetType target) => (string hello);
+  GetEvasions(string target) => (mojo_base.mojom.Value callback);
+  [Sync]
+  GetEvasionsStr(string target) => (string callback);
   [Sync]
   GetFingerprintString() => (string fingerprint);
 };

@@ -6,7 +6,7 @@
 namespace fingerprinting::internal {
 
 void EvasionsMixinMojom::GetEvasions(
-    core::evasions::HookTargetType target,
+    const std::string& target,
     mojom::FingerprintManager::GetEvasionsCallback callback) {
   // Compute cache key based on the target
   // std::string cache_key =
@@ -35,6 +35,10 @@ void EvasionsMixinMojom::GetEvasions(
   // pack = core::evasions::EvasionsPackage::Pack(to_mojom(target),
   // _disable_evasions); this->cache.Value<mojom::EvasionsPack>(cache_key, ptr);
   // std::move(callback).Run(*ptr);
+
+
+
+  std::move(callback).Run(GetFingerprint()->value().Clone());
 }
 
 }  // namespace fingerprinting::internal

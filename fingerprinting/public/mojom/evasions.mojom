@@ -8,17 +8,17 @@ enum HookTargetType {
   SHARED_WORKER,
 };
 
-// struct Hook {
-//   string codename;
-// };
+struct Hook {
+  string codename;
+};
 
 
 
-// struct EvasionsPackage {
-//   array<fingerprinting.mojom.Hook> hooks;
-//   fingerprinting.mojom.HookTargetType target;
-//   string fingerprint;
-// };
+struct EvasionsPackage {
+  array<fingerprinting.mojom.Hook> hooks;
+  fingerprinting.mojom.HookTargetType target;
+  mojo_base.mojom.Value fingerprint;
+};
 
 
 

@@ -1,5 +1,6 @@
 
 
+
 # Script wrappable
 
 ScriptWrappable provides a way to map from/to C++ DOM implementation to/from
@@ -9,20 +10,6 @@ a ScriptWrappable.  v8::Object as platform object is called "wrapper object".
 The wrapper object for the main world is stored in ScriptWrappable.  Wrapper
 objects for other worlds are stored in DOMDataStore.
 
-
-
-# Mojo V8
-
-
-
-
-
-```
-The JavaScript system API exposes the capabilities to create message pipes, data
-pipes, shared buffers and watchers. The API is defined using Web IDL. You could
-find the IDL files [here](https://cs.chromium.org/chromium/src/third_party/blink/renderer/core/mojo/)
-```
-Would it help us advance anyhow in our objective?
 
 
 #include "third_party/blink/renderer/core/mojo/mojo_handle.h"
@@ -43,3 +30,10 @@ enum MojoScope {
   // BrowserInterfaceBroker per site instance.
   "process",
 };
+
+
+
+
+class CORE_EXPORT ScriptCacheConsumer final
+    : public GarbageCollected<ScriptCacheConsumer> {
+ public:

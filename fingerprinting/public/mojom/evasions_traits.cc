@@ -9,48 +9,48 @@
 // Mojo traits specialization for the `Package` structure
 namespace mojo {
 
-// bool StructTraits<
-//     ::fingerprinting::mojom::EvasionsPackageDataView,
-//     std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>>::
-//     Read(::fingerprinting::mojom::EvasionsPackageDataView data_view,
-//          std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>*
-//              out) {
-//   // The deserialization logic would be here, for example:
-//   *out = std::make_shared<::fingerprinting::core::evasions::EvasionsPackage>();
-//
-//   if (!data_view.ReadHooks(&(*out)->hooks)) {
-//     return false;
-//   }
-//
-//   if (!data_view.ReadTarget(&(*out)->target)) {
-//     return false;
-//   }
-//
-//   if (!data_view.ReadFingerprint(&(*out)->fingerprint)) {
-//     return false;
-//   }
-//
-//   return true;
-// }
-//
-// bool StructTraits<::fingerprinting::mojom::HookDataView,
-//                   std::unique_ptr<::fingerprinting::core::evasions::Hook>>::
-//     Read(::fingerprinting::mojom::HookDataView data_view,
-//          std::unique_ptr<::fingerprinting::core::evasions::Hook>* out) {
-//   // std::string body;
-//   // if (!data_view.ReadBody(&body)) {
-//   //   return false;
-//   // }
-//
-//   std::string codename;
-//   if (!data_view.ReadCodename(&codename)) {
-//     return false;
-//   }
-//
-//   *out = fingerprinting::core::evasions::HookFactory::Create(codename);
-//
-//   return true;
-// }
+bool StructTraits<
+    ::fingerprinting::mojom::EvasionsPackageDataView,
+    std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>>::
+    Read(::fingerprinting::mojom::EvasionsPackageDataView data_view,
+         std::shared_ptr<::fingerprinting::core::evasions::EvasionsPackage>*
+             out) {
+  // The deserialization logic would be here, for example:
+  *out = std::make_shared<::fingerprinting::core::evasions::EvasionsPackage>();
+
+  if (!data_view.ReadHooks(&(*out)->hooks)) {
+    return false;
+  }
+
+  if (!data_view.ReadTarget(&(*out)->target)) {
+    return false;
+  }
+
+  if (!data_view.ReadFingerprint(&(*out)->fingerprint)) {
+    return false;
+  }
+
+  return true;
+}
+
+bool StructTraits<::fingerprinting::mojom::HookDataView,
+                  std::unique_ptr<::fingerprinting::core::evasions::Hook>>::
+    Read(::fingerprinting::mojom::HookDataView data_view,
+         std::unique_ptr<::fingerprinting::core::evasions::Hook>* out) {
+  // std::string body;
+  // if (!data_view.ReadBody(&body)) {
+  //   return false;
+  // }
+
+  std::string codename;
+  if (!data_view.ReadCodename(&codename)) {
+    return false;
+  }
+
+  *out = fingerprinting::core::evasions::HookFactory::Create(codename);
+
+  return true;
+}
 
 bool EnumTraits<::fingerprinting::mojom::HookTargetType,
                 ::fingerprinting::core::evasions::HookTargetType>::
