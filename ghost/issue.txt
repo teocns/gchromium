@@ -1,0 +1,56 @@
+
+beyond:~/.gchromium/fingerprinting/src $ ..
+beyond:~/.gchromium/fingerprinting $ ./build -j12 chrome
+ninja: Entering directory `/Users/beyond/.gchromium/fingerprinting/src/out/debug_plain'
+[1/45](1) SOLINK libchrome_dll.dylib libchrome_dll.dylib.TOC
+FAILED: libchrome_dll.dylib libchrome_dll.dylib.TOC 
+if [ ! -e "./libchrome_dll.dylib" -o ! -e "./libchrome_dll.dylib.TOC" ] || /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchai
+n/usr/bin/otool -l "./libchrome_dll.dylib" | grep -q LC_REEXPORT_DYLIB ; then TOOL_VERSION=1687826881 ../../build/toolchain/apple/linker_driver.py -Wcrl
+,strippath,/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/strip -Wcrl,installnametoolpath,/Applications/Xcode.ap
+p/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/install_name_tool ../../third_party/llvm-build/Release+Asserts/bin/clang++ -shared  -Wl
+,-install_name,@rpath/"libchrome_dll.dylib" -Wl,-order_file -Wl,../../chrome/app/framework.order -ObjC -fuse-ld=lld -Wl,-fatal_warnings -Wl,--color-diag
+nostics -Wl,--strict-auto-link -Wl,--no-call-graph-profile-sort -arch arm64 -fno-global-isel -Wl,-mllvm,-enable-machine-outliner=never -no-canonical-pre
+fixes -nostdlib++ -isysroot ../../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk -mmac
+os-version-min=13.3 -Wl,-ObjC -Wl,-rpath,@loader_path/. -Wl,-rpath,@loader_path/../../.. -rpath @executable_path/ -L/Applications/Xcode.app/Contents/Dev
+eloper/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/usr/lib -o "./libchrome_dll.dylib" "@./libchrome_dll.dylib.rsp" && { /Applications/Xcode.
+app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/otool -l "./libchrome_dll.dylib" | grep LC_ID_DYLIB -A 5; /Applications/Xcode.app/Con
+tents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/nm -gPp "./libchrome_dll.dylib" | cut -f1-2 -d' ' | grep -v U$$; true; } > "./libchrome_dll.
+dylib.TOC"; else TOOL_VERSION=1687826881 ../../build/toolchain/apple/linker_driver.py -Wcrl,strippath,/Applications/Xcode.app/Contents/Developer/Toolcha
+ins/XcodeDefault.xctoolchain/usr/bin/strip -Wcrl,installnametoolpath,/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/
+bin/install_name_tool ../../third_party/llvm-build/Release+Asserts/bin/clang++ -shared  -Wl,-install_name,@rpath/"libchrome_dll.dylib" -Wl,-order_file -
+Wl,../../chrome/app/framework.order -ObjC -fuse-ld=lld -Wl,-fatal_warnings -Wl,--color-diagnostics -Wl,--strict-auto-link -Wl,--no-call-graph-profile-so
+rt -arch arm64 -fno-global-isel -Wl,-mllvm,-enable-machine-outliner=never -no-canonical-prefixes -nostdlib++ -isysroot ../../../../../../../Applications
+/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk -mmacos-version-min=13.3 -Wl,-ObjC -Wl,-rpath,@loader_path/. -Wl,-
+rpath,@loader_path/../../.. -rpath @executable_path/ -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sd
+k/usr/lib -o "./libchrome_dll.dylib" "@./libchrome_dll.dylib.rsp" && { /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/us
+r/bin/otool -l "./libchrome_dll.dylib" | grep LC_ID_DYLIB -A 5; /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/n
+m -gPp "./libchrome_dll.dylib" | cut -f1-2 -d' ' | grep -v U$$; true; } > "./libchrome_dll.dylib.tmp" && if ! cmp -s "./libchrome_dll.dylib.tmp" "./libc
+hrome_dll.dylib.TOC"; then mv "./libchrome_dll.dylib.tmp" "./libchrome_dll.dylib.TOC" ; fi; fi
+ld64.lld: error: undefined symbol: vtable for GhostRenderThreadObserver
+>>> referenced by ghost_render_thread_observer.h:29 (../../ghost/renderer/ghost_render_thread_observer.h:29)
+>>>               obj/chrome/renderer/librenderer.a(ghost_content_renderer_client.o):(symbol GhostRenderThreadObserver::GhostRenderThreadObserver()+0x5c
+)
+>>> referenced by ghost_render_thread_observer.h:29 (../../ghost/renderer/ghost_render_thread_observer.h:29)
+>>>               obj/chrome/renderer/librenderer.a(ghost_content_renderer_client.o):(symbol GhostRenderThreadObserver::GhostRenderThreadObserver()+0x58
+)
+>>> referenced by ghost_render_thread_observer.h:29 (../../ghost/renderer/ghost_render_thread_observer.h:29)
+>>>               obj/chrome/renderer/librenderer.a(ghost_content_renderer_client.o):(symbol GhostRenderThreadObserver::GhostRenderThreadObserver()+0x48
+)
+>>> referenced 1 more times
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)
+Traceback (most recent call last):
+  File "/Users/beyond/.gchromium/fingerprinting/src/out/debug_plain/../../build/toolchain/apple/linker_driver.py", line 367, in <module>
+    LinkerDriver(sys.argv).run()
+  File "/Users/beyond/.gchromium/fingerprinting/src/out/debug_plain/../../build/toolchain/apple/linker_driver.py", line 151, in run
+    subprocess.check_call(compiler_driver_args, env=env)
+  File "/usr/local/Cellar/python@3.10/3.10.13/Frameworks/Python.framework/Versions/3.10/lib/python3.10/subprocess.py", line 369, in check_call
+    raise CalledProcessError(retcode, cmd)
+subprocess.CalledProcessError: Command '['../../third_party/llvm-build/Release+Asserts/bin/clang++', '-shared', '-Wl,-install_name,@rpath/libchrome_dll.
+dylib', '-Wl,-order_file', '-Wl,../../chrome/app/framework.order', '-ObjC', '-fuse-ld=lld', '-Wl,-fatal_warnings', '-Wl,--color-diagnostics', '-Wl,--str
+ict-auto-link', '-Wl,--no-call-graph-profile-sort', '-arch', 'arm64', '-fno-global-isel', '-Wl,-mllvm,-enable-machine-outliner=never', '-no-canonical-pr
+efixes', '-nostdlib++', '-isysroot', '../../../../../../../Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3
+.sdk', '-mmacos-version-min=13.3', '-Wl,-ObjC', '-Wl,-rpath,@loader_path/.', '-Wl,-rpath,@loader_path/../../..', '-rpath', '@executable_path/', '-L/Appl
+ications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/usr/lib', '-o', './libchrome_dll.dylib', '@./libchrome_dll
+.dylib.rsp']' returned non-zero exit status 1.
+ninja: build stopped: subcommand failed.
+beyond:~/.gchromium/fingerprinting [!1] $ 
