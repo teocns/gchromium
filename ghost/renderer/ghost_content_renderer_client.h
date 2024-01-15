@@ -14,7 +14,7 @@
 #include "chrome/renderer/chrome_content_renderer_client.h"
 #include "ghost/renderer/ghost_render_frame_observer.h"
 #include "ghost/renderer/ghost_render_thread_observer.h"
-#include "v8/include/v8.h"
+// #include "v8/include/v8.h"
 
 class BraveRenderThreadObserver;
 class GURL;
@@ -23,9 +23,18 @@ namespace blink {
 class WebServiceWorkerContextProxy;
 }
 
-class GhostContentRenderClient : public ChromeContentRendererClient {
+// Responsible for initializing the renderer process, setting up observers, etc.
+class GhostContentRendererClient : public ChromeContentRendererClient {
  public:
-  GhostContentRenderClient();
+ using ChromeContentRendererClient::ChromeContentRendererClient;
+  // GhostContentRendererClient();
+
+  // void RenderFrameCreated(content::RenderFrame* render_frame) override;
+  //
+  // void RenderThreadStarted() override;
+
+ private:
+  std::unique_ptr<GhostRenderThreadObserver> render_thread_observer_;
 };
 
 #endif  // GHOST_CONTENT_RENDERER_CLIENT_H_

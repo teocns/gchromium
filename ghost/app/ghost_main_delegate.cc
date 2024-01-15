@@ -34,7 +34,7 @@
 
 namespace {}  // namespace
 
-base::LazyInstance<GhostContentRenderClient>::DestructorAtExit
+base::LazyInstance<GhostContentRendererClient>::DestructorAtExit
     g_ghost_content_renderer_client = LAZY_INSTANCE_INITIALIZER;
 
 content::ContentRendererClient*
