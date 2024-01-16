@@ -1,5 +1,5 @@
-#ifndef GHOST_APP_MAIN_DELEGATE
-#define GHOST_APP_MAIN_DELEGATE
+#ifndef GHOST_APP_MAIN_DELEGATE_H
+#define GHOST_APP_MAIN_DELEGATE_H
 
 #include <optional>
 
@@ -9,20 +9,20 @@
 // Chrome implementation of ContentMainDelegate.
 class GhostMainDelegate : public ChromeMainDelegate {
  public:
-  using ChromeMainDelegate::ChromeMainDelegate;
+  GhostMainDelegate(const GhostMainDelegate&) = delete;
+  GhostMainDelegate& operator=(const GhostMainDelegate&) = delete;
+  GhostMainDelegate();
+  // using ChromeMainDelegate::ChromeMainDelegate;
   
-  // GhostMainDelegate(const GhostMainDelegate&) = delete;
-  // GhostMainDelegate& operator=(const GhostMainDelegate&) = delete;
-  // GhostMainDelegate();
 
   // |exe_entry_point_ticks| is the time at which the main function of the
   // executable was entered, or null if not available.
-  // explicit GhostMainDelegate(base::TimeTicks exe_entry_point_ticks);
-  // ~GhostMainDelegate() override;
+  explicit GhostMainDelegate(base::TimeTicks exe_entry_point_ticks);
+  ~GhostMainDelegate() override;
 
  protected:
   // content::ContentMainDelegate implementation:
-  // content::ContentBrowserClient* CreateContentBrowserClient() override;
+  content::ContentBrowserClient* CreateContentBrowserClient() override;
   content::ContentRendererClient* CreateContentRendererClient() override;
   // content::ContentUtilityClient* CreateContentUtilityClient() override;
   // void PreSandboxStartup() override;
@@ -30,4 +30,4 @@ class GhostMainDelegate : public ChromeMainDelegate {
   //     ChromeMainDelegate::InvokedIn invoked_in) override;
 };
 
-#endif  // GHOST_APP_MAIN_DELEGATE
+#endif  // GHOST_APP_MAIN_DELEGATE_H

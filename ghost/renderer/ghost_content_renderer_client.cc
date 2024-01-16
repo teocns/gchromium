@@ -3,9 +3,9 @@
 #include "ghost/renderer/ghost_render_frame_observer.h"
 #include "ghost/renderer/ghost_render_thread_observer.h"
 
-// GhostContentRendererClient::GhostContentRendererClient() {
-//   LOG(INFO) << "GhostContentRendererClient constructor";
-// }
+GhostContentRendererClient::GhostContentRendererClient() {
+  LOG(INFO) << "GhostContentRendererClient constructor";
+}
 
 // void GhostContentRendererClient::RenderThreadStarted() {
 //   ChromeContentRendererClient::RenderThreadStarted();
@@ -22,12 +22,12 @@
 
 // Override the RenderFrameCreated method to just call LOG, and forward the rest
 // to the superclass
-// void GhostContentRendererClient::RenderFrameCreated(
-//     content::RenderFrame* render_frame) {
-//   ChromeContentRendererClient::RenderFrameCreated(render_frame);
-//
-//   LOG(INFO) << "GhostContentRendererClient RenderFrameCreated";
-//
-//   // auto g_render_frame_observer = std::make_unique<GhostRenderFrameObserver>(
-//   //     render_frame, web_cache_impl_.get());
-// }
+void GhostContentRendererClient::RenderFrameCreated(
+    content::RenderFrame* render_frame) {
+  ChromeContentRendererClient::RenderFrameCreated(render_frame);
+
+  LOG(INFO) << "GhostContentRendererClient RenderFrameCreated";
+
+  // auto g_render_frame_observer = std::make_unique<GhostRenderFrameObserver>(
+  //     render_frame, web_cache_impl_.get());
+}

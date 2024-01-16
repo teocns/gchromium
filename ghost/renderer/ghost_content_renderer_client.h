@@ -26,10 +26,10 @@ class WebServiceWorkerContextProxy;
 // Responsible for initializing the renderer process, setting up observers, etc.
 class GhostContentRendererClient : public ChromeContentRendererClient {
  public:
- using ChromeContentRendererClient::ChromeContentRendererClient;
-  // GhostContentRendererClient();
+ // using ChromeContentRendererClient::ChromeContentRendererClient;
+  GhostContentRendererClient();
 
-  // void RenderFrameCreated(content::RenderFrame* render_frame) override;
+  void RenderFrameCreated(content::RenderFrame* render_frame) override;
   //
   // void RenderThreadStarted() override;
 
