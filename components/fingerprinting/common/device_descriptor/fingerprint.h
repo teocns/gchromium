@@ -1,5 +1,5 @@
-#ifndef COMPONENTS_FINGERPRINTING_COMMON_DEVICE_DESCRIPTOR_H
-#define COMPONENTS_FINGERPRINTING_COMMON_DEVICE_DESCRIPTOR_H
+#ifndef FINGERPRINTING_FINGERPRINT_H_
+#define FINGERPRINTING_FINGERPRINT_H_
 
 #include <vector>
 
@@ -9,7 +9,7 @@
 namespace fingerprinting {
 
 
-class COMPONENT_EXPORT(FINGERPRINTING_COMMON_DEVICE_DESCRIPTOR) IDeviceDescriptor {
+class COMPONENT_EXPORT(FINGERPRINTING_CORE_DEVICE_DESCRIPTOR) IFingerprint {
  public:
   virtual bool Find(std::vector<std::string>&& keys, base::Value*& out) = 0;
   virtual bool Find(std::vector<std::string>&& keys) = 0;
@@ -17,4 +17,4 @@ class COMPONENT_EXPORT(FINGERPRINTING_COMMON_DEVICE_DESCRIPTOR) IDeviceDescripto
 
 }  // namespace fingerprinting
 
-#endif  // COMPONENTS_FINGERPRINTING_COMMON_DEVICE_DESCRIPTOR_H
+#endif  // FINGERPRINTING_FINGERPRINT_H_

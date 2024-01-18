@@ -1,0 +1,50 @@
+import("//build/config/chrome_build.gni")
+
+
+source_set("core") {
+  sources = [
+    "manager.h",
+    "manager.cc",
+  ]
+
+  visibility = [ "//fingerprinting/*" ]
+
+  defines = [ "IS_FINGERPRINTING_CORE_IMPL" ]
+
+
+  deps = [
+    "//base",
+  ]
+
+  public_deps = [
+    "//third_party/abseil-cpp:absl",
+    ":device_descriptor",
+  ]
+}
+
+
+
+
+source_set("device_descriptor"){
+  sources = [
+    "device_descriptor/fingerprint.h",
+    "device_descriptor/fingerprint_impl.h",
+    "device_descriptor/fingerprint_impl.cc",
+  ]
+
+  visibility = [ "*" ]
+
+  defines = [ "IS_FINGERPRINTING_CORE_DEVICE_DESCRIPTOR_IMPL" ]
+
+
+  deps = [
+    "//base",
+  ]
+
+  public_deps = [
+    "//third_party/abseil-cpp:absl",
+  ]
+
+}
+
+

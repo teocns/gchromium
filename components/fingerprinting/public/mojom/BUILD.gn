@@ -1,0 +1,37 @@
+import("//build/config/chrome_build.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojom") {
+  # disable_variants = true
+  sources = [
+    "manager.mojom",
+  ]
+
+  visibility = [ "*" ]
+  # Since this is now a shared library and we make use of third_party/blink/public/mojom/user_agent/user_agent_metadata.mojom,
+  # we need to add the appropriate dependencies
+  public_deps = [
+    "//mojo/public/mojom/base",
+    "//third_party/blink/public/mojom:mojom_core",
+    "//third_party/blink/public/mojom:mojom_modules",
+    "//third_party/blink/public/mojom:mojom_platform",
+  ]
+
+  export_class_attribute = "FINGERPRINTING_PUBLIC_EXPORT"
+  export_define = "FINGERPRINTING_PUBLIC_IMPL=1"
+  export_header = "fingerprinting/public/cpp/export.h"
+
+
+
+
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/blink/public/platform/web_common.h"
+
+  visibility_blink = [
+    "*"
+  ]
+}
+
+
+
