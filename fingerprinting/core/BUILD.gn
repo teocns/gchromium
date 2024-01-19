@@ -1,0 +1,74 @@
+import("//build/config/chrome_build.gni")
+
+
+source_set("core") {
+  sources = [
+    "manager.h",
+    "manager.cc",
+  ]
+
+  visibility = [ "//fingerprinting/*" ]
+
+  defines = [ "IS_FINGERPRINTING_CORE_IMPL" ]
+
+
+  deps = [
+    "//base",
+  ]
+
+  public_deps = [
+    "//third_party/abseil-cpp:absl",
+    ":device_descriptor",
+    ":evasions"
+  ]
+}
+
+
+
+
+source_set("device_descriptor"){
+  sources = [
+    "device_descriptor/fingerprint.h",
+    "device_descriptor/fingerprint_impl.h",
+    "device_descriptor/fingerprint_impl.cc",
+  ]
+
+  visibility = [ "*" ]
+
+  defines = [ "IS_FINGERPRINTING_CORE_DEVICE_DESCRIPTOR_IMPL" ]
+
+
+  deps = [
+    "//base",
+  ]
+
+  public_deps = [
+    "//third_party/abseil-cpp:absl",
+  ]
+
+}
+
+
+source_set("evasions"){
+  sources = [
+    "evasions/hook.cc",
+    "evasions/hook.h",
+    "evasions/hooks/navigator_webdriver.h",
+    "evasions/hooks/webgl.h",
+    "evasions/hook_factory.cc",
+    "evasions/hook_factory.h",
+    "evasions/pack.cc",
+    "evasions/pack.h",
+  ]
+
+  visibility = [ "*" ]
+
+  defines = [ "IS_FINGERPRINTING_CORE_EVASIONS_IMPL" ]
+  deps = [
+    "//base",
+  ]
+
+  public_deps = [
+    "//third_party/abseil-cpp:absl",
+  ]
+}
