@@ -3,7 +3,9 @@ ghost_chrome_browser_sources = [
   "//ghost/browser/ghost_content_browser_client.cc",
 ]
 
-ghost_chrome_browser_deps = []
+ghost_chrome_browser_deps = [
+  "//fingerprinting"
+]
 
 
 # do not add anything else here
