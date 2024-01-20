@@ -15,9 +15,7 @@ interface FingerprintManager {
   [Sync]
   GetUserAgentMetadata() => (blink.mojom.UserAgentMetadata? metadata);
   [Sync]
-  GetEvasions(string target) => (mojo_base.mojom.Value callback);
-  [Sync]
-  GetEvasionsStr(string target) => (string callback);
-  [Sync]
   GetFingerprintString() => (string fingerprint);
+  [Sync]
+  GetFingerprintValue() => (mojo_base.mojom.Value callback);
 };

@@ -7,7 +7,6 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
-#include "base/synchronization/rlock.h"
 #include "base/values.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"

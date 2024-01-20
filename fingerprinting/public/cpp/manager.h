@@ -14,7 +14,7 @@
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "fingerprinting/core/manager.h"
 #include "fingerprinting/public/cpp/export.h"
-#include "fingerprinting/public/cpp/mixins/evasions.mojom.h"
+// #include "fingerprinting/public/cpp/mixins/evasions.mojom.h"
 #include "fingerprinting/public/cpp/mixins/user-agent.mojom.h"
 #include "fingerprinting/public/mojom/manager.mojom.h"
 
@@ -27,8 +27,7 @@ namespace fingerprinting {
 
 class FINGERPRINTING_PUBLIC_EXPORT FingerprintManager
     : virtual public internal::FingerprintManagerBase,
-      public internal::UAMixinMojom,
-      public internal::EvasionsMixinMojom {
+      public internal::UAMixinMojom {
  public:
   static FingerprintManager* GetInstance(bool try_init = false);
 
@@ -37,6 +36,7 @@ class FINGERPRINTING_PUBLIC_EXPORT FingerprintManager
 
   void Enabled(EnabledCallback callback) override;
   void GetFingerprintString(GetFingerprintStringCallback) override;
+  void GetFingerprintValue(GetFingerprintValueCallback) override;
 
  private:
   FingerprintManager();

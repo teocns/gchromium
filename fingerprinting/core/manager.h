@@ -12,7 +12,6 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
-#include "base/synchronization/rlock.h"
 #include "base/values.h"
 #include "fingerprinting/core/cache.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
@@ -85,7 +84,6 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE) FingerprintManagerCore {
 
   std::unique_ptr<Fingerprint> fingerprint_;
 
-  base::RLock rlock_;
   base::Lock lock_;
 
   bool initialized_ =

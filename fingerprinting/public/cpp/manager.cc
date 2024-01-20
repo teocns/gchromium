@@ -44,7 +44,8 @@ FingerprintManager* FingerprintManager::GetInstance(bool try_init) {
 void FingerprintManager::Enabled(EnabledCallback callback) {
   std::move(callback).Run(Loaded());
 }
-void FingerprintManager::GetFingerprintString(GetFingerprintStringCallback callback) {
+void FingerprintManager::GetFingerprintString(
+    GetFingerprintStringCallback callback) {
   std::move(callback).Run(this->GetFingerprint()->str_value());
 }
 
@@ -55,6 +56,10 @@ void FingerprintManager::Bind(
 
 FingerprintManager* manager(bool try_init) {
   return FingerprintManager::GetInstance(try_init);
+}
+
+void FingerprintManager::GetFingerprintValue(GetFingerprintValueCallback callback) {
+  std::move(callback).Run(this->GetFingerprint()->value().Clone());
 }
 
 }  // namespace fingerprinting

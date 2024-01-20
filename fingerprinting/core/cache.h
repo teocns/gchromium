@@ -14,7 +14,6 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
-#include "base/synchronization/rlock.h"
 #include "base/values.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
