@@ -2502,6 +2502,7 @@ static_library("browser") {
 
     import("//ghost/browser/sources.gni")
     sources += ghost_chrome_browser_sources
+    deps += ghost_chrome_browser_deps
     if (is_chromeos_ash) {
       deps += [ "//chrome/browser/screen_ai:screen_ai_chromeos_installer" ]
     } else {
