@@ -9,6 +9,9 @@
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/renderer_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 
+namespace fingerprinting {
+class Fingerprint;
+}
 namespace blink {
 
 // A singleton that holds the device descriptor in Renderer Process' stack
@@ -20,7 +23,7 @@ class CONTROLLER_EXPORT FingerprintingEvasionsController {
   FingerprintingEvasionsController& operator=(
       const FingerprintingEvasionsController&) = delete;
   ~FingerprintingEvasionsController() = default;
- FingerprintingEvasionsController() = default;
+  FingerprintingEvasionsController() = default;
 
   static void Init();
   // These calls can arrive on any thread.
@@ -28,7 +31,7 @@ class CONTROLLER_EXPORT FingerprintingEvasionsController {
                             ExecutionContext* execution_context) {}
   void OnScriptStateDestroyed(ScriptState* script_state) {}
 
- private:
+ // private:
   // friend class FingerprintingEvasionsControllerTest;
 
   // explicit FingerprintingEvasionsController(
@@ -50,6 +53,7 @@ class CONTROLLER_EXPORT FingerprintingEvasionsController {
   //     service_;
 
   // scoped_refptr<base::SequencedTaskRunner> service_task_runner_;
+  // std::unique_ptr<fingerprinting::Fingerprint> fingerprint_;
 };
 
 }  // namespace blink

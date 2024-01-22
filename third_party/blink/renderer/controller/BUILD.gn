@@ -23,12 +23,13 @@ component("controller") {
 
   deps = [
     "//components/performance_manager/public/mojom:mojom_blink",
+    "//components/fingerprinting/common/mojom:mojom_blink",
     "//skia",
     "//third_party/blink/renderer/core",
     "//third_party/blink/renderer/modules",
     "//third_party/blink/renderer/platform",
     "//v8",
-    "//fingerprinting"
+    "//components/fingerprinting/common"
   ]
 
   if (use_blink_extensions_chromeos) {
@@ -277,7 +278,6 @@ source_set("blink_unittests_sources") {
     "//base/test:test_support",
     "//components/payments/mojom:mojom_blink",
     "//components/performance_manager/public/mojom:mojom_blink",
-    "//fingerprinting/public/mojom:mojom_blink",
     "//content/test:test_support",
     "//gpu:test_support",
     "//testing/gmock",
