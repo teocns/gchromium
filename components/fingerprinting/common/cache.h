@@ -15,14 +15,14 @@
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
-#include "components/fingerprinting/common/device_descriptor/fingerprint_impl.h"
+#include "components/fingerprinting/common/fingerprint_impl.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include "base/command_line.h"
 #include "base/debug/stack_trace.h"
 #include "base/process/process_handle.h"
 
-namespace fingerprinting::core {
+namespace fingerprinting {
 
 class COMPONENT_EXPORT(FINGERPRINTING_CORE) Cache {
  private:
@@ -149,5 +149,5 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE) Cache {
   }
 };
 
-}  // namespace fingerprinting::core
+}  // namespace fingerprinting
 #endif  // FINGERPRINTING_CORE_CACHE_H
