@@ -8,10 +8,10 @@
 #include "base/logging.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 
+#include "components/fingerprinting/browser/manager_impl.h"
+#include "components/fingerprinting/common/mojom/manager.mojom.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/public/browser/render_process_host.h"
-#include "fingerprinting/public/cpp/manager.h"
-#include "fingerprinting/public/mojom/manager.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"

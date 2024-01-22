@@ -1,10 +1,11 @@
 ghost_chrome_browser_sources = [
   "//ghost/browser/ghost_content_browser_client.h",
   "//ghost/browser/ghost_content_browser_client.cc",
+  "//ghost/browser/ghost_browser_main_loop.h",
 ]
 
 ghost_chrome_browser_deps = [
-  "//fingerprinting"
+  "//components/fingerprinting/browser",
 ]
 
 

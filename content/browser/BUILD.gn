@@ -291,7 +291,7 @@ source_set("browser") {
     "//ui/strings:ax_strings",
     "//ui/touch_selection",
     "//v8:v8_version",
-    "//fingerprinting",
+    "//components/fingerprinting/browser",
   ]
 
   public_deps = [

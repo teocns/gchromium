@@ -152,7 +152,7 @@
 #include "ui/display/display_features.h"
 #include "ui/gfx/font_render_params.h"
 #include "ui/gfx/switches.h"
-#include "fingerprinting/public/cpp/manager.h"
+#include "components/fingerprinting/browser/manager_impl.h"
 
 #if defined(USE_AURA) || BUILDFLAG(IS_MAC)
 #include "content/browser/compositor/image_transport_factory.h"
