@@ -9,7 +9,7 @@
 namespace fingerprinting {
 
 
-class COMPONENT_EXPORT(COMPONENTS_FINGERPRINTING_COMMON_FINGERPRINT) IFingerprint {
+class IFingerprint {
  public:
   virtual bool Find(std::vector<std::string>&& keys, base::Value*& out) = 0;
   virtual bool Find(std::vector<std::string>&& keys) = 0;

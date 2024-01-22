@@ -3,7 +3,7 @@
 
 #include "base/values.h"
 #include "components/fingerprinting/common/fingerprint.h"
-#include "fingerprinting/utility/user_agent.h"
+#include "components/fingerprinting/common/helper/user_agent.h"
 
 namespace blink {
 struct UserAgentMetadata;
@@ -17,7 +17,7 @@ const uint32_t kVersion =
          // third_party/blink/common/user_agent/user_agent_metadata.cc
 }
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS_DEVICE_DESCRIPTOR)  UAMixin : protected virtual IFingerprint {
+class UAMixin : protected virtual IFingerprint {
   /**
    "highEntropyValues": {
 "architecture": "arm",
@@ -73,7 +73,7 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS_DEVICE_DESCRIPTOR)  UAMixin 
      */
     base::Value* in = nullptr;
     if (GetUserAgentClientHints(in)) {
-      return fingerprinting::utility::user_agent::MakeUserAgentMetadata(
+      return fingerprinting::helper::MakeUserAgentMetadata(
           in->GetDict(), out);
     }
     return false;
@@ -90,6 +90,10 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS_DEVICE_DESCRIPTOR)  UAMixin 
     }
     return false;
   }
+
+
+
+
 };
 
 }  // namespace fingerprinting

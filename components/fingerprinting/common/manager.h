@@ -16,14 +16,14 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 namespace fingerprinting {
 
-class COMPONENT_EXPORT(FINGERPRINT_STORE) FingerprintStore {
+class COMPONENT_EXPORT(FINGERPRINT_MANAGER) FingerprintManager {
   // Responsible for fetching the fingerprint from the browser process
   // and serving it to the renderer process
  public:
   bool isInitialized() { return this->fingerprint_ != nullptr; }
 
-  static FingerprintStore* GetInstance() {
-    static base::NoDestructor<FingerprintStore> instance;
+  static FingerprintManager* GetInstance() {
+    static base::NoDestructor<FingerprintManager> instance;
     return instance.get();
   }
 
@@ -31,15 +31,17 @@ class COMPONENT_EXPORT(FINGERPRINT_STORE) FingerprintStore {
 
   bool CanBeInitialized() { return !initialized_ && can_be_initialized_; }
 
-  void Set(std::unique_ptr<Fingerprint> fp) {
+  void SetFingerprint(std::unique_ptr<Fingerprint> fp) {
     this->fingerprint_ = std::move(fp);
     this->initialized_ = true;
   }
 
- protected:
-  FingerprintStore();
-  ~FingerprintStore();
+  Fingerprint* GetFingerprint() { return this->fingerprint_.get(); }
 
+  FingerprintManager();
+  ~FingerprintManager();
+
+ protected:
   Cache cache;
 
  private:

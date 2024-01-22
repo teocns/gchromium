@@ -1,0 +1,31 @@
+
+import("//build/config/chrome_build.gni")
+
+
+
+
+source_set("browser") {
+  sources = [
+    "manager_impl.h",
+    "manager_impl.cc",
+  ]
+
+  visibility = [ "*" ]
+
+  defines = [ "COMPONENTS_FINGERPRINTING_BROWSER_IMPL" ]
+
+
+  deps = [
+    "//base",
+    "//components/fingerprinting/common/mojom",
+  ]
+
+  public_deps = [
+    "//third_party/abseil-cpp:absl",
+    "//components/fingerprinting/common"
+  ]
+}
+
+
+
+

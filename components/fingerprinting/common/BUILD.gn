@@ -3,17 +3,14 @@ import("//build/config/chrome_build.gni")
 static_library("common") {
   sources = [
     "manager.h",
-    "manager.cc",
     "fingerprint.h",
     "fingerprint_impl.h",
     "fingerprint_impl.cc",
-    "store.h",
-    "store.cc",
     "cache.h",
     "mixins/user-agent.h",
+    "helper/user_agent.h",
+    "helper/user_agent.cc",
   ]
-
-  # visibility = [ "//fingerprinting/*" ]
 
   deps = [
     "//base",
@@ -21,10 +18,9 @@ static_library("common") {
 
   public_deps = [
     "//third_party/abseil-cpp:absl",
-    # ":device_descriptor",
-    # ":evasions"
   ]
 }
+
 
 
 

@@ -10,10 +10,9 @@
 
 namespace fingerprinting {
 
-class COMPONENT_EXPORT(COMPONENTS_FINGERPRINTING_COMMON_FINGERPRINT)
-    Fingerprint final : public UAMixin,
-                        public WebGLMixin,
-                        protected virtual IFingerprint {
+class Fingerprint final : public UAMixin,
+                          public WebGLMixin,
+                          protected virtual IFingerprint {
  public:
   Fingerprint& operator=(Fingerprint&& other);
   Fingerprint(Fingerprint&& other);
@@ -31,7 +30,7 @@ class COMPONENT_EXPORT(COMPONENTS_FINGERPRINTING_COMMON_FINGERPRINT)
   std::string& str_value() { return this->str_value_; }
 
   // Statics
-  static absl::optional<Fingerprint>& From(const std::string& fingerprint_str);
+  static absl::optional<Fingerprint> From(const std::string& fingerprint_str);
 
  private:
   base::Value value_;

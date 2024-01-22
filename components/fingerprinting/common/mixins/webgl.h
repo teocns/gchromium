@@ -3,7 +3,7 @@
 
 #include "base/values.h"
 #include "components/fingerprinting/common/fingerprint.h"
-#include "fingerprinting/utility/user_agent.h"
+#include "components/fingerprinting/common/helper/user_agent.h"
 
 
 namespace fingerprinting {

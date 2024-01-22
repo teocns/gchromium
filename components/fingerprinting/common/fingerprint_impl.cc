@@ -1,7 +1,6 @@
 #include <vector>
 #include "base/json/json_reader.h"
 #include "base/logging.h"
-
 #include "components/fingerprinting/common/fingerprint_impl.h"
 
 namespace fingerprinting {
