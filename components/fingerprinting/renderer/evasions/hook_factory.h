@@ -6,7 +6,7 @@
 #include "base/component_export.h"
 #include "fingerprinting/core/evasions/hook.h"
 
-namespace fingerprinting::evasions {
+namespace fingerprinting::core::evasions {
 
 typedef std::function<std::unique_ptr<Hook>()> HookConstructor;
 
@@ -34,6 +34,6 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) HookFactory {
       (HookFactory::Register(#name, [] { return std::make_unique<type>(); }), \
        true);
 
-}  // namespace fingerprinting::evasions
+}  // namespace fingerprinting::core::evasions
 
 #endif  // FINGERPRINTING_CORE_EVASIONS_FACTORY_H

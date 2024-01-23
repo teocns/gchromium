@@ -5,7 +5,7 @@
 #include "fingerprinting/core/evasions/hook_factory.h"
 #include "fingerprinting/core/evasions/hook.h"
 
-namespace fingerprinting::evasions {
+namespace fingerprinting::core::evasions {
 
 class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hWebGL : public Hook {
  public:
@@ -30,5 +30,5 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hWebGL : public Hook {
 
 REGISTER_HOOK(webgl, hWebGL)
 
-}  // namespace fingerprinting::evasions
+}  // namespace fingerprinting::core::evasions
 #endif  // FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H

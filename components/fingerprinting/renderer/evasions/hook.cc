@@ -1,5 +1,5 @@
 #include "fingerprinting/core/evasions/hook.h"
-namespace fingerprinting::evasions {
+namespace fingerprinting::core::evasions {
 
 // std::string Hook::get_definition() {
 //   /*
@@ -18,4 +18,4 @@ std::string Hook::get_iife() {
 }
 
 
-}  // namespace fingerprinting::evasions
+}  // namespace fingerprinting::core::evasions
