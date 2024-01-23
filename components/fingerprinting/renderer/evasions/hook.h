@@ -14,7 +14,7 @@ namespace {
 class EvasionsPackage;
 }
 
-namespace fingerprinting::core::evasions {
+namespace fingerprinting::evasions {
 
 enum HookTargetType {
   PAGE,
@@ -75,6 +75,6 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Hook {
   std::string impl;
 };
 
-}  // namespace fingerprinting::core::evasions
+}  // namespace fingerprinting::evasions
 
 #endif  // FINGERPRINTING_EVASIONS_HOOK_H_

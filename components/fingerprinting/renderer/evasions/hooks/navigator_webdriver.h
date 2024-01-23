@@ -4,7 +4,7 @@
 #include "base/component_export.h"
 #include "fingerprinting/core/evasions/hook.h"
 #include "fingerprinting/core/evasions/hook_factory.h"
-namespace fingerprinting::core::evasions {
+namespace fingerprinting::evasions {
 
 class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hNavigatorWebdriver
     : public Hook {
@@ -29,5 +29,5 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hNavigatorWebdriver
 
 REGISTER_HOOK(navigator_webdriver, hNavigatorWebdriver)
 
-}  // namespace fingerprinting::core::evasions
+}  // namespace fingerprinting::evasions
 #endif  // FINGERPRINTING_EVASIONS_HOOK_NAVIGATOR_WEBDRIVER_H

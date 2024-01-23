@@ -5,7 +5,7 @@
 #include <map>
 #include "base/values.h"
 
-namespace fingerprinting::core::evasions {
+namespace fingerprinting::evasions {
 class HookData : public base::Value{
   /*
    * Reference to the portion of data that Hook needs to access from the Fingerprint object
