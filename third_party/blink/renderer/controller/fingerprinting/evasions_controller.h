@@ -14,13 +14,14 @@ namespace blink {
 // A singleton that holds the device descriptor in Renderer Process' stack
 // Monkey-patches script contexts
 class CONTROLLER_EXPORT FingerprintingEvasionsController {
+ // USING_FAST_MALLOC(FingerprintingEvasionsController) {
  public:
   FingerprintingEvasionsController(const FingerprintingEvasionsController&) =
       delete;
   FingerprintingEvasionsController& operator=(
       const FingerprintingEvasionsController&) = delete;
   ~FingerprintingEvasionsController() = default;
- FingerprintingEvasionsController() = default;
+  FingerprintingEvasionsController() = default;
 
   static void Init();
   // These calls can arrive on any thread.
@@ -29,7 +30,6 @@ class CONTROLLER_EXPORT FingerprintingEvasionsController {
   void OnScriptStateDestroyed(ScriptState* script_state) {}
 
  private:
-  // friend class FingerprintingEvasionsControllerTest;
 
   // explicit FingerprintingEvasionsController(
   //     mojo::PendingRemote<
