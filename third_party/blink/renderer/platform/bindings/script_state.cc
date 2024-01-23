@@ -6,7 +6,7 @@
 
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_context_data.h"
-#include "third_party/blink/renderer/platform/fingerprinting/patch.h"
+#include "third_party/blink/renderer/platform/fingerprinting/provider.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/renderer_resource_coordinator.h"
 #include <string>
@@ -41,7 +41,7 @@ ScriptState::ScriptState(v8::Local<v8::Context> context,
   context->SetAlignedPointerInEmbedderData(kV8ContextPerContextDataIndex, this);
   RendererResourceCoordinator::Get()->OnScriptStateCreated(this,
                                                            execution_context);
-  auto fp = FingerprintingResourceController::Get();
+  auto fp = FingerprintProvider::Get();
 
   // Let's try to access something from the fingerprint!
   LOG(INFO) << "ScriptState::ScriptState(); "

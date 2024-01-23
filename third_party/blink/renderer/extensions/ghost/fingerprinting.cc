@@ -1,28 +1,54 @@
-#include "third_party/blink/renderer/controller/fingerprinting/evasions_controller.h"
+#include "third_party/blink/renderer/extensions/ghost/fingerprinting.h"
+
 #include "base/logging.h"
-#include "base/time/time.h"
-#include "base/values.h"
 #include "base/process/current_process.h"
 #include "base/process/process.h"
+#include "base/time/time.h"
+#include "base/values.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "fingerprinting/public/cpp/manager.h"
 #include "fingerprinting/public/mojom/manager.mojom.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/renderer/controller/fingerprinting/script_context_mock.h"
-#include "third_party/blink/renderer/platform/fingerprinting/patch.h"
-
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/platform/bindings/extensions_registry.h"
+#include "third_party/blink/renderer/platform/bindings/v8_set_return_value.h"
+#include "third_party/blink/renderer/platform/fingerprinting/provider.h"
 namespace blink {
 
-// Fetch the device descriptor from the browser process via IPC
-void FingerprintingEvasionsController::Init() {
+void InstallFingerprintingExtensions(ScriptState* script_state) {
+  auto* execution_context = ExecutionContext::From(script_state);
+
+  // The acutal patch logic to be executed here....
+
+  auto global_proxy = script_state->GetContext()->Global();
+
+
+
+  LOG(INFO) << "InstallFingerprintExtensions executing()";
+
+  // global_proxy
+  //     ->SetLazyDataProperty(script_state->GetContext(),
+  //                           V8String(script_state->GetIsolate(), "chromeos"),
+  //                           ChromeOSDataPropertyGetCallback,
+  //                           v8::Local<v8::Value>(), v8::DontEnum,
+  //                           v8::SideEffectType::kHasNoSideEffect)
+  //     .ToChecked();
+
+}  // namespace
+
+
+void FingerprintingExtensions::Initialize() {
   // Supposed to be invoked on the main thread only
   blink::Platform* platform = Platform::Current();
   DCHECK(IsMainThread());
   DCHECK(platform);
 
-  // Do not run on snapshot
+  ExtensionsRegistry::GetInstance().RegisterBlinkExtensionInstallCallback(
+      &InstallFingerprintingExtensions);
+
+  // Do not run on snapshot. This can also run at build time lol
   if (platform->IsTakingV8ContextSnapshot()) {
     return;
   }
@@ -46,28 +72,22 @@ void FingerprintingEvasionsController::Init() {
     // Fingerprinting is blocked, so we should not enable the API.
     return;
   }
+
   base::TimeDelta delta = end - start;
 
   base::Process procData = base::Process::Current();
 
-  DLOG(INFO) << "Render Proc [" << procData.Pid() << "]"
-             << "Retrieved fingerprint in " << delta.InMillisecondsF() << " ms";
+  DLOG(INFO) << "Render Proc [" << procData.Pid() << "]" << "Retrieved fingerprint in " << delta.InMillisecondsF() << " ms";
 
   // get dict size
   const size_t size = fp_value.GetDict().size();
 
   // Get the renderer process ID
-  DLOG(INFO) << "FingerprintingEvasionsController::Init() -> Retrieved "
-                "fingerprint in "
-             << delta.InMillisecondsF()
-             << " ms, dict-keys: " << std::to_string(size);
+  DLOG(INFO) << "FingerprintExtesions::Init() -> Retrieved " "fingerprint in " << delta.InMillisecondsF() << " ms, dict-keys: " << std::to_string(size);
 
-  // fingerprinting::Fingerprint fp =
-  // fingerprinting::Fingerprint(fingerprint_str);
-
-  // Move the ownership of the fingerprint_str to the
-  // FingerprintingResourceController
+  // Set the static fingerprint
   FingerprintProvider::Set(
       new fingerprinting::Fingerprint(fp_value));
 }
+
 }  // namespace blink
