@@ -6,7 +6,7 @@
 #include <string>
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "fingerprinting/core/evasions/hook.h"
-namespace fingerprinting::evasions {
+namespace fingerprinting::core::evasions {
 
 struct COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) EvasionsPackage {
   /*
@@ -40,6 +40,6 @@ struct COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) EvasionsPackage {
   std::string get_iife();
 };
 
-}  // namespace fingerprinting::evasions
+}  // namespace fingerprinting::core::evasions
 
 #endif  // FINGERPRINTING_EVASIONS_PACKER_H

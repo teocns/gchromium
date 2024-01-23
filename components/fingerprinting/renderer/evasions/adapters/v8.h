@@ -8,7 +8,7 @@
 
 inline v8::MaybeLocal<v8::UnboundScript> ToV8Script(
     v8::Isolate* isolate,
-    fingerprinting::evasions::EvasionsPackage* pack) {
+    fingerprinting::core::evasions::EvasionsPackage* pack) {
   v8::Local<v8::String> source =
       v8::String::NewFromUtf8(isolate, pack->get_iife().c_str())
           .ToLocalChecked();
