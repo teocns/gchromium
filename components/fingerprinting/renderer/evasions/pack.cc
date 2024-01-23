@@ -7,7 +7,7 @@
 #include "fingerprinting/core/evasions/hooks/webgl.h"
 #include "fingerprinting/core/evasions/hooks/navigator_webdriver.h"
 
-namespace fingerprinting::core::evasions {
+namespace fingerprinting::evasions {
 
 std::string EvasionsPackage::get_iife() {
   std::string iife = "(function(){";
@@ -42,4 +42,4 @@ std::unique_ptr<EvasionsPackage> EvasionsPackage::Pack(
   return pack;
 }
 
-}  // namespace fingerprinting::core::evasions
+}  // namespace fingerprinting::evasions

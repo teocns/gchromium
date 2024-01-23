@@ -1,6 +1,6 @@
 #include "fingerprinting/core/evasions/hook.h"
 #include "fingerprinting/core/evasions/hook_factory.h"
-namespace fingerprinting::core::evasions {
+namespace fingerprinting::evasions {
 std::unique_ptr<Hook> HookFactory::Create(const std::string& codename) {
   auto it = GetRegistry().find(codename);
   if (it != GetRegistry().end()) {
@@ -29,4 +29,4 @@ std::map<std::string, HookConstructor>& HookFactory::GetRegistry() {
   return registry;
 }
 
-}  // namespace fingerprinting::core::evasions
+}  // namespace fingerprinting::evasions
