@@ -4,6 +4,8 @@
 #include "base/values.h"
 // #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 // #include "fingerprinting/public/cpp/manager.h"
+#include "base/process/current_process.h"
+#include "base/process/process.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "fingerprinting/public/cpp/manager.h"
 #include "fingerprinting/public/mojom/manager.mojom.h"
@@ -11,9 +13,7 @@
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/controller/fingerprinting/script_context_mock.h"
-
-#include "base/process/current_process.h"
-#include "base/process/process.h"
+#include "third_party/blink/renderer/platform/fingerprinting/patch.h"
 
 namespace blink {
 
@@ -36,13 +36,13 @@ void FingerprintingEvasionsController::Init() {
   base::TimeTicks start = base::TimeTicks::Now();
 
   // Use the fingerprint_manager to call GetFingerprintStr
-  base::Value fingerprint_str;
-  if (!fingerprint_manager->GetFingerprintValue(&fingerprint_str)) {
+  base::Value fp_value;
+  if (!fingerprint_manager->GetFingerprintValue(&fp_value)) {
     LOG(ERROR) << "FingerprintingEvasionsController::Init() -> "
                   "Failed to retrieve fingerprint (PIPE)";
   }
   base::TimeTicks end = base::TimeTicks::Now();
-  if (fingerprint_str.is_none()) {
+  if (fp_value.is_none()) {
     LOG(ERROR) << "FingerprintingEvasionsController::Init() -> "
                   "Failed to retrieve fingerprint";
     // Fingerprinting is blocked, so we should not enable the API.
@@ -53,16 +53,23 @@ void FingerprintingEvasionsController::Init() {
   base::Process procData = base::Process::Current();
 
   DLOG(INFO) << "Render Proc [" << procData.Pid() << "]"
-            << "Retrieved fingerprint in " << delta.InMillisecondsF() << " ms";
+             << "Retrieved fingerprint in " << delta.InMillisecondsF() << " ms";
 
   // get dict size
-  const size_t size = fingerprint_str.GetDict().size();
+  const size_t size = fp_value.GetDict().size();
 
   // Get the renderer process ID
   DLOG(INFO) << "FingerprintingEvasionsController::Init() -> Retrieved "
-               "fingerprint in "
-            << delta.InMillisecondsF() << " ms, dict-keys: " << std::to_string(size);
+                "fingerprint in "
+             << delta.InMillisecondsF()
+             << " ms, dict-keys: " << std::to_string(size);
 
-  fingerprinting::Fingerprint fp = fingerprinting::Fingerprint(fingerprint_str);
+  // fingerprinting::Fingerprint fp =
+  // fingerprinting::Fingerprint(fingerprint_str);
+
+  // Move the ownership of the fingerprint_str to the
+  // FingerprintingResourceController
+  FingerprintingResourceController::Set(
+      new fingerprinting::Fingerprint(fp_value));
 }
 }  // namespace blink
