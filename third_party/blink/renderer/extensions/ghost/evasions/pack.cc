@@ -1,0 +1,45 @@
+#include "fingerprinting/core/evasions/pack.h"
+#include <vector>
+#include "fingerprinting/core/evasions/hook.h"
+#include "fingerprinting/core/evasions/hook_factory.h"
+
+// Include all hooks here
+#include "fingerprinting/core/evasions/hooks/webgl.h"
+#include "fingerprinting/core/evasions/hooks/navigator_webdriver.h"
+
+namespace fingerprinting::core::evasions {
+
+std::string EvasionsPackage::get_iife() {
+  std::string iife = "(function(){";
+  for (auto& hook : this->hooks) {
+    iife += hook->get_iife();
+  }
+  iife += "})();";
+  return iife;
+}
+
+std::unique_ptr<EvasionsPackage> EvasionsPackage::Pack(
+    HookTargetType target,
+    std::set<std::string> filters) {
+  // Returns a compiled, ready-to-inject JS function string
+  // Filters are the evasions to disable
+
+  auto pack = std::make_unique<EvasionsPackage>(target);
+  for (auto& hook_descriptor : HookFactory::GetRegistry()) {
+    const std::string& name = hook_descriptor.first;
+
+    if (filters.find(name) != filters.end()) {
+      // Skip disabled evasions
+      continue;
+    }
+
+    std::unique_ptr<Hook> hook = HookFactory::Create(name);
+    if (hook != nullptr) {
+      pack->Register(std::move(hook));
+    }
+  }
+
+  return pack;
+}
+
+}  // namespace fingerprinting::core::evasions

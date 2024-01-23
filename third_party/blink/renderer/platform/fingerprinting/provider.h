@@ -12,7 +12,7 @@
 namespace blink {
 
 // This object is a process-wide singleton, and thread-safe.
-class PLATFORM_EXPORT FingerprintingResourceController {
+class PLATFORM_EXPORT FingerprintProvider {
  public:
   static void Set(fingerprinting::Fingerprint*);
 

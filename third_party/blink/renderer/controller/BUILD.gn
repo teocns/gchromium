@@ -28,7 +28,8 @@ component("controller") {
     "//third_party/blink/renderer/modules",
     "//third_party/blink/renderer/platform",
     "//v8",
-    "//fingerprinting"
+    "//fingerprinting/",
+    "//third_party/blink/renderer/extensions/ghost"
   ]
 
   if (use_blink_extensions_chromeos) {
@@ -61,8 +62,6 @@ component("controller") {
     "performance_manager/v8_detailed_memory_reporter_impl.h",
     "performance_manager/v8_worker_memory_reporter.cc",
     "performance_manager/v8_worker_memory_reporter.h",
-    "fingerprinting/evasions_controller.h",
-    "fingerprinting/evasions_controller.cc",
   ]
 
   if (is_linux || is_chromeos) {

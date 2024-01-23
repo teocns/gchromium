@@ -6,8 +6,8 @@ import("//third_party/blink/renderer/platform/platform.gni")
 
 blink_platform_sources("fingerprinting") {
   sources = [
-    "patch.h",
-    "patch.cc",
+    "provider.h",
+    "provider.cc",
   ]
 }
 

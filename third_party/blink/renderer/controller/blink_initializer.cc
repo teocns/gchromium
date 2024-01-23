@@ -60,6 +60,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/loader/loader_factory_for_frame.h"
 #include "third_party/blink/renderer/core/loader/resource_cache_impl.h"
+#include "third_party/blink/renderer/extensions/ghost/fingerprinting.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/disk_data_allocator.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -149,6 +150,8 @@ void InitializeCommon(Platform* platform, mojo::BinderMap* binders) {
   // BlinkInitializer::Initialize() must be called before InitializeMainThread
   GetBlinkInitializer().Initialize();
 
+  // FingerprintingEvasionsController::Init();
+  FingerprintingExtensions::Initialize();
   std::string js_command_line_flag =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           blink::switches::kJavaScriptFlags);
@@ -166,7 +169,6 @@ void InitializeCommon(Platform* platform, mojo::BinderMap* binders) {
   // Initialize performance manager.
   RendererResourceCoordinatorImpl::MaybeInitialize();
 
-  FingerprintingEvasionsController::Init();
 }
 
 }  // namespace
