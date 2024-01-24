@@ -1,5 +1,5 @@
 #include "base/logging.h"
-#include "components/fingerprinting/renderer/evasions/execution_context_package.h"
+#include "components/fingerprinting/renderer/evasions/package_execution_context.h"
 #include "components/fingerprinting/renderer/evasions/pack.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 namespace fingerprinting::evasions {
@@ -89,7 +89,7 @@ void EvasionsPackageExecutionContext::Run() {
 }
 
 EvasionsPackageExecutionContext::EvasionsPackageExecutionContext(
-    core::evasions::EvasionsPackage package,
+    core::evasions::EvasionsPackage* package,
     blink::ScriptState* scirpt_state,
     fingerprinting::Fingerprint* fingerprinting) {
   // Each hook gets its own execution context

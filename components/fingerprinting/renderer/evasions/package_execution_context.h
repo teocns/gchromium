@@ -18,7 +18,7 @@ class EvasionsPackageExecutionContext {
 
  public:
   explicit EvasionsPackageExecutionContext(
-      core::evasions::EvasionsPackage,
+      core::evasions::EvasionsPackage*,
       // The reason we pass the ScriptState* and not the ExecutionContext* is
       // because the former provides a way to get the latter and not viceversa
       blink::ScriptState*,
