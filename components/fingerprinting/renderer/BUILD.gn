@@ -14,6 +14,8 @@ static_library("renderer") {
     "evasions/hook_factory.h",
     "evasions/pack.cc",
     "evasions/pack.h",
+    "helper/v8.h",
+    "helper/v8.cc",
   ]
 
   visibility = [ "*" ]

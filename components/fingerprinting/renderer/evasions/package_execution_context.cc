@@ -2,6 +2,7 @@
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "components/fingerprinting/renderer/evasions/pack.h"
+#include "components/fingerprinting/renderer/helper/v8.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "v8/include/v8.h"
 namespace fingerprinting::evasions {
@@ -49,6 +50,44 @@ v8::Local<v8::Object> EvasionsPackageExecutionContext::GetCommonArguments() {
       ->Set(context, v8::String::NewFromUtf8(isolate, "dd").ToLocalChecked(),
             wrapped_fingerprint)
       .ToChecked();
+
+  // ---------------
+  v8::Local<v8::Function> f1 =
+      v8::FunctionTemplate::New(
+          isolate, ::fingerprinting::utility::PatchAccessor)
+          ->GetFunction(context)
+          .ToLocalChecked();
+  v8::Local<v8::Function> f2 =
+      v8::FunctionTemplate::New(isolate,
+                                ::fingerprinting::utility::PatchValue)
+          ->GetFunction(context)
+          .ToLocalChecked();
+
+  bool p1 =
+      obj->Set(
+             context,
+             v8::String::NewFromUtf8(isolate, "PatchAccessor").ToLocalChecked(),
+             f1)
+          .ToChecked();
+  bool p2 =
+      obj->Set(context,
+               v8::String::NewFromUtf8(isolate, "PatchValue").ToLocalChecked(),
+               f2)
+          .ToChecked();
+
+  if (!p1 || !p2) {
+    LOG(ERROR) << "Failed to set PatchAccessor or PatchValue";
+  }
+
+  bool p3 =
+      obj->Set(context, v8::String::NewFromUtf8(isolate, "dd").ToLocalChecked(),
+               v8::External::New(isolate, this->fingerprint_))
+          .ToChecked();
+
+  if (!p3) {
+    LOG(ERROR) << "Failed to set dd";
+  }
+
   return obj;
 
   //_________________________
