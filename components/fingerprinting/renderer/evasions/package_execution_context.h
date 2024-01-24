@@ -6,8 +6,8 @@
 #include <unordered_map>
 #include "base/component_export.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
-#include "fingerprinting/core/evasions/pack.h"
-#include "components/fingerprinting/renderer/evasions/execution_context/hook.h"
+#include "components/fingerprinting/renderer/evasions/pack.h"
+#include "components/fingerprinting/renderer/evasions/hook_execution_context.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "v8/include/v8.h"
 

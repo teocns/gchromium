@@ -2,10 +2,10 @@ static_library("renderer") {
   # Make output library name something else
   output_name = "components_fingerprint_renderer"
   sources = [
-    "evasions/execution_context/hook.h",
-    "evasions/execution_context/hook.cc",
-    "evasions/execution_context/package.h",
-    "evasions/execution_context/package.cc",
+    "evasions/hook_execution_context.h",
+    "evasions/hook_execution_context.cc",
+    "evasions/package_execution_context.h",
+    "evasions/package_execution_context.cc",
     "evasions/hook.cc",
     "evasions/hook.h",
     "evasions/hooks/navigator_webdriver.h",

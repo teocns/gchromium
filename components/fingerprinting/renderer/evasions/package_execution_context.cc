@@ -1,5 +1,5 @@
 #include "base/logging.h"
-#include "components/fingerprinting/renderer/evasions/execution_context/package.h"
+#include "components/fingerprinting/renderer/evasions/execution_context_package.h"
 #include "components/fingerprinting/renderer/evasions/pack.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 namespace fingerprinting::evasions {

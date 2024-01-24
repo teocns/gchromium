@@ -5,7 +5,7 @@
 #include "base/process/process.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "components/fingerprinting/renderer/evasions/execution_context/package.h"
+#include "components/fingerprinting/renderer/evasions/package_execution_context.h"
 #include "components/fingerprinting/renderer/evasions/pack.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "fingerprinting/core/evasions/hook.h"

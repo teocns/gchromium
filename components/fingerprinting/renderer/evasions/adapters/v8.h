@@ -1,5 +1,5 @@
 #include "components/fingerprinting/renderer/evasions/hook.h"
-#include "fingerprinting/core/evasions/pack.h"
+#include "components/fingerprinting/renderer/evasions/pack.h"
 #include "v8-isolate.h"
 #include "v8-local-handle.h"
 #include "v8-script.h"

@@ -3,7 +3,7 @@
 #define FINGERPRINTING_PUBLIC_EVASIONS_HOOK_EXECUTION_CONTEXT_H_
 
 #include "base/component_export.h"
-#include "fingerprinting/core/evasions/hook.h"
+#include "components/fingerprinting/renderer/evasions/hook.h"
 #include "v8/include/v8.h"
 
 namespace fingerprinting::evasions {
