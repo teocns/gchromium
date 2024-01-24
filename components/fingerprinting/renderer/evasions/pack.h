@@ -5,7 +5,7 @@
 #include <set>
 #include <string>
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
-#include "fingerprinting/core/evasions/hook.h"
+#include "components/fingerprinting/renderer/evasions/hook.h"
 namespace fingerprinting::core::evasions {
 
 struct EvasionsPackage {
