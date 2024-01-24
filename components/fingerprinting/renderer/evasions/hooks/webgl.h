@@ -2,8 +2,8 @@
 #define COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H
 
 #include "base/component_export.h"
-#include "fingerprinting/core/evasions/hook_factory.h"
-#include "fingerprinting/core/evasions/hook.h"
+#include "components/fingerprinting/renderer/evasions/hook_factory.h"
+#include "components/fingerprinting/renderer/evasions/hook.h"
 
 namespace fingerprinting::core::evasions {
 

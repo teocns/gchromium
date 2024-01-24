@@ -4,7 +4,7 @@
 
 #include <memory>
 #include "base/component_export.h"
-#include "fingerprinting/core/evasions/hook.h"
+#include "components/fingerprinting/renderer/evasions/hook.h"
 
 namespace fingerprinting::core::evasions {
 

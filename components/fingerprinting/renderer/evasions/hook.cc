@@ -1,4 +1,4 @@
-#include "fingerprinting/core/evasions/hook.h"
+#include "components/fingerprinting/renderer/evasions/hook.h"
 namespace fingerprinting::core::evasions {
 
 // std::string Hook::get_definition() {
