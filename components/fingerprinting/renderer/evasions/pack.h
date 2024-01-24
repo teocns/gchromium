@@ -1,6 +1,6 @@
 // fingerprint_manager.h
-#ifndef FINGERPRINTING_EVASIONS_PACKER_H
-#define FINGERPRINTING_EVASIONS_PACKER_H
+#ifndef COMPONENTS_FINGERPRINTING_EVASIONS_PACKER_H
+#define COMPONENTS_FINGERPRINTING_EVASIONS_PACKER_H
 #include <memory>
 #include <set>
 #include <string>
@@ -42,4 +42,4 @@ struct COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) EvasionsPackage {
 
 }  // namespace fingerprinting::core::evasions
 
-#endif  // FINGERPRINTING_EVASIONS_PACKER_H
+#endif  // COMPONENTS_FINGERPRINTING_EVASIONS_PACKER_H
