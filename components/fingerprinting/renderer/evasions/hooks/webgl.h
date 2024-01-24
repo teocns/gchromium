@@ -1,5 +1,5 @@
-#ifndef FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H
-#define FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H
+#ifndef COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H
+#define COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H
 
 #include "base/component_export.h"
 #include "fingerprinting/core/evasions/hook_factory.h"
@@ -7,7 +7,7 @@
 
 namespace fingerprinting::core::evasions {
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hWebGL : public Hook {
+class hWebGL : public Hook {
  public:
   std::string codename() override { return "webgl"; }
 
@@ -31,4 +31,4 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hWebGL : public Hook {
 REGISTER_HOOK(webgl, hWebGL)
 
 }  // namespace fingerprinting::core::evasions
-#endif  // FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H
+#endif  // COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H
