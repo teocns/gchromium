@@ -5,7 +5,11 @@
 #include "base/process/process.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/fingerprinting/renderer/evasions/execution_context/package.h"
+#include "components/fingerprinting/renderer/evasions/pack.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
+#include "fingerprinting/core/evasions/hook.h"
+#include "fingerprinting/core/evasions/pack.h"
 #include "fingerprinting/public/cpp/manager.h"
 #include "fingerprinting/public/mojom/manager.mojom.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
@@ -17,6 +21,10 @@
 #include "third_party/blink/renderer/platform/fingerprinting/provider.h"
 namespace blink {
 
+using fingerprinting::core::evasions::EvasionsPackage;
+using fingerprinting::core::evasions::EvasionsPackageExecutionContext;
+using fingerprinting::core::evasions::Hook;
+using fingerprinting::core::evasions::HookTargetType;
 void InstallFingerprintingExtensions(ScriptState* script_state) {
   auto* execution_context = ExecutionContext::From(script_state);
 
@@ -24,9 +32,18 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
 
   auto global_proxy = script_state->GetContext()->Global();
 
-
-
   LOG(INFO) << "InstallFingerprintExtensions executing()";
+
+  // Create an evasion pack
+  ExecutionContext* exec = ExecutionContext::From(script_state);
+
+  EvasionsPackageExecutionContext runner = EvasionsPackageExecutionContext(
+      EvasionsPackage::Pack(HookTargetType::PAGE), script_state,
+      FingerprintProvider::Get());
+
+  runner.Run();
+
+  // EvasionsPackageExecutionContext
 
   // global_proxy
   //     ->SetLazyDataProperty(script_state->GetContext(),
@@ -37,7 +54,6 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
   //     .ToChecked();
 
 }  // namespace
-
 
 void FingerprintingExtensions::Initialize() {
   // Supposed to be invoked on the main thread only
@@ -77,17 +93,20 @@ void FingerprintingExtensions::Initialize() {
 
   base::Process procData = base::Process::Current();
 
-  DLOG(INFO) << "Render Proc [" << procData.Pid() << "]" << "Retrieved fingerprint in " << delta.InMillisecondsF() << " ms";
+  DLOG(INFO) << "Render Proc [" << procData.Pid() << "]"
+             << "Retrieved fingerprint in " << delta.InMillisecondsF() << " ms";
 
   // get dict size
   const size_t size = fp_value.GetDict().size();
 
   // Get the renderer process ID
-  DLOG(INFO) << "FingerprintExtesions::Init() -> Retrieved " "fingerprint in " << delta.InMillisecondsF() << " ms, dict-keys: " << std::to_string(size);
+  DLOG(INFO) << "FingerprintExtesions::Init() -> Retrieved "
+                "fingerprint in "
+             << delta.InMillisecondsF()
+             << " ms, dict-keys: " << std::to_string(size);
 
   // Set the static fingerprint
-  FingerprintProvider::Set(
-      new fingerprinting::Fingerprint(fp_value));
+  FingerprintProvider::Set(new fingerprinting::Fingerprint(fp_value));
 }
 
 }  // namespace blink
