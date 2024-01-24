@@ -19,24 +19,11 @@ EvasionsPackageExecutionContext::EvasionsPackageExecutionContext(
   }
 }
 void EvasionsPackageExecutionContext::Run() {
-  v8::Isolate* isolate = this->script_state_->GetIsolate();
-
-  v8::Local<v8::Context> context = this->script_state_->GetContext();
-  // Begin a new scope for handles.
-  v8::HandleScope handle_scope(isolate);
-  //
-  // // Enter context with a new microtasks scope if you want to run microtasks
-  // // after the script execution.
-  v8::MicrotasksScope microtasks(isolate, v8::MicrotasksScope::kRunMicrotasks);
-  //
-  v8::Context::Scope context_scope(context);
-
-  // // Iterate over the map of this->hooks_ [string, HookExecutionContext]
+  // Iterate over the map of this->hooks_ [string, HookExecutionContext]
   for (auto& [_, hook] : this->hooks_) {
     // Run the hook
     hook->Run();
   }
-
 }
 
 v8::Local<v8::Object> EvasionsPackageExecutionContext::GetCommonArguments() {
