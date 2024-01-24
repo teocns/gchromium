@@ -35,6 +35,20 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
   // ExecutionContext* exec = ExecutionContext::From(script_state);
   //
   fingerprinting::Fingerprint* fp = FingerprintProvider::Get();
+
+
+
+  if (fp == nullptr) {
+    LOG(ERROR) << "InstallFingerprintExtensions: NO FINGERPRINT";
+    return;
+  }
+
+
+
+  // Set the fingerprint json as a persistent data within the isolate
+  std::string str = fp->str_value();
+
+
   std::unique_ptr<EvasionsPackage> o_pack = EvasionsPackage::Pack(
       fingerprinting::core::evasions::HookTargetType::PAGE);
 

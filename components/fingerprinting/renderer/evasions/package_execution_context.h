@@ -32,6 +32,7 @@ class EvasionsPackageExecutionContext {
    */
   void Run();
 
+  friend class HookExecutionContext;
  private:
   // A map whereas the key is the hook object (not the string) and the value is
   // the execution context
