@@ -25,7 +25,7 @@ enum HookTargetType {
 // Define type alias HOOK_CODENAME for string;
 // typedef std::string HOOK_CODENAME;
 //
-class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) Hook {
+class Hook {
   /*
    * Each hook represents a patch for a specific JS feature API
    * (e.g. WebGL, Canvas, etc.) A hook instance binds with a

@@ -33,7 +33,7 @@ class ExecutionContext {
   v8::Isolate* isolate;
 };
 
-COMPONENT_EXPORT(FINGERPRINTING_UTILITY_V8)
+
 void RunWithUtils(v8::Local<v8::Context> context, std::string source_code);
 
 }  // namespace fingerprinting::utility::v8_patcher

@@ -6,8 +6,7 @@
 #include "fingerprinting/core/evasions/hook_factory.h"
 namespace fingerprinting::core::evasions {
 
-class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) hNavigatorWebdriver
-    : public Hook {
+class hNavigatorWebdriver : public Hook {
  public:
   std::string codename() override { return "navigator_webdriver"; }
 

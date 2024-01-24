@@ -8,7 +8,7 @@
 #include "fingerprinting/core/evasions/hook.h"
 namespace fingerprinting::core::evasions {
 
-struct COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) EvasionsPackage {
+struct EvasionsPackage {
   /*
    * Represents a packed collection of evasions ready to run as-a-script
    */
