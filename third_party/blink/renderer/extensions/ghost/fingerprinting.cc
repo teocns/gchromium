@@ -5,11 +5,9 @@
 #include "base/process/process.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "components/fingerprinting/renderer/evasions/package_execution_context.h"
 #include "components/fingerprinting/renderer/evasions/pack.h"
+#include "components/fingerprinting/renderer/evasions/package_execution_context.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
-#include "fingerprinting/core/evasions/hook.h"
-#include "fingerprinting/core/evasions/pack.h"
 #include "fingerprinting/public/cpp/manager.h"
 #include "fingerprinting/public/mojom/manager.mojom.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
@@ -22,9 +20,8 @@
 namespace blink {
 
 using fingerprinting::core::evasions::EvasionsPackage;
-using fingerprinting::core::evasions::EvasionsPackageExecutionContext;
 using fingerprinting::core::evasions::Hook;
-using fingerprinting::core::evasions::HookTargetType;
+using fingerprinting::evasions::EvasionsPackageExecutionContext;
 void InstallFingerprintingExtensions(ScriptState* script_state) {
   auto* execution_context = ExecutionContext::From(script_state);
 
@@ -35,11 +32,14 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
   LOG(INFO) << "InstallFingerprintExtensions executing()";
 
   // Create an evasion pack
-  ExecutionContext* exec = ExecutionContext::From(script_state);
+  // ExecutionContext* exec = ExecutionContext::From(script_state);
+  //
+  fingerprinting::Fingerprint* fp = FingerprintProvider::Get();
+  std::unique_ptr<EvasionsPackage> o_pack = EvasionsPackage::Pack(
+      fingerprinting::core::evasions::HookTargetType::PAGE);
 
-  EvasionsPackageExecutionContext runner = EvasionsPackageExecutionContext(
-      EvasionsPackage::Pack(HookTargetType::PAGE), script_state,
-      FingerprintProvider::Get());
+  EvasionsPackageExecutionContext runner =
+      EvasionsPackageExecutionContext(o_pack.get(), script_state, fp);
 
   runner.Run();
 
@@ -47,7 +47,8 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
 
   // global_proxy
   //     ->SetLazyDataProperty(script_state->GetContext(),
-  //                           V8String(script_state->GetIsolate(), "chromeos"),
+  //                           V8String(script_state->GetIsolate(),
+  //                           "chromeos"),
   //                           ChromeOSDataPropertyGetCallback,
   //                           v8::Local<v8::Value>(), v8::DontEnum,
   //                           v8::SideEffectType::kHasNoSideEffect)
