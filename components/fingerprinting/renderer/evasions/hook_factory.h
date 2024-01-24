@@ -19,7 +19,7 @@ typedef std::function<std::unique_ptr<Hook>()> HookConstructor;
 
 
  */
-class COMPONENT_EXPORT(FINGERPRINTING_CORE_EVASIONS) HookFactory {
+class HookFactory {
  public:
   static void Register(const std::string& key, HookConstructor constructor);
 
