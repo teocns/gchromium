@@ -23,6 +23,8 @@ class  HookExecutionContext {
 
   bool Run();
 
+  bool GetKind();
+
  private:
   EvasionsPackageExecutionContext* package_;
   std::unique_ptr<fingerprinting::core::evasions::Hook> hook_;

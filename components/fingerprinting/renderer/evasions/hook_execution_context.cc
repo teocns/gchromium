@@ -1,5 +1,6 @@
 #include "components/fingerprinting/renderer/evasions/hook_execution_context.h"
 #include <format>
+#include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "components/fingerprinting/renderer/evasions/package_execution_context.h"
 #include "v8-local-handle.h"
@@ -47,10 +48,13 @@ bool HookExecutionContext::Run() {
   if (try_catch.HasCaught()) {
     v8::Local<v8::Value> exception = try_catch.Exception();
     v8::String::Utf8Value exception_str(isolate, exception);
-    LOG(ERROR) << "Exception: " << *exception_str;
+    LOG(ERROR) << "Exception [" << this->package_->Kind() << "]:" << *exception_str;
+    // Print stacktrace of this thread
+    // base::debug::StackTrace().Print();
+
     return false;
   }
-  LOG(INFO) << "Hook " << this->hook_->codename() << " executed successfully";
+  LOG(INFO) << "[" << this->package_->Kind() << "]:" << this->hook_->codename() << " hook OK";
   LOG(INFO) << "Result: "
             << *v8::String::Utf8Value(isolate, result.ToLocalChecked());
   return true;
