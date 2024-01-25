@@ -8,6 +8,7 @@
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "components/fingerprinting/renderer/evasions/pack.h"
 #include "components/fingerprinting/renderer/evasions/hook_execution_context.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "v8/include/v8.h"
 
@@ -31,6 +32,42 @@ class EvasionsPackageExecutionContext {
    * Runs the whole package into a V8 Context
    */
   void Run();
+
+
+  std::string Kind() {
+   // Returns the type of ExecutionContext
+   auto exc = blink::ExecutionContext::From(this->script_state_);
+   if (exc->IsWindow()) {
+     return "Window";
+   } else if (exc->IsWorkerGlobalScope()) {
+     return "WorkerGlobalScope";
+   } else if (exc->IsWorkerOrWorkletGlobalScope()) {
+     return "WorkerOrWorkletGlobalScope";
+   } else if (exc->IsPaintWorkletGlobalScope()) {
+     return "PaintWorkletGlobalScope";
+   } else if (exc->IsAudioWorkletGlobalScope()) {
+     return "AudioWorkletGlobalScope";
+   } else if (exc->IsDedicatedWorkerGlobalScope()) {
+     return "DedicatedWorkerGlobalScope";
+   } else if (exc->IsSharedWorkerGlobalScope()) {
+     return "SharedWorkerGlobalScope";
+   } else if (exc->IsServiceWorkerGlobalScope()) {
+     return "ServiceWorkerGlobalScope";
+   } else if (exc->IsWorkletGlobalScope()) {
+     return "WorkletGlobalScope";
+   } else if (exc->IsAnimationWorkletGlobalScope()) {
+     return "WorkletAnimationGlobalScope";
+   } else if (exc->IsLayoutWorkletGlobalScope()) {
+     return "LayoutWorkletGlobalScope";
+   } else if (exc->IsPaintWorkletGlobalScope()) {
+     return "WorkletPaintGlobalScope";
+   } else if (exc->IsAudioWorkletGlobalScope()) {
+     return "WorkletAudioProcessorGlobalScope";
+   } else {
+     return "Unknown";
+   }
+ }
+
 
   friend class HookExecutionContext;
  private:
