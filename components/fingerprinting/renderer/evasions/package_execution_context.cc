@@ -90,64 +90,6 @@ v8::Local<v8::Object> EvasionsPackageExecutionContext::GetCommonArguments() {
 
   return obj;
 
-  //_________________________
-  //   // Gets common arguments for the current execution context
-  //   // All hooks must have access to these arguments
-  //
-  //   v8::Isolate* isolate = this->script_state_->GetIsolate();
-  //
-  //
-  //
-  //   if (this->state_.IsEmpty()) {
-  //     // Create a new object (Dictionary)
-  //     this->state_ = v8::Object::New(isolate);
-  //
-  //     // Add the function utilities
-  //
-  //     v8::Local<v8::Function> f1 =
-  //         v8::FunctionTemplate::New(
-  //             isolate, ::fingerprinting::evasions::utility::PatchAccessor)
-  //             ->GetFunction(this->context())
-  //             .ToLocalChecked();
-  //
-  //     v8::Local<v8::Function> f2 =
-  //         v8::FunctionTemplate::New(
-  //             isolate, ::fingerprinting::evasions::utility::PatchValue)
-  //             ->GetFunction(this->context())
-  //             .ToLocalChecked();
-  //
-  //     bool p1 = this->state_
-  //                   ->Set(this->context(),
-  //                         v8::String::NewFromUtf8(isolate, "PatchAccessor")
-  //                             .ToLocalChecked(),
-  //                         f1)
-  //                   .ToChecked();
-  //
-  //     bool p2 =
-  //         this->state_
-  //             ->Set(
-  //                 this->context(),
-  //                 v8::String::NewFromUtf8(isolate,
-  //                 "PatchValue").ToLocalChecked(), f2)
-  //             .ToChecked();
-  //
-  //     if (!p1 || !p2) {
-  //       LOG(ERROR) << "Failed to set PatchAccessor or PatchValue";
-  //     }
-  //
-  //     // Set dd. Fingerprint::value() returns a base::Value* object
-  //     bool p3 = this->state_
-  //                   ->Set(this->context(),
-  //                         v8::String::NewFromUtf8(isolate,
-  //                         "dd").ToLocalChecked(), v8::External::New(isolate,
-  //                         this->fingerprint_))
-  //                   .ToChecked();
-  //
-  //     if (!p3) {
-  //       LOG(ERROR) << "Failed to set dd";
-  //     }
-  //   }
-  // // Create a one-off fingerprint object
   //
   //   return this->state_;
 }  // namespace fingerprinting::evasions
