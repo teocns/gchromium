@@ -31,35 +31,20 @@ v8::Local<v8::Object> EvasionsPackageExecutionContext::GetCommonArguments() {
   // Wrap fingerprint in a v8 external, but let's track the timing needed for
   // this
 
-  v8::Isolate* isolate = this->script_state_->GetIsolate();
-  base::TimeTicks start = base::TimeTicks::Now();
-
-  v8::Local<v8::External> wrapped_fingerprint =
-      v8::External::New(isolate, &this->fingerprint_->str_value());
-
-  base::TimeTicks end = base::TimeTicks::Now();
-  base::TimeDelta delta = end - start;
-  DLOG(INFO) << "It took " << delta.InMilliseconds()
-             << "ms to wrap the fingerprint in a v8 external";
+  v8::Local<v8::Context> context = this->script_state_->GetContext();
+  v8::Isolate* isolate = context->GetIsolate();
 
   v8::Local<v8::Object> obj = v8::Object::New(isolate);
 
-  v8::Local<v8::Context> context = isolate->GetCurrentContext();
-
-  (void)obj
-      ->Set(context, v8::String::NewFromUtf8(isolate, "dd").ToLocalChecked(),
-            wrapped_fingerprint)
-      .ToChecked();
-
   // ---------------
   v8::Local<v8::Function> f1 =
-      v8::FunctionTemplate::New(
-          isolate, ::fingerprinting::utility::PatchAccessor)
+      v8::FunctionTemplate::New(isolate,
+                                ::fingerprinting::utility::PatchAccessor)
           ->GetFunction(context)
           .ToLocalChecked();
+
   v8::Local<v8::Function> f2 =
-      v8::FunctionTemplate::New(isolate,
-                                ::fingerprinting::utility::PatchValue)
+      v8::FunctionTemplate::New(isolate, ::fingerprinting::utility::PatchValue)
           ->GetFunction(context)
           .ToLocalChecked();
 
@@ -75,23 +60,63 @@ v8::Local<v8::Object> EvasionsPackageExecutionContext::GetCommonArguments() {
                f2)
           .ToChecked();
 
+  // Let's also set them to the global object
+  // v8::Local<v8::Object> global = context->Global();
+  // global
+  //     ->Set(context,
+  //           v8::String::NewFromUtf8(isolate,
+  //           "PatchAccessor").ToLocalChecked(), f1)
+  //     .ToChecked();
+  // global
+  //     ->Set(context,
+  //           v8::String::NewFromUtf8(isolate, "PatchValue").ToLocalChecked(),
+  //           f2)
+  //     .ToChecked();
   if (!p1 || !p2) {
     LOG(ERROR) << "Failed to set PatchAccessor or PatchValue";
   }
 
-  bool p3 =
-      obj->Set(context, v8::String::NewFromUtf8(isolate, "dd").ToLocalChecked(),
-               v8::External::New(isolate, this->fingerprint_))
-          .ToChecked();
+  // Compile the JSON string into a v8::Value
 
-  if (!p3) {
-    LOG(ERROR) << "Failed to set dd";
+  base::TimeTicks start = base::TimeTicks::Now();
+
+  // Attempt retrieval of v8::Value from the persistent value
+
+
+  v8::ScriptCompiler::Source source(
+      v8::String::NewFromUtf8(isolate,
+      ("("+this->fingerprint_->str_value() + ")").c_str())
+          .ToLocalChecked());
+
+  v8::MaybeLocal<v8::UnboundScript> fp_maybe_script =
+      v8::ScriptCompiler::CompileUnboundScript(isolate, &source);
+
+  if (fp_maybe_script.IsEmpty()) {
+    LOG(ERROR) << "Could not compute fingerprint string JSON into a JS object"; return obj;
   }
 
-  return obj;
+  auto runnable = fp_maybe_script.ToLocalChecked()->BindToCurrentContext();
 
-  //
-  //   return this->state_;
-}  // namespace fingerprinting::evasions
+  v8::Local<v8::Value> fp_val;
+  // isolate->PerformMicrotaskCheckpoint();
+  if (!runnable->Run(context).ToLocal(&fp_val)) {
+    LOG(ERROR)
+        << "[RUN] Could not compute fingerprint string JSON into a JS object";
+    return obj;
+  }
+
+  (void)obj
+      ->Set(context, v8::String::NewFromUtf8(isolate, "dd").ToLocalChecked(),
+            fp_val)
+      .ToChecked();
+
+  // Persist the fingerprint in the isolate
+
+  base::TimeTicks end = base::TimeTicks::Now();
+  base::TimeDelta delta = end - start;
+  DLOG(INFO) << "It took " << delta.InMilliseconds()
+             << "ms to set the fingerprint string";
+  return obj;
+}
 
 }  // namespace fingerprinting::evasions
