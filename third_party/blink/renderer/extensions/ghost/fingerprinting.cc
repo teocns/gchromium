@@ -90,14 +90,14 @@ void FingerprintingExtensions::Initialize() {
 
   base::TimeTicks start = base::TimeTicks::Now();
 
-  // Use the fingerprint_manager to call GetFingerprintStr
-  base::Value fp_value;
-  if (!fingerprint_manager->GetFingerprintValue(&fp_value)) {
+  // Retrieve Fingerprint from the browser process
+  std::string fingerprint_str;
+  if (!fingerprint_manager->GetFingerprintString(&fingerprint_str)) {
     LOG(ERROR) << "FingerprintingEvasionsController::Init() -> "
                   "Failed to retrieve fingerprint (PIPE)";
   }
   base::TimeTicks end = base::TimeTicks::Now();
-  if (fp_value.is_none()) {
+  if (fingerprint_str.empty()) {
     LOG(ERROR) << "FingerprintingEvasionsController::Init() -> "
                   "Failed to retrieve fingerprint";
     // Fingerprinting is blocked, so we should not enable the API.
@@ -112,16 +112,20 @@ void FingerprintingExtensions::Initialize() {
              << "Retrieved fingerprint in " << delta.InMillisecondsF() << " ms";
 
   // get dict size
-  const size_t size = fp_value.GetDict().size();
+  const size_t size = fingerprint_str.length();
 
   // Get the renderer process ID
   DLOG(INFO) << "FingerprintExtesions::Init() -> Retrieved "
                 "fingerprint in "
              << delta.InMillisecondsF()
-             << " ms, dict-keys: " << std::to_string(size);
+             << " ms, size: " << std::to_string(size);
 
   // Set the static fingerprint
-  FingerprintProvider::Set(new fingerprinting::Fingerprint(fp_value));
+  FingerprintProvider::Set(new fingerprinting::Fingerprint(std::move(fingerprint_str)));
+
+
+  // Create a persistent, unbound v8 JSON object that can be statically accessed
+  
 }
 
 }  // namespace blink
