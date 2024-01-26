@@ -6,6 +6,7 @@
 // Include all hooks here
 #include "components/fingerprinting/renderer/evasions/hooks/webgl.h"
 #include "components/fingerprinting/renderer/evasions/hooks/navigator_webdriver.h"
+#include "components/fingerprinting/renderer/evasions/hooks/navigator_platform.h"
 
 namespace fingerprinting::core::evasions {
 
