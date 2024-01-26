@@ -67,9 +67,17 @@ class Hook {
    */
   virtual base::Value* get_data(Fingerprint* fingerprint) { return nullptr; }
 
+
+
+  // The priority of the hook
+  // The higher the priority, the earlier the hook will be executed
+  virtual int priority() { return 0; }
+
   std::shared_ptr<EvasionsPackage> package = nullptr;
 
   friend class HookFactory;
+
+
 
  private:
   std::string impl;
