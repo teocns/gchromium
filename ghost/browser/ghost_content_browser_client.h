@@ -36,11 +36,11 @@ class GhostContentBrowserClient : public ChromeContentBrowserClient {
       blink::AssociatedInterfaceRegistry* associated_registry,
       content::RenderProcessHost* render_process_host) override;
 
-  // blink::UserAgentMetadata GetUserAgentMetadata() override;
+  blink::UserAgentMetadata GetUserAgentMetadata() override;
   // std::string GetProduct() override;
-  // std::string GetUserAgent() override;
-  // std::string GetUserAgentBasedOnPolicy(
-  //     content::BrowserContext* context) override;
+  std::string GetUserAgent() override;
+  std::string GetUserAgentBasedOnPolicy(
+      content::BrowserContext* context) override;
 
   // ~GhostContentBrowserClient() override;
   // std::unique_ptr<MemoryPressureControllerImpl> memory_pressure_controller_;

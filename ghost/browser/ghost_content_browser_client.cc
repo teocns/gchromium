@@ -67,6 +67,43 @@ void GhostContentBrowserClient::ExposeInterfacesToRenderer(
           }));
 }
 
+// GetUserAgentMetadata
+blink::UserAgentMetadata GhostContentBrowserClient::GetUserAgentMetadata() {
+  // Attempt to retrieve from fingerprint, otherwise return default
+  // TODO: this should be moved to extra parts, or at least not use static
+  // access
+
+  auto fp = fingerprinting::FingerprintManager::GetInstance();
+  // fp->GetUserAgentMetadata();
+  if (!fp->Loaded()) {
+    // Fall back to superclass
+    return ChromeContentBrowserClient::GetUserAgentMetadata();
+  }
+
+  return fp->GetUserAgentMetadata_().value();
+
+  // ->GetUserAgentMetadata();
+}
+
+std::string GhostContentBrowserClient::GetUserAgent() {
+  auto fp = fingerprinting::FingerprintManager::GetInstance();
+  if (!fp->Loaded()) {
+    // Fall back to superclass
+    return ChromeContentBrowserClient::GetUserAgent();
+  }
+
+  return fp->GetUserAgent_().value();
+}
+
+std::string GhostContentBrowserClient::GetUserAgentBasedOnPolicy(content::BrowserContext* context) {
+  auto fp = fingerprinting::FingerprintManager::GetInstance();
+  if (!fp->Loaded()) {
+    // Fall back to superclass
+    return ChromeContentBrowserClient::GetUserAgentBasedOnPolicy(context);
+  }
+
+  return fp->GetUserAgent_().value();
+}
 // @@ -2653,6 +2654,13 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
 //                            instance_weak_factory_.GetWeakPtr()));
 //  #endif
