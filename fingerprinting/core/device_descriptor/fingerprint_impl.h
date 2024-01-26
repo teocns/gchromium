@@ -24,6 +24,10 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_DEVICE_DESCRIPTOR) Fingerprint final
 
   explicit Fingerprint(base::Value&& value);
 
+  // This makes the class lazy-loadable
+  explicit Fingerprint(std::string& value);
+  explicit Fingerprint(std::string&& value);
+
   bool Find(std::vector<std::string>&& keys, base::Value*& out) override;
   bool Find(std::vector<std::string>&& keys) override;
   static bool FromString(const std::string& fingerprint_str,
@@ -35,6 +39,7 @@ class COMPONENT_EXPORT(FINGERPRINTING_CORE_DEVICE_DESCRIPTOR) Fingerprint final
  private:
   base::Value value_;
   std::string str_value_;
+  bool lazy_loaded_ = false;
   std::unordered_map<std::size_t, base::Value*> cache_;
 
   std::size_t hash_keys(std::vector<std::string>& keys);

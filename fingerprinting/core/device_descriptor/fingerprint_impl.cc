@@ -2,6 +2,7 @@
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 
+#include "base/notreached.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 
 namespace fingerprinting {
@@ -25,6 +26,10 @@ Fingerprint::Fingerprint(base::Value& value) {
 Fingerprint::Fingerprint(base::Value&& value) {
   value_ = std::move(value);
 }
+Fingerprint::Fingerprint(std::string&& value) {
+  this->lazy_loaded_ = true;
+  this->str_value_ = std::move(value);
+}
 bool Fingerprint::Find(std::vector<std::string>&& keys) {
   /** Only checks for existency */
   base::Value* out = nullptr;
@@ -38,6 +43,12 @@ bool Fingerprint::Find(std::vector<std::string>&& keys, base::Value*& out) {
    *
    * base::Value* out = nullptr;
    */
+
+  // Ensure the class is initialized
+  if (this->lazy_loaded_) {
+    this->lazy_loaded_ = false;
+    this->value_ = base::JSONReader::Read(this->str_value_).value();
+  }
   std::size_t hash = hash_keys(keys);
 
   if (find_in_cache(hash, out)) {
