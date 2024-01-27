@@ -19,9 +19,9 @@ class  HookExecutionContext {
   v8::MaybeLocal<v8::Function> GetFunction(v8::Local<v8::Context>);
 
   // Invocation data
-  v8::Local<v8::Value> GetArguments();
+  // v8::Local<v8::Value> GetArguments();
 
-  bool Run();
+  bool Run(v8::Local<v8::Value>* args = nullptr);
 
   bool GetKind();
 

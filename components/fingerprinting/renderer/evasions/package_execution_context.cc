@@ -4,6 +4,7 @@
 #include "components/fingerprinting/renderer/evasions/pack.h"
 #include "components/fingerprinting/renderer/helper/v8.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "v8/include/v8.h"
 namespace fingerprinting::evasions {
 EvasionsPackageExecutionContext::EvasionsPackageExecutionContext(
@@ -21,15 +22,30 @@ EvasionsPackageExecutionContext::EvasionsPackageExecutionContext(
 }
 void EvasionsPackageExecutionContext::Run() {
   // Iterate over the map of this->hooks_ [string, HookExecutionContext]
+  v8::Local<v8::Context> context = this->script_state_->GetContext();
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::Context::Scope context_scope(context);
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Value> args;
+
+  {
+    v8::MicrotasksScope microtasks(isolate, context->GetMicrotaskQueue(),
+                                   v8::MicrotasksScope::kRunMicrotasks);
+    args = this->GetCommonArguments();
+  }
   for (auto& [_, hook] : this->hooks_) {
     // Run the hook
-    hook->Run();
+    hook->Run(&args);
   }
 }
 
 v8::Local<v8::Object> EvasionsPackageExecutionContext::GetCommonArguments() {
-  // Wrap fingerprint in a v8 external, but let's track the timing needed for
-  // this
+  // Returns the arguments passed to each Hook's invocation
+  // Namingly:
+  // - dd: the device descriptor
+  // - PatchAccessor: a function that patches an accessor
+  // - PatchValue: a function that patches a Value
+  // - results[codename]: the result of each hook
 
   v8::Local<v8::Context> context = this->script_state_->GetContext();
   v8::Isolate* isolate = context->GetIsolate();
@@ -48,51 +64,28 @@ v8::Local<v8::Object> EvasionsPackageExecutionContext::GetCommonArguments() {
           ->GetFunction(context)
           .ToLocalChecked();
 
-  bool p1 =
-      obj->Set(
-             context,
-             v8::String::NewFromUtf8(isolate, "PatchAccessor").ToLocalChecked(),
-             f1)
-          .ToChecked();
-  bool p2 =
-      obj->Set(context,
-               v8::String::NewFromUtf8(isolate, "PatchValue").ToLocalChecked(),
-               f2)
-          .ToChecked();
+  (void)obj->Set(context, blink::V8String(isolate, "PatchAccessor"), f1)
+      .ToChecked();
 
-  // Let's also set them to the global object
-  // v8::Local<v8::Object> global = context->Global();
-  // global
-  //     ->Set(context,
-  //           v8::String::NewFromUtf8(isolate,
-  //           "PatchAccessor").ToLocalChecked(), f1)
-  //     .ToChecked();
-  // global
-  //     ->Set(context,
-  //           v8::String::NewFromUtf8(isolate, "PatchValue").ToLocalChecked(),
-  //           f2)
-  //     .ToChecked();
-  if (!p1 || !p2) {
-    LOG(ERROR) << "Failed to set PatchAccessor or PatchValue";
-  }
+  (void)obj->Set(context, blink::V8String(isolate, "PatchValue"), f2)
+      .ToChecked();
 
   // Compile the JSON string into a v8::Value
-
   base::TimeTicks start = base::TimeTicks::Now();
 
   // Attempt retrieval of v8::Value from the persistent value
 
-
   v8::ScriptCompiler::Source source(
-      v8::String::NewFromUtf8(isolate,
-      ("("+this->fingerprint_->str_value() + ")").c_str())
+      v8::String::NewFromUtf8(
+          isolate, ("(" + this->fingerprint_->str_value() + ")").c_str())
           .ToLocalChecked());
 
   v8::MaybeLocal<v8::UnboundScript> fp_maybe_script =
       v8::ScriptCompiler::CompileUnboundScript(isolate, &source);
 
   if (fp_maybe_script.IsEmpty()) {
-    LOG(ERROR) << "Could not compute fingerprint string JSON into a JS object"; return obj;
+    LOG(ERROR) << "Could not compute fingerprint string JSON into a JS object";
+    return obj;
   }
 
   auto runnable = fp_maybe_script.ToLocalChecked()->BindToCurrentContext();
@@ -105,12 +98,13 @@ v8::Local<v8::Object> EvasionsPackageExecutionContext::GetCommonArguments() {
     return obj;
   }
 
-  (void)obj
-      ->Set(context, v8::String::NewFromUtf8(isolate, "dd").ToLocalChecked(),
-            fp_val)
-      .ToChecked();
+  (void)obj->Set(context, blink::V8String(isolate, "dd"), fp_val).ToChecked();
 
-  // Persist the fingerprint in the isolate
+  // Create a dictionary for results
+  (void)obj
+      ->Set(context, blink::V8String(isolate, "results"),
+            v8::Object::New(isolate))
+      .ToChecked();
 
   base::TimeTicks end = base::TimeTicks::Now();
   base::TimeDelta delta = end - start;

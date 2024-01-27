@@ -3,20 +3,20 @@
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "components/fingerprinting/renderer/evasions/package_execution_context.h"
+#include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "v8-local-handle.h"
 #include "v8-object.h"
 #include "v8-script.h"
 namespace fingerprinting::evasions {
 
-v8::Local<v8::Value> HookExecutionContext::GetArguments() {
-  // A value array of arguments
-  return this->package_->GetCommonArguments();
-}
+// v8::Local<v8::Value> HookExecutionContext::GetArguments() {
+//   // A value array of arguments
+//   return this->package_->GetCommonArguments();
+// }
 
-bool HookExecutionContext::Run() {
+bool HookExecutionContext::Run(v8::Local<v8::Value>* args) {
   v8::Local<v8::Context> context = this->package_->script_state_->GetContext();
   v8::Isolate* isolate = context->GetIsolate();
-  v8::Context::Scope context_scope(context);
 
   v8::MicrotasksScope microtasks(isolate, context->GetMicrotaskQueue(),
                                  v8::MicrotasksScope::kRunMicrotasks);
@@ -31,8 +31,6 @@ bool HookExecutionContext::Run() {
 
   v8::Local<v8::Function> function = fn.ToLocalChecked();
 
-  v8::Local<v8::Value> args[1] = {GetArguments()};
-
   v8::MaybeLocal<v8::Value> result =
       function->Call(context, context->Global(), 1, args);
 
@@ -45,9 +43,15 @@ bool HookExecutionContext::Run() {
   }
   LOG(INFO) << "[" << this->package_->Kind() << "]:" << this->hook_->codename()
             << " hook OK";
-  LOG(INFO) << "Result: "
-            << *v8::String::Utf8Value(isolate, result.ToLocalChecked());
-  return true;
+
+  // Save the result in the arguments, on property "resultsByHook"
+  return args->As<v8::Object>()
+      ->Get(context, blink::V8String(isolate, "results"))
+      .ToLocalChecked()
+      .As<v8::Object>()
+      ->Set(context, blink::V8String(isolate, this->hook_->codename().c_str()),
+            result.ToLocalChecked())
+      .ToChecked();
 }
 
 v8::MaybeLocal<v8::Function> HookExecutionContext::GetFunction(
@@ -67,8 +71,8 @@ v8::MaybeLocal<v8::Function> HookExecutionContext::GetFunction(
   v8::MaybeLocal<v8::UnboundScript> compiled_src;
   v8::ScriptCompiler::Source script_source(js_src);
 
-  v8::MicrotasksScope microtasks(isolate, context->GetMicrotaskQueue(),
-                                 v8::MicrotasksScope::kRunMicrotasks);
+  // v8::MicrotasksScope microtasks(isolate, context->GetMicrotaskQueue(),
+  //                                v8::MicrotasksScope::kRunMicrotasks);
 
   compiled_src =
       v8::ScriptCompiler::CompileUnboundScript(isolate, &script_source);
