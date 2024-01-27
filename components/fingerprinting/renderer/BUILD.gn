@@ -9,6 +9,7 @@ static_library("renderer") {
     "evasions/hook.cc",
     "evasions/hook.h",
     "evasions/hooks/navigator_webdriver.h",
+    "evasions/hooks/utils.h",
     "evasions/hooks/webgl.h",
     "evasions/hook_factory.cc",
     "evasions/hook_factory.h",
