@@ -4,9 +4,8 @@
 #include "components/fingerprinting/renderer/evasions/hook_factory.h"
 
 // Include all hooks here
+#include "components/fingerprinting/renderer/evasions/hooks/navigator.h"
 #include "components/fingerprinting/renderer/evasions/hooks/webgl.h"
-#include "components/fingerprinting/renderer/evasions/hooks/navigator_webdriver.h"
-#include "components/fingerprinting/renderer/evasions/hooks/utils.h"
 
 namespace fingerprinting::core::evasions {
 
