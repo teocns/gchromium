@@ -9,6 +9,7 @@ namespace fingerprinting::core::evasions {
 
 class hWebGL : public Hook {
  public:
+  static int priority() { return 1; }
   std::string codename() override { return "webgl"; }
 
   std::string get_impl() override {
