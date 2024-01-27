@@ -43,8 +43,6 @@ class EvasionsPackageExecutionContext {
      return "WorkerGlobalScope";
    } else if (exc->IsWorkerOrWorkletGlobalScope()) {
      return "WorkerOrWorkletGlobalScope";
-   } else if (exc->IsPaintWorkletGlobalScope()) {
-     return "PaintWorkletGlobalScope";
    } else if (exc->IsAudioWorkletGlobalScope()) {
      return "AudioWorkletGlobalScope";
    } else if (exc->IsDedicatedWorkerGlobalScope()) {
@@ -61,8 +59,6 @@ class EvasionsPackageExecutionContext {
      return "LayoutWorkletGlobalScope";
    } else if (exc->IsPaintWorkletGlobalScope()) {
      return "WorkletPaintGlobalScope";
-   } else if (exc->IsAudioWorkletGlobalScope()) {
-     return "WorkletAudioProcessorGlobalScope";
    } else {
      return "Unknown";
    }
