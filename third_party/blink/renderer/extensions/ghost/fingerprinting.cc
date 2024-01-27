@@ -17,6 +17,10 @@
 #include "third_party/blink/renderer/platform/bindings/extensions_registry.h"
 #include "third_party/blink/renderer/platform/bindings/v8_set_return_value.h"
 #include "third_party/blink/renderer/platform/fingerprinting/provider.h"
+#include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
+#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "url/url_constants.h"
+
 namespace blink {
 
 using fingerprinting::core::evasions::EvasionsPackage;
@@ -27,7 +31,7 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
 
   // The acutal patch logic to be executed here....
 
-  auto global_proxy = script_state->GetContext()->Global();
+  // auto global_proxy = script_state->GetContext()->Global();
 
   LOG(INFO) << "InstallFingerprintExtensions executing()";
 
@@ -36,18 +40,22 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
   //
   fingerprinting::Fingerprint* fp = FingerprintProvider::Get();
 
-
-
   if (fp == nullptr) {
     LOG(ERROR) << "InstallFingerprintExtensions: NO FINGERPRINT";
     return;
   }
 
-
+  // Avoid blocking fingerprinting in WebUI, extensions, etc.
+  const String protocol = execution_context->GetSecurityOrigin()->Protocol();
+  LOG(INFO) << "InstallFingerprintExtensions: Protocol: " << protocol;
+  
+  if (protocol == url::kAboutScheme || protocol == "chrome-extension" ||
+      blink::SchemeRegistry::ShouldTreatURLSchemeAsDisplayIsolated(protocol)) {
+    return;
+  }
 
   // Set the fingerprint json as a persistent data within the isolate
   std::string str = fp->str_value();
-
 
   std::unique_ptr<EvasionsPackage> o_pack = EvasionsPackage::Pack(
       fingerprinting::core::evasions::HookTargetType::PAGE);
@@ -121,11 +129,10 @@ void FingerprintingExtensions::Initialize() {
              << " ms, size: " << std::to_string(size);
 
   // Set the static fingerprint
-  FingerprintProvider::Set(new fingerprinting::Fingerprint(std::move(fingerprint_str)));
-
+  FingerprintProvider::Set(
+      new fingerprinting::Fingerprint(std::move(fingerprint_str)));
 
   // Create a persistent, unbound v8 JSON object that can be statically accessed
-  
 }
 
 }  // namespace blink
