@@ -16,22 +16,13 @@ v8::Local<v8::Value> HookExecutionContext::GetArguments() {
 bool HookExecutionContext::Run() {
   v8::Local<v8::Context> context = this->package_->script_state_->GetContext();
   v8::Isolate* isolate = context->GetIsolate();
-  //
-
-  // Begin a new scope for handles.
-  //
-  // // Enter context with a new microtasks scope if you want to run microtasks
-  // // after the script execution.
-  //
   v8::Context::Scope context_scope(context);
 
   v8::MicrotasksScope microtasks(isolate, context->GetMicrotaskQueue(),
                                  v8::MicrotasksScope::kRunMicrotasks);
 
   v8::HandleScope handle_scope(isolate);
-  //
   v8::TryCatch try_catch(isolate);
-  //
   v8::MaybeLocal<v8::Function> fn = GetFunction(context);
 
   if (fn.IsEmpty()) {
@@ -48,13 +39,12 @@ bool HookExecutionContext::Run() {
   if (try_catch.HasCaught()) {
     v8::Local<v8::Value> exception = try_catch.Exception();
     v8::String::Utf8Value exception_str(isolate, exception);
-    LOG(ERROR) << "Exception [" << this->package_->Kind() << "]:" << *exception_str;
-    // Print stacktrace of this thread
-    // base::debug::StackTrace().Print();
-
+    LOG(ERROR) << "Exception [" << this->package_->Kind()
+               << "]:" << *exception_str;
     return false;
   }
-  LOG(INFO) << "[" << this->package_->Kind() << "]:" << this->hook_->codename() << " hook OK";
+  LOG(INFO) << "[" << this->package_->Kind() << "]:" << this->hook_->codename()
+            << " hook OK";
   LOG(INFO) << "Result: "
             << *v8::String::Utf8Value(isolate, result.ToLocalChecked());
   return true;

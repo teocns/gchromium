@@ -22,9 +22,6 @@ enum HookTargetType {
   SHARED_WORKER,
 };
 
-// Define type alias HOOK_CODENAME for string;
-// typedef std::string HOOK_CODENAME;
-//
 class Hook {
   /*
    * Each hook represents a patch for a specific JS feature API
@@ -41,17 +38,9 @@ class Hook {
 
   // Priority queues only need the LLT operator
   bool operator<(Hook& other) { return priority() < other.priority(); }
-  // Hook(const Hook& other);
-  // Hook& operator=(const Hook&) = delete;
-  //   explicit Hook()
-  //     : signature("f" + std::to_string(rand() % 1000000000000 +
-  //     100000000000)) {
-  // }
 
   virtual ~Hook() = default;
 
-  // Returns the definition, but not the invocation
-  // std::string get_definition();
 
   // Returns immediately-invoked function expression (IIFE)
   std::string get_iife();
