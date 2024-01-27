@@ -25,15 +25,15 @@ std::unique_ptr<EvasionsPackage> EvasionsPackage::Pack(
   // Filters are the evasions to disable
 
   auto pack = std::make_unique<EvasionsPackage>(target);
-  for (auto& hook_descriptor : HookFactory::GetRegistry()) {
-    const std::string& name = hook_descriptor.first;
+  for (auto& [_, entry] : HookFactory::GetRegistry()) {
+    const std::string& name = entry.key;
 
     if (filters.find(name) != filters.end()) {
       // Skip disabled evasions
       continue;
     }
 
-    std::unique_ptr<Hook> hook = HookFactory::Create(name);
+    std::unique_ptr<Hook> hook = entry.value();
     if (hook != nullptr) {
       pack->Register(std::move(hook));
     }

@@ -1,32 +1,34 @@
-#include "components/fingerprinting/renderer/evasions/hook.h"
 #include "components/fingerprinting/renderer/evasions/hook_factory.h"
+#include "components/fingerprinting/renderer/evasions/hook.h"
 namespace fingerprinting::core::evasions {
-std::unique_ptr<Hook> HookFactory::Create(const std::string& codename) {
-  auto it = GetRegistry().find(codename);
-  if (it != GetRegistry().end()) {
-    return it->second();
-  }
-  return nullptr;
-}
-
-// std::unique_ptr<Hook> HookFactory::Create(const std::string& codename,
-//                                           const std::string impl) {
+// std::unique_ptr<Hook> HookFactory::Create(const std::string& codename) {
 //   auto it = GetRegistry().find(codename);
 //   if (it != GetRegistry().end()) {
-//     auto hook = it->second();
-//     hook->impl = impl;
+//     return it->second();
 //   }
 //   return nullptr;
 // }
 
-void HookFactory::Register(const std::string& key,
-                           HookConstructor constructor) {
-  GetRegistry()[key] = constructor;
+std::unique_ptr<Hook> HookFactory::Create(const std::string& codename) {
+  auto registry = GetRegistry();
+  if (auto found = registry.Get(codename)) {
+    return found->value();
+  }
+  return nullptr;
 }
 
-std::map<std::string, HookConstructor>& HookFactory::GetRegistry() {
-  static std::map<std::string, HookConstructor> registry;
+void HookFactory::Register(const std::string& key,
+                           int priority,
+                           HookConstructor constructor) {
+  GetRegistry().Register(key, priority, constructor);
+}
+
+HookRegistry& HookFactory::GetRegistry() {
+  // static std::map<std::string, HookConstructor> registry;
+  static HookRegistry registry;
   return registry;
 }
+
+// Get Sorted Iterator
 
 }  // namespace fingerprinting::core::evasions

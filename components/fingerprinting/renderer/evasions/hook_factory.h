@@ -2,36 +2,39 @@
 #ifndef FINGERPRINTING_CORE_EVASIONS_FACTORY_H
 #define FINGERPRINTING_CORE_EVASIONS_FACTORY_H
 
+#include <algorithm>
+#include <functional>
 #include <memory>
 #include "base/component_export.h"
 #include "components/fingerprinting/renderer/evasions/hook.h"
+#include "components/fingerprinting/renderer/evasions/hook_registry.h"
 
 namespace fingerprinting::core::evasions {
-
-typedef std::function<std::unique_ptr<Hook>()> HookConstructor;
 
 /*
  * HookFactory is a factory class that creates Hook instances
  * based on a given key (e.g. "webgl", "canvas", etc.)
  * The key is used to lookup the registry of Hook constructors
  * (i.e. HookFactory::GetRegistry())
-
-
-
  */
+
 class HookFactory {
  public:
-  static void Register(const std::string& key, HookConstructor constructor);
+  static void Register(const std::string& key,
+                       int priority,
+                       HookConstructor constructor);
 
   static std::unique_ptr<Hook> Create(const std::string& key);
 
-  static std::map<std::string, HookConstructor>& GetRegistry();
+  static HookRegistry& GetRegistry();
 };
 
 // Macro to define a self-registering hook
-#define REGISTER_HOOK(name, type)                                             \
-  static bool _hook_##name##_registered =                                     \
-      (HookFactory::Register(#name, [] { return std::make_unique<type>(); }), \
+// TODO remove pseudo priority value
+#define REGISTER_HOOK(name, type)                                      \
+  static bool _hook_##name##_registered =                              \
+      (HookFactory::Register(#name, type::priority(),                  \
+                             [] { return std::make_unique<type>(); }), \
        true);
 
 }  // namespace fingerprinting::core::evasions

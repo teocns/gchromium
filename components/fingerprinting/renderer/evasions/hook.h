@@ -38,6 +38,9 @@ class Hook {
   Hook(Hook&& other) = default;
   Hook& operator=(const Hook& other) = default;
   Hook& operator=(Hook&& other) = default;
+
+  // Priority queues only need the LLT operator
+  bool operator<(Hook& other) { return priority() < other.priority(); }
   // Hook(const Hook& other);
   // Hook& operator=(const Hook&) = delete;
   //   explicit Hook()
@@ -67,20 +70,34 @@ class Hook {
    */
   virtual base::Value* get_data(Fingerprint* fingerprint) { return nullptr; }
 
-
-
   // The priority of the hook
   // The higher the priority, the earlier the hook will be executed
-  virtual int priority() { return 0; }
+  static int priority() { return 0; }
 
   std::shared_ptr<EvasionsPackage> package = nullptr;
 
   friend class HookFactory;
 
-
-
  private:
   std::string impl;
+};
+
+class HookIterator {
+ public:
+  explicit HookIterator(std::vector<std::unique_ptr<Hook>>& foos)
+      : it(foos.begin()), end(foos.end()) {}
+
+  bool hasNext() const { return it != end; }
+
+  Hook* next() { return it++->get(); }
+
+  // Comparator for sorting unique_ptr<Hook> by priority
+  bool cmp(const std::unique_ptr<Hook>& a, const std::unique_ptr<Hook>& b) {
+    return a->priority() > b->priority();
+  }
+
+ private:
+  std::vector<std::unique_ptr<Hook>>::iterator it, end;
 };
 
 }  // namespace fingerprinting::core::evasions
