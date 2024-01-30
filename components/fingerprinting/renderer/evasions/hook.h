@@ -16,10 +16,12 @@ class EvasionsPackage;
 
 namespace fingerprinting::core::evasions {
 
-enum HookTargetType {
-  PAGE,
-  WORKER,
-  SHARED_WORKER,
+enum class HookTargetType : unsigned int {
+  NONE = 0,                              // No target, 0b000
+  WINDOW = 1 << 0,                       // Window target, 0b001
+  WORKER = (1 << 1) | (1 << 2),          // Worker target, 0b110
+  SHARED_WORKER = 1 << 2,                // SharedWorker target, 0b100
+  ALL = WINDOW | WORKER | SHARED_WORKER  // All targets, 0b111
 };
 
 class Hook {
@@ -40,7 +42,6 @@ class Hook {
   bool operator<(Hook& other) { return priority() < other.priority(); }
 
   virtual ~Hook() = default;
-
 
   // Returns immediately-invoked function expression (IIFE)
   std::string get_iife();
@@ -84,6 +85,8 @@ class HookIterator {
   bool cmp(const std::unique_ptr<Hook>& a, const std::unique_ptr<Hook>& b) {
     return a->priority() > b->priority();
   }
+
+  virtual HookTargetType AllowdTargetTypes() { return HookTargetType::ALL; }
 
  private:
   std::vector<std::unique_ptr<Hook>>::iterator it, end;
