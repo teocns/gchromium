@@ -36,9 +36,18 @@ std::unique_ptr<EvasionsPackage> EvasionsPackage::Pack(
     }
 
     std::unique_ptr<Hook> hook = entry.value();
-    if (hook != nullptr) {
-      pack->Register(std::move(hook));
+    if (hook == nullptr) {
+      LOG(ERROR) << "Failed to create hook " << name;
+      continue;
     }
+
+    // Skip hooks that are not allowed for the target
+    // Note this is a bitwise operation
+    if ((hook->AllowedTargetTypes() & target) == HookTargetType::NONE) {
+      LOG(INFO) << "Skipping hook " << name;
+      continue;
+    }
+    pack->Register(std::move(hook));
   }
 
   return pack;

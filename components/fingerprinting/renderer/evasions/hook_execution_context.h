@@ -6,11 +6,14 @@
 #include "components/fingerprinting/renderer/evasions/hook.h"
 #include "v8/include/v8.h"
 
+namespace blink {
+class ExecutionContext;
+}
 namespace fingerprinting::evasions {
 
 class EvasionsPackageExecutionContext;
 
-class  HookExecutionContext {
+class HookExecutionContext {
  public:
   explicit HookExecutionContext(
       EvasionsPackageExecutionContext* package,
@@ -23,7 +26,8 @@ class  HookExecutionContext {
 
   bool Run(v8::Local<v8::Value>* args = nullptr);
 
-  bool GetKind();
+  static core::evasions::HookTargetType TypeFromExecutionContext(
+      blink::ExecutionContext*);
 
  private:
   EvasionsPackageExecutionContext* package_;

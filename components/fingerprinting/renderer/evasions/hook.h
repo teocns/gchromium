@@ -24,6 +24,10 @@ enum class HookTargetType : unsigned int {
   ALL = WINDOW | WORKER | SHARED_WORKER  // All targets, 0b111
 };
 
+inline HookTargetType operator&(HookTargetType a, HookTargetType b) {
+  return static_cast<HookTargetType>(static_cast<unsigned int>(a) &
+                                     static_cast<unsigned int>(b));
+}
 class Hook {
   /*
    * Each hook represents a patch for a specific JS feature API
@@ -65,7 +69,7 @@ class Hook {
   static int priority() { return 0; }
 
   std::shared_ptr<EvasionsPackage> package = nullptr;
-
+  virtual HookTargetType AllowedTargetTypes() { return HookTargetType::ALL; }
   friend class HookFactory;
 
  private:
@@ -85,9 +89,6 @@ class HookIterator {
   bool cmp(const std::unique_ptr<Hook>& a, const std::unique_ptr<Hook>& b) {
     return a->priority() > b->priority();
   }
-
-  virtual HookTargetType AllowdTargetTypes() { return HookTargetType::ALL; }
-
  private:
   std::vector<std::unique_ptr<Hook>>::iterator it, end;
 };

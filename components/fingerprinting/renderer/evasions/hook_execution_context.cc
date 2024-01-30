@@ -143,4 +143,17 @@ HookExecutionContext::HookExecutionContext(
     EvasionsPackageExecutionContext* package,
     std::unique_ptr<fingerprinting::core::evasions::Hook> hook)
     : package_(package), hook_(std::move(hook)) {}
+core::evasions::HookTargetType HookExecutionContext::TypeFromExecutionContext(
+    blink::ExecutionContext* exc) {
+  if (exc->IsWindow()) {
+    return core::evasions::HookTargetType::WINDOW;
+  }
+  if (exc->IsWorkerGlobalScope()) {
+    return core::evasions::HookTargetType::WORKER;
+  }
+
+  LOG(ERROR) << "Unknown hook target type conversion";
+
+  return core::evasions::HookTargetType::WINDOW;
+}
 }  // namespace fingerprinting::evasions

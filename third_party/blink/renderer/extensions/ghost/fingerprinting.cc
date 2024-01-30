@@ -5,6 +5,7 @@
 #include "base/process/process.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/fingerprinting/renderer/evasions/hook_execution_context.h"
 #include "components/fingerprinting/renderer/evasions/pack.h"
 #include "components/fingerprinting/renderer/evasions/package_execution_context.h"
 #include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
@@ -25,6 +26,8 @@ namespace blink {
 
 using fingerprinting::core::evasions::EvasionsPackage;
 using fingerprinting::core::evasions::Hook;
+using fingerprinting::core::evasions::HookTargetType;
+using fingerprinting::evasions::HookExecutionContext;
 using fingerprinting::evasions::EvasionsPackageExecutionContext;
 void InstallFingerprintingExtensions(ScriptState* script_state) {
   auto* execution_context = ExecutionContext::From(script_state);
@@ -48,7 +51,7 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
   // Avoid blocking fingerprinting in WebUI, extensions, etc.
   const String protocol = execution_context->GetSecurityOrigin()->Protocol();
   LOG(INFO) << "InstallFingerprintExtensions: Protocol: " << protocol;
-  
+
   if (protocol == url::kAboutScheme || protocol == "chrome-extension" ||
       blink::SchemeRegistry::ShouldTreatURLSchemeAsDisplayIsolated(protocol)) {
     return;
@@ -57,8 +60,11 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
   // Set the fingerprint json as a persistent data within the isolate
   std::string str = fp->str_value();
 
-  std::unique_ptr<EvasionsPackage> o_pack = EvasionsPackage::Pack(
-      fingerprinting::core::evasions::HookTargetType::PAGE);
+  HookTargetType hType =
+      HookExecutionContext::TypeFromExecutionContext(
+          execution_context);
+
+  std::unique_ptr<EvasionsPackage> o_pack = EvasionsPackage::Pack(hType);
 
   EvasionsPackageExecutionContext runner =
       EvasionsPackageExecutionContext(o_pack.get(), script_state, fp);
