@@ -80,7 +80,13 @@ blink::UserAgentMetadata GhostContentBrowserClient::GetUserAgentMetadata() {
     return ChromeContentBrowserClient::GetUserAgentMetadata();
   }
 
-  return fp->GetUserAgentMetadata_().value();
+  absl::optional<blink::UserAgentMetadata> maybeV = fp->GetUserAgentMetadata_();
+
+  if (!maybeV.has_value()) {
+    return ChromeContentBrowserClient::GetUserAgentMetadata();
+  }
+
+  return maybeV.value();
 
   // ->GetUserAgentMetadata();
 }
@@ -92,7 +98,13 @@ std::string GhostContentBrowserClient::GetUserAgent() {
     return ChromeContentBrowserClient::GetUserAgent();
   }
 
-  return fp->GetUserAgent_().value();
+  absl::optional<std::string> maybeV = fp->GetUserAgent_();
+
+  if (!maybeV.has_value()) {
+    return ChromeContentBrowserClient::GetUserAgent();
+  }
+
+  return maybeV.value();
 }
 
 std::string GhostContentBrowserClient::GetUserAgentBasedOnPolicy(content::BrowserContext* context) {
@@ -102,7 +114,13 @@ std::string GhostContentBrowserClient::GetUserAgentBasedOnPolicy(content::Browse
     return ChromeContentBrowserClient::GetUserAgentBasedOnPolicy(context);
   }
 
-  return fp->GetUserAgent_().value();
+  absl::optional<std::string> maybeV = fp->GetUserAgent_();
+
+  if (!maybeV.has_value()) {
+    return ChromeContentBrowserClient::GetUserAgentBasedOnPolicy(context);
+  }
+
+  return maybeV.value();
 }
 // @@ -2653,6 +2654,13 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
 //                            instance_weak_factory_.GetWeakPtr()));
