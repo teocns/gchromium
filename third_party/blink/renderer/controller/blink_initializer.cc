@@ -151,7 +151,6 @@ void InitializeCommon(Platform* platform, mojo::BinderMap* binders) {
   GetBlinkInitializer().Initialize();
 
   // FingerprintingEvasionsController::Init();
-  FingerprintingExtensions::Initialize();
   std::string js_command_line_flag =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           blink::switches::kJavaScriptFlags);
@@ -166,6 +165,8 @@ void InitializeCommon(Platform* platform, mojo::BinderMap* binders) {
 
   GetBlinkInitializer().RegisterMemoryWatchers(platform);
 
+
+  FingerprintingExtensions::Initialize();
   // Initialize performance manager.
   RendererResourceCoordinatorImpl::MaybeInitialize();
 
