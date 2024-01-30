@@ -27,8 +27,8 @@ namespace blink {
 using fingerprinting::core::evasions::EvasionsPackage;
 using fingerprinting::core::evasions::Hook;
 using fingerprinting::core::evasions::HookTargetType;
-using fingerprinting::evasions::HookExecutionContext;
 using fingerprinting::evasions::EvasionsPackageExecutionContext;
+using fingerprinting::evasions::HookExecutionContext;
 void InstallFingerprintingExtensions(ScriptState* script_state) {
   auto* execution_context = ExecutionContext::From(script_state);
 
@@ -61,8 +61,7 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
   std::string str = fp->str_value();
 
   HookTargetType hType =
-      HookExecutionContext::TypeFromExecutionContext(
-          execution_context);
+      HookExecutionContext::TypeFromExecutionContext(execution_context);
 
   std::unique_ptr<EvasionsPackage> o_pack = EvasionsPackage::Pack(hType);
 
@@ -106,17 +105,16 @@ void FingerprintingExtensions::Initialize() {
 
   // Retrieve Fingerprint from the browser process
   std::string fingerprint_str;
-  if (!fingerprint_manager->GetFingerprintString(&fingerprint_str)) {
+  bool fingerprinting_enabled = false;
+  if (!fingerprint_manager->Enabled(&fingerprinting_enabled) ||
+      !fingerprinting_enabled ||
+      !fingerprint_manager->GetFingerprintString(&fingerprint_str) ||
+      fingerprint_str.empty()) {
     LOG(ERROR) << "FingerprintingEvasionsController::Init() -> "
                   "Failed to retrieve fingerprint (PIPE)";
-  }
-  base::TimeTicks end = base::TimeTicks::Now();
-  if (fingerprint_str.empty()) {
-    LOG(ERROR) << "FingerprintingEvasionsController::Init() -> "
-                  "Failed to retrieve fingerprint";
-    // Fingerprinting is blocked, so we should not enable the API.
     return;
   }
+  base::TimeTicks end = base::TimeTicks::Now();
 
   base::TimeDelta delta = end - start;
 
