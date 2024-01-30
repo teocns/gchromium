@@ -1,5 +1,6 @@
 #include "components/fingerprinting/renderer/evasions/pack.h"
 #include <vector>
+#include "base/logging.h"
 #include "components/fingerprinting/renderer/evasions/hook.h"
 #include "components/fingerprinting/renderer/evasions/hook_factory.h"
 
@@ -7,6 +8,7 @@
 #include "components/fingerprinting/renderer/evasions/hooks/navigator-battery-manager.h"
 #include "components/fingerprinting/renderer/evasions/hooks/navigator-webdriver.h"
 #include "components/fingerprinting/renderer/evasions/hooks/navigator.h"
+#include "components/fingerprinting/renderer/evasions/hooks/utils.h"
 #include "components/fingerprinting/renderer/evasions/hooks/webgl.h"
 
 namespace fingerprinting::core::evasions {
@@ -27,7 +29,7 @@ std::unique_ptr<EvasionsPackage> EvasionsPackage::Pack(
   // Filters are the evasions to disable
 
   auto pack = std::make_unique<EvasionsPackage>(target);
-  for (auto& [_, entry] : HookFactory::GetRegistry()) {
+  for (auto& entry : HookFactory::GetRegistry()) {
     const std::string& name = entry.key;
 
     if (filters.find(name) != filters.end()) {

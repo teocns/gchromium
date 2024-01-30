@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <functional>
 #include <memory>
+#include <set>
 #include "base/component_export.h"
 #include "components/fingerprinting/renderer/evasions/hook.h"
 
@@ -28,9 +29,11 @@ struct HookRegistryEntry {
   int priority;
   HookConstructor value;
 
-  // LLT operator
   bool operator<(const HookRegistryEntry& other) const {
-    return priority < other.priority;
+    if (priority == other.priority) {
+      return key < other.key;  // Tie-breaker if priorities are equal
+    }
+    return priority > other.priority;
   }
 };
 
@@ -40,37 +43,20 @@ class HookRegistry {
                 int priority,
                 HookConstructor constructor) {
     HookRegistryEntry entry(key, priority, constructor);
-    reg_priority_.emplace(priority, entry);
-    reg_key_.emplace(key, entry);
+    entries_.insert(std::move(entry));
   }
 
-  HookRegistryEntry* Get(const std::string& key) {
-    auto it = reg_key_.find(key);
-    if (it != reg_key_.end()) {
-      return &it->second;
-    }
-    return nullptr;
-  }
-
-  // ------------------------------------
-  // ITERATOR
-  // Define iterator type using the iterator of the std::multimap
-  using iterator = std::multimap<int, HookRegistryEntry>::iterator;
-  using const_iterator = std::multimap<int, HookRegistryEntry>::const_iterator;
-
-  // begin and end methods to enable range-based for loops
-  iterator begin() { return reg_priority_.begin(); }
-
-  iterator end() { return reg_priority_.end(); }
-
-  const_iterator begin() const { return reg_priority_.cbegin(); }
-
-  const_iterator end() const { return reg_priority_.cend(); }
+  // Iterators
+  auto begin() const { return entries_.begin(); }
+  auto end() const { return entries_.end(); }
 
  private:
-  std::multimap<int, HookRegistryEntry> reg_priority_;
-  std::unordered_map<std::string, HookRegistryEntry> reg_key_;
+  // std::multimap<int, HookRegistryEntry> reg_priority_;
+  // std::unordered_map<std::string, HookRegistryEntry> reg_key_;
+  std::set<HookRegistryEntry> entries_;
 };
+
+// Let's moveo the iterator logic out of the HookRegistry
 
 }  // namespace fingerprinting::core::evasions
 

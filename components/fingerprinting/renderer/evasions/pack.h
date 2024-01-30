@@ -4,8 +4,8 @@
 #include <memory>
 #include <set>
 #include <string>
-#include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 #include "components/fingerprinting/renderer/evasions/hook.h"
+#include "fingerprinting/core/device_descriptor/fingerprint_impl.h"
 namespace fingerprinting::core::evasions {
 
 struct EvasionsPackage {
@@ -28,14 +28,14 @@ struct EvasionsPackage {
   HookTargetType target_;
 
   void Register(std::unique_ptr<Hook> hook) {
-    this->hooks.push_back(std::move(hook));
+    this->hooks.insert(std::move(hook));
   }
 
   static std::unique_ptr<EvasionsPackage> Pack(
       HookTargetType,
       std::set<std::string> = std::set<std::string>());
 
-  std::vector<std::unique_ptr<Hook>> hooks;
+  std::set<std::unique_ptr<Hook>, HookPtrComparator> hooks;
 
   std::string get_iife();
 };

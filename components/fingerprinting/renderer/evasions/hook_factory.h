@@ -24,7 +24,7 @@ class HookFactory {
                        int priority,
                        HookConstructor constructor);
 
-  static std::unique_ptr<Hook> Create(const std::string& key);
+  // static std::unique_ptr<Hook> Create(const std::string& key);
 
   static HookRegistry& GetRegistry();
 };

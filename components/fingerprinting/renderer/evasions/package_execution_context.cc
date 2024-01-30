@@ -16,8 +16,8 @@ EvasionsPackageExecutionContext::EvasionsPackageExecutionContext(
   // Each hook gets its own execution context
   for (auto& hook : package->hooks) {
     std::string codename = hook->codename();
-    this->hooks_[codename] =
-        std::make_unique<HookExecutionContext>(this, std::move(hook));
+    this->hooks_.insert(
+        std::make_unique<HookExecutionContext>(this, hook.get()));
   }
 }
 void EvasionsPackageExecutionContext::Run() {
@@ -33,7 +33,7 @@ void EvasionsPackageExecutionContext::Run() {
                                    v8::MicrotasksScope::kRunMicrotasks);
     args = this->GetCommonArguments();
   }
-  for (auto& [_, hook] : this->hooks_) {
+  for (auto& hook : this->hooks_) {
     // Run the hook
     hook->Run(&args);
   }

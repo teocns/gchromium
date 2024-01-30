@@ -37,7 +37,7 @@ bool HookExecutionContext::Run(v8::Local<v8::Value>* args) {
   if (try_catch.HasCaught()) {
     v8::Local<v8::Value> exception = try_catch.Exception();
     v8::String::Utf8Value exception_str(isolate, exception);
-    LOG(ERROR) << "Exception [" << this->package_->Kind()
+    LOG(ERROR) << this->hook_->codename() << "[" << this->package_->Kind()
                << "]:" << *exception_str;
     return false;
   }
@@ -141,8 +141,9 @@ v8::MaybeLocal<v8::Function> HookExecutionContext::GetFunction(
 // }
 HookExecutionContext::HookExecutionContext(
     EvasionsPackageExecutionContext* package,
-    std::unique_ptr<fingerprinting::core::evasions::Hook> hook)
-    : package_(package), hook_(std::move(hook)) {}
+    fingerprinting::core::evasions::Hook* hook)
+    : package_(package), hook_(hook) {}
+
 core::evasions::HookTargetType HookExecutionContext::TypeFromExecutionContext(
     blink::ExecutionContext* exc) {
   if (exc->IsWindow()) {
@@ -156,4 +157,5 @@ core::evasions::HookTargetType HookExecutionContext::TypeFromExecutionContext(
 
   return core::evasions::HookTargetType::WINDOW;
 }
+
 }  // namespace fingerprinting::evasions

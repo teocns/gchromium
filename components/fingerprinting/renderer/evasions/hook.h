@@ -43,7 +43,13 @@ class Hook {
   Hook& operator=(Hook&& other) = default;
 
   // Priority queues only need the LLT operator
-  bool operator<(Hook& other) { return priority() < other.priority(); }
+  bool operator<(Hook& other) {
+    if (priority() == other.priority()) {
+      return codename() >
+             other.codename();  // Tie-breaker if priorities are equal
+    }
+    return priority() > other.priority();
+  }
 
   virtual ~Hook() = default;
 
@@ -76,23 +82,20 @@ class Hook {
   std::string impl;
 };
 
-class HookIterator {
- public:
-  explicit HookIterator(std::vector<std::unique_ptr<Hook>>& foos)
-      : it(foos.begin()), end(foos.end()) {}
-
-  bool hasNext() const { return it != end; }
-
-  Hook* next() { return it++->get(); }
-
-  // Comparator for sorting unique_ptr<Hook> by priority
-  bool cmp(const std::unique_ptr<Hook>& a, const std::unique_ptr<Hook>& b) {
-    return a->priority() > b->priority();
+struct HookPtrComparator {
+  bool operator()(const std::unique_ptr<Hook>& lhs,
+                  const std::unique_ptr<Hook>& rhs) const {
+    // Compare the Hook objects pointed to by lhs and rhs
+    // Make sure to check for null if that's a possibility
+    if (lhs->priority() == rhs->priority()) {
+      return lhs.get() < rhs.get();  // Tie-breaker if priorities are Equality
+    }
+    return lhs->priority() <
+           rhs->priority();  // Assuming Hook has an operator< defined
   }
- private:
-  std::vector<std::unique_ptr<Hook>>::iterator it, end;
-};
 
+  // overload for rw pointers
+};
 }  // namespace fingerprinting::core::evasions
 
 #endif  // COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_H_
