@@ -4,6 +4,7 @@
 #include "components/fingerprinting/renderer/evasions/hook_factory.h"
 
 // Include all hooks here
+#include "components/fingerprinting/renderer/evasions/hooks/navigator-battery-manager.h"
 #include "components/fingerprinting/renderer/evasions/hooks/navigator-webdriver.h"
 #include "components/fingerprinting/renderer/evasions/hooks/navigator.h"
 #include "components/fingerprinting/renderer/evasions/hooks/webgl.h"
