@@ -39,8 +39,8 @@ void patchWrapper(const v8::FunctionCallbackInfo<v8::Value>& innerArgs) {
   argv[0] = target;
   argv[1] = innerArgs.This();
 
-  for (int i = 2; i < argc; ++i) {
-    argv[i] = innerArgs[i];
+  for (int i = 0; i < argc; ++i) {
+    argv[i + 2] = innerArgs[i];
   }
 
   v8::Local<v8::Function> handler =
@@ -380,7 +380,6 @@ PatchValue(
             v8::String::NewFromUtf8(isolate, "target").ToLocalChecked(), target)
       .ToChecked();
 
-  v8::Local<v8::Object> oTarget = v8::Local<v8::Object>::Cast(target);
 
   v8::Local<v8::FunctionTemplate> templateFn =
       v8::FunctionTemplate::New(isolate, patchWrapper, wrapperInnerArgs);
@@ -391,7 +390,7 @@ PatchValue(
   v8::Local<v8::Function> fnWrapped =
       templateFn->GetFunction(context).ToLocalChecked();
 
-  CopyOwnPropertiesDescriptors(oTarget, fnWrapped, context, isolate);
+  CopyOwnPropertiesDescriptors(v8::Local<v8::Object>::Cast(target), fnWrapped, context, isolate);
 
   v8::PropertyAttribute targetPropertyAttributes =
       holder->GetPropertyAttributes(context, propName).FromJust();
