@@ -9,14 +9,20 @@ namespace fingerprinting::core::evasions {
 
 class hNavigatorWebdriver : public Hook {
  public:
-  static int priority() { return 0; }
+  using Hook::Hook;
   std::string codename() override { return "navigator_webdriver"; }
 
   std::string get_impl() override {
     return R"(
+
+
+const utils = arguments[0].utils;
+
+        debugger;
+
 const webdriverDesc =
-    Navigator.prototype.webdriver ||
-    WorkerNavigator.prototype.webdriver;
+    utils.cache.global.Navigator.prototype.webdriver ||
+    utils.cache.global.WorkerNavigator.prototype.webdriver;
 
 if (webdriverDesc === undefined) {
     // Post Chrome 89.0.4339.0 and already good
@@ -39,7 +45,7 @@ delete Object.getPrototypeOf(navigator).webdriver;
   }
 };
 
-REGISTER_HOOK(navigator_webdriver, hNavigatorWebdriver)
+REGISTER_HOOK(navigator_webdriver, hNavigatorWebdriver, 0)
 
 }  // namespace fingerprinting::core::evasions
 #endif  // COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_NAVIGATOR_WEBDRIVER_H

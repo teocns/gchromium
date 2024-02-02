@@ -1,6 +1,6 @@
 #include "components/fingerprinting/renderer/evasions/hook_factory.h"
-#include "components/fingerprinting/renderer/evasions/hook.h"
 #include "base/logging.h"
+#include "components/fingerprinting/renderer/evasions/hook.h"
 namespace fingerprinting::core::evasions {
 // std::unique_ptr<Hook> HookFactory::Create(const std::string& codename) {
 //   auto it = GetRegistry().find(codename);
@@ -21,6 +21,7 @@ namespace fingerprinting::core::evasions {
 void HookFactory::Register(const std::string& key,
                            int priority,
                            HookConstructor constructor) {
+  LOG(INFO) << "Registering hook " << key << " with priority " << priority;
   GetRegistry().Register(key, priority, constructor);
 }
 

@@ -2,13 +2,14 @@
 #define COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H
 
 #include "base/component_export.h"
-#include "components/fingerprinting/renderer/evasions/hook_factory.h"
 #include "components/fingerprinting/renderer/evasions/hook.h"
+#include "components/fingerprinting/renderer/evasions/hook_factory.h"
 
 namespace fingerprinting::core::evasions {
 
 class hWebGL : public Hook {
  public:
+  using Hook::Hook;
   std::string codename() override { return "webgl"; }
 
   std::string get_impl() override {
@@ -20,7 +21,6 @@ class hWebGL : public Hook {
   }
 };
 
-
 // base::Value* get_data(Fingerprint* dd) {
 //   base::Value* ptr = nullptr;
 //   dd->GetWebGL(ptr);
@@ -28,7 +28,7 @@ class hWebGL : public Hook {
 // }
 
 
-REGISTER_HOOK(webgl, hWebGL)
+REGISTER_HOOK(webgl, hWebGL, 0)
 
 }  // namespace fingerprinting::core::evasions
 #endif  // COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_WEBBGL_H

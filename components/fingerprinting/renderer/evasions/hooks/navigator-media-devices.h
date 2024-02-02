@@ -134,7 +134,7 @@ if (fakeMediaDevices && 'undefined' !== typeof MediaDevices) {
     }
 
     utils.replaceWithProxy(MediaDevices.prototype, 'enumerateDevices', {
-        apply(target, thisArg, ...args) {
+        apply(target, thisArg, args) {
             try {
                 Reflect.apply(target, thisArg, args).catch((e) => e);
             } catch (ignored) { }

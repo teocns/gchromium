@@ -6,9 +6,9 @@
 #include "components/fingerprinting/renderer/evasions/hook_factory.h"
 namespace fingerprinting::core::evasions {
 
-class hNavigator: public Hook {
+class hNavigator : public Hook {
  public:
-  static int priority() { return 0; }
+  using Hook::Hook;
   std::string codename() override { return "navigator"; }
 
   std::string get_impl() override {
@@ -55,7 +55,7 @@ if ('undefined' !== typeof g_window.Navigator) {
   }
 };
 
-REGISTER_HOOK(navigator, hNavigator)
+REGISTER_HOOK(navigator, hNavigator, 0)
 
 }  // namespace fingerprinting::core::evasions
 #endif  // COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_NAVIGATOR_H

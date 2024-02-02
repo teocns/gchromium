@@ -9,7 +9,7 @@ namespace fingerprinting::core::evasions {
 
 class hNavigatorBatteryManager : public Hook {
  public:
-  static int priority() { return 0; }
+  using Hook::Hook;
   std::string codename() override { return "navigator_battery_manager"; }
 
   std::string get_impl() override {
@@ -57,7 +57,7 @@ if ('undefined' != typeof BatteryManager) {
   }
 };
 
-REGISTER_HOOK(navigator_battery_manager, hNavigatorBatteryManager)
+REGISTER_HOOK(navigator_battery_manager, hNavigatorBatteryManager, 0)
 
 }  // namespace fingerprinting::core::evasions
 #endif  // COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_NAVIGATOR_BATTERY_MANAGER_H

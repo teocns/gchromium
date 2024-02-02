@@ -66,6 +66,8 @@ class EvasionsPackageExecutionContext {
 
   friend class HookExecutionContext;
 
+  auto& Hooks() { return this->hooks_; }
+
  private:
   // A map whereas the key is the hook object (not the string) and the value is
   // the execution context

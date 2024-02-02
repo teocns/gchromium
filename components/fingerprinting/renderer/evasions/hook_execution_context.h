@@ -13,10 +13,12 @@ namespace fingerprinting::evasions {
 
 class EvasionsPackageExecutionContext;
 
+using core::evasions::HookTargetType;
+using fingerprinting::core::evasions::Hook;
 class HookExecutionContext {
  public:
   explicit HookExecutionContext(EvasionsPackageExecutionContext* package,
-                                fingerprinting::core::evasions::Hook* hook);
+                                Hook* hook);
 
   v8::MaybeLocal<v8::Function> GetFunction(v8::Local<v8::Context>);
 
@@ -25,19 +27,19 @@ class HookExecutionContext {
 
   bool Run(v8::Local<v8::Value>* args = nullptr);
 
-  static core::evasions::HookTargetType TypeFromExecutionContext(
-      blink::ExecutionContext*);
+  static HookTargetType TypeFromExecutionContext(blink::ExecutionContext*);
 
   bool operator<(HookExecutionContext& other) {
     if (hook_->priority() == other.hook_->priority()) {
-      return hook_->codename() >
-             other.hook_->codename();  // Tie-breaker if priorities are Equality
+      return hook_ > other.hook_;  // Tie-breaker if priorities are Equality
     }
     return hook_->priority() > other.hook_->priority();
   }
 
   // Equality operator
   friend struct HookExecutionContextPtrComparator;
+
+  auto& Hook() { return hook_; }
 
  private:
   EvasionsPackageExecutionContext* package_;
@@ -46,13 +48,11 @@ class HookExecutionContext {
 struct HookExecutionContextPtrComparator {
   bool operator()(const std::unique_ptr<HookExecutionContext>& lhs,
                   const std::unique_ptr<HookExecutionContext>& rhs) const {
-
-
-
     if (lhs->hook_->priority() == rhs->hook_->priority()) {
-      return lhs.get() < rhs.get();  // Tie-breaker if priorities are Equality
+      return lhs->Hook()->codename() <
+             rhs->Hook()->codename();  // Tie-breaker if priorities are Equality
     }
-    return lhs->hook_->priority() <
+    return lhs->hook_->priority() >
            rhs->hook_->priority();  // Assuming Hook has an operator< defined
   }
 

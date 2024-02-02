@@ -36,7 +36,8 @@ class Hook {
    */
 
  public:
-  Hook() = default;
+  Hook(int priority = 0) : priority_(priority) {}
+
   Hook(const Hook& other);
   Hook(Hook&& other) = default;
   Hook& operator=(const Hook& other) = default;
@@ -72,11 +73,14 @@ class Hook {
 
   // The priority of the hook
   // The higher the priority, the earlier the hook will be executed
-  static int priority() { return 0; }
+  int priority() { return priority_; }
 
   std::shared_ptr<EvasionsPackage> package = nullptr;
   virtual HookTargetType AllowedTargetTypes() { return HookTargetType::ALL; }
   friend class HookFactory;
+
+ protected:
+  int priority_;
 
  private:
   std::string impl;
@@ -88,9 +92,10 @@ struct HookPtrComparator {
     // Compare the Hook objects pointed to by lhs and rhs
     // Make sure to check for null if that's a possibility
     if (lhs->priority() == rhs->priority()) {
-      return lhs.get() < rhs.get();  // Tie-breaker if priorities are Equality
+      return lhs->codename() <
+             rhs->codename();  // Tie-breaker if priorities are Equality
     }
-    return lhs->priority() <
+    return lhs->priority() >
            rhs->priority();  // Assuming Hook has an operator< defined
   }
 

@@ -10,7 +10,8 @@
 
 namespace fingerprinting::core::evasions {
 
-typedef std::function<std::unique_ptr<Hook>()> HookConstructor;
+using HookConstructor = std::function<std::unique_ptr<Hook>()>;
+
 
 struct HookRegistryEntry {
   HookRegistryEntry(const std::string& key,
@@ -19,7 +20,18 @@ struct HookRegistryEntry {
       : key(key), priority(priority), value(constructor) {}
 
   // Make it copiable
-  HookRegistryEntry(const HookRegistryEntry& other) {
+  // HookRegistryEntry(const HookRegistryEntry& other) {
+  //   key = other.key;
+  //   priority = other.priority;
+  //   value = other.value;
+  // }
+
+  // Non-copyable
+  HookRegistryEntry(const HookRegistryEntry& other) = delete;
+  HookRegistryEntry& operator=(const HookRegistryEntry&) = delete;
+
+  // Movable
+  HookRegistryEntry(HookRegistryEntry&& other) noexcept {
     key = other.key;
     priority = other.priority;
     value = other.value;
@@ -51,8 +63,6 @@ class HookRegistry {
   auto end() const { return entries_.end(); }
 
  private:
-  // std::multimap<int, HookRegistryEntry> reg_priority_;
-  // std::unordered_map<std::string, HookRegistryEntry> reg_key_;
   std::set<HookRegistryEntry> entries_;
 };
 

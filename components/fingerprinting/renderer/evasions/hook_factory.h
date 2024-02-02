@@ -31,10 +31,10 @@ class HookFactory {
 
 // Macro to define a self-registering hook
 // TODO remove pseudo priority value
-#define REGISTER_HOOK(name, type)                                      \
-  static bool _hook_##name##_registered =                              \
-      (HookFactory::Register(#name, type::priority(),                  \
-                             [] { return std::make_unique<type>(); }), \
+#define REGISTER_HOOK(name, type, priority)                                    \
+  static bool _hook_##name##_registered =                                      \
+      (HookFactory::Register(#name, priority,                                  \
+                             [] { return std::make_unique<type>(priority); }), \
        true);
 
 }  // namespace fingerprinting::core::evasions

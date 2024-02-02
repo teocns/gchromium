@@ -10,7 +10,7 @@ namespace fingerprinting::core::evasions {
 class hUtility : public Hook {
  // Purpose of this hook is to provide a shared utility function for all the other hooks
  public:
- static int priority() { return 99; }
+  using Hook::Hook;
   std::string codename() override { return "utility"; }
 
   std::string get_impl() override {
@@ -246,7 +246,7 @@ arguments[0].utils = magic();
   }
 };
 
-REGISTER_HOOK(utility, hUtility)
+REGISTER_HOOK(utility, hUtility, 99)
 
 }  // namespace fingerprinting::core::evasions
 #endif  // COMPONENTS_FINGERPRINTING_EVASIONS_HOOK_UTILS_H
