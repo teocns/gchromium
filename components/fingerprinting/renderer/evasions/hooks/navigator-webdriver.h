@@ -14,16 +14,17 @@ class hNavigatorWebdriver : public Hook {
 
   std::string get_impl() override {
     return R"(
-
-
 const utils = arguments[0].utils;
+const g_window = utils.cache.global;
 
-        debugger;
+let webdriverDesc;
+if ('undefined' !== typeof g_window.Navigator) {
+    webdriverDesc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
 
-const webdriverDesc =
-    utils.cache.global.Navigator.prototype.webdriver ||
-    utils.cache.global.WorkerNavigator.prototype.webdriver;
-
+}
+else if ('undefined' !== typeof g_window.WorkerNavigator) {
+    webdriverDesc = Object.getOwnPropertyDescriptor(WorkerNavigator.prototype, 'webdriver');
+}
 if (webdriverDesc === undefined) {
     // Post Chrome 89.0.4339.0 and already good
     return;
@@ -41,6 +42,7 @@ if (get_webdriverFunc() === false) {
 
 // Pre Chrome 88.0.4291.0 and needs patching
 delete Object.getPrototypeOf(navigator).webdriver;
+
     )";
   }
 };
