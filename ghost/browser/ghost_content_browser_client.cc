@@ -83,7 +83,9 @@ blink::UserAgentMetadata GhostContentBrowserClient::GetUserAgentMetadata() {
   absl::optional<blink::UserAgentMetadata> maybeV = fp->GetUserAgentMetadata_();
 
   if (!maybeV.has_value()) {
-    return ChromeContentBrowserClient::GetUserAgentMetadata();
+    // Return empty user agnet UserAgentMetadata because the Fingerprint did not provide it
+    // WARN: is this what we want?
+    return blink::UserAgentMetadata();
   }
 
   return maybeV.value();
