@@ -15,8 +15,6 @@ class hUtility : public Hook {
 
   std::string get_impl() override {
     return R"(
-     // Print the name of the arguments in a string format
-     
 const PatchAccessor = arguments[0].PatchAccessor;
 const PatchValue = arguments[0].PatchValue;
 function magic() {
@@ -65,24 +63,39 @@ function magic() {
     kObjUndefinedPlaceHolder: '_$obj!_undefined_//+_',
   };
 
-  utils.ogProxyAdapter = function (src) {
+  utils.ogProxyAdapter = function(src) {
     // HACK: We're cheaping out on refactoring so old evasions versions still pass an { apply: fun } object as the third arguments
     // We check for this and if it's the case, we just use the function directly
-    return typeof src === 'function' ? src : src.apply;
+
+    if (typeof src === 'function') {
+      return src;
+    }
+    else if (typeof src !== 'object'){
+      throw new Error('Invalid ogProxyAdapter');
+    }
+
+    if (src.hasOwnProperty('apply')) {
+      return src.apply;
+    }
+    else if (src.hasOwnProperty('constructor')) {
+      // We need to override the constructor here
+      // Basically we create a new function that returns th
+      console.warn('ogProxyAdapter constructor');
+    }
   };
 
-  utils.replaceGetterWithProxy = function (obj, name, getter) {
+  utils.replaceGetterWithProxy = function(obj, name, getter) {
     PatchAccessor(obj, name, {
       get: utils.ogProxyAdapter(getter),
     });
   };
-  utils.replaceSetterWithProxy = function (obj, name, setter) {
+  utils.replaceSetterWithProxy = function(obj, name, setter) {
     PatchAccessor(obj, name, {
       set: utils.ogProxyAdapter(setter),
     });
   };
 
-  utils.replaceWithProxy = function (obj, name, fun) {
+  utils.replaceWithProxy = function(obj, name, fun) {
     PatchValue(obj, name, utils.ogProxyAdapter(fun));
   };
   /**
@@ -151,7 +164,7 @@ function magic() {
     return { context: null, contextIndex: -1 };
   };
 
-  utils.overwriteObjectProperties = function (obj, newPropValues, blackList) {
+  utils.overwriteObjectProperties = function(obj, newPropValues, blackList) {
     if (!obj) {
       return;
     }
@@ -237,11 +250,22 @@ function magic() {
     }
   };
 
+  utils.makeGetter = (value) => ({
+    apply(target, thisArg, ...args) {
+      // Let's fetch the value first, to trigger and escalate potential errors
+      // Illegal invocations like `navigator.__proto__.vendor` will throw here
+      Reflect.apply(...arguments);
+      return value;
+    },
+  });
+
   return utils;
 }
 
 // arguments[0] is the object shared between all hooks
 arguments[0].utils = magic();
+globalThis.patchAccessor = arguments[0].PatchAccessor;
+globalThis.patchValue = arguments[0].PatchValue;
     )";
   }
 };

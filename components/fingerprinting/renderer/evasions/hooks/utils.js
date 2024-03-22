@@ -49,7 +49,23 @@ function magic() {
   utils.ogProxyAdapter = function(src) {
     // HACK: We're cheaping out on refactoring so old evasions versions still pass an { apply: fun } object as the third arguments
     // We check for this and if it's the case, we just use the function directly
-    return typeof src === 'function' ? src : src.apply;
+
+    if (typeof src === 'function') {
+      return src;
+    }
+    else if (typeof src === 'object'){
+      throw new Error('Invalid ogProxyAdapter');
+    }
+
+    if (src.hasOwnProperty('apply')) {
+      return src.apply;
+    }
+    else if (src.hasOwnProperty('constructor')) {
+      // We need to override the constructor here
+      // Basically we create a new function that returns th
+    }
+
+    
   };
 
   utils.replaceGetterWithProxy = function(obj, name, getter) {
@@ -232,3 +248,5 @@ function magic() {
 
 // arguments[0] is the object shared between all hooks
 arguments[0].utils = magic();
+globalThis.patchAccessor = arguments[0].PatchAccessor;
+globalThis.patchValue = arguments[0].PatchValue;
