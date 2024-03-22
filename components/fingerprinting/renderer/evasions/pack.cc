@@ -9,6 +9,7 @@
 #include "components/fingerprinting/renderer/evasions/hooks/navigator-webdriver.h"
 #include "components/fingerprinting/renderer/evasions/hooks/navigator.h"
 #include "components/fingerprinting/renderer/evasions/hooks/utils.h"
+#include "components/fingerprinting/renderer/evasions/hooks/fonts.h"
 #include "components/fingerprinting/renderer/evasions/hooks/webgl.h"
 
 namespace fingerprinting::core::evasions {
