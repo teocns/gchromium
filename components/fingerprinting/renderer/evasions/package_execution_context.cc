@@ -15,7 +15,6 @@ EvasionsPackageExecutionContext::EvasionsPackageExecutionContext(
   this->fingerprint_ = fingerprinting;
   // Each hook gets its own execution context
   for (auto& hook : package->hooks) {
-    std::string codename = hook->codename();
     this->hooks_.insert(
         std::make_unique<HookExecutionContext>(this, hook.get()));
   }
