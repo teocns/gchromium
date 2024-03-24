@@ -1,0 +1,30 @@
+on:
+  push:
+    tags:
+      - 'gv*'
+jobs:
+  # Triggers lambda 
+  build_gchromium:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      # - name: Trigger Lambda
+        # uses: actions/aws/lambda@v1
+      - name: invoke-aws-lambda
+        uses: gagoar/invoke-aws-lambda@v3.3.2
+        with:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY : ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          REGION: ${{ secrets.AWS_REGION }}
+          FunctionName: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
+          # Here we pass the commit name as the payload
+          Payload: |
+            {
+              "action": "build",
+              "commit_hash": "${{ github.sha }}",
+              "debug": false,
+              "gsync": false
+            }
+      - name: Store response payload to file
+        run: echo '${{ fromJSON(steps.build_gchromium.outputs.response).Payload }}' > invocation-response.json
