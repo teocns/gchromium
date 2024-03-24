@@ -233,6 +233,11 @@ static_library("renderer") {
     "//v8",
   ]
 
+
+
+  # Add Ghost sources
+  import("//ghost/renderer/sources.gni")
+  sources += ghost_chrome_renderer_sources
   data_deps = [ "//tools/v8_context_snapshot" ]
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
