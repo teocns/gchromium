@@ -198,7 +198,9 @@ HttpProxyConnectJob::HttpProxyConnectJob(
                     params_->network_anonymization_key(),
                     common_connect_job_params->http_auth_cache,
                     common_connect_job_params->http_auth_handler_factory,
-                    host_resolver())
+                    host_resolver(),
+                    *common_connect_job_params->proxy_server
+              )
               : nullptr) {}
 
 HttpProxyConnectJob::~HttpProxyConnectJob() = default;
@@ -532,7 +534,7 @@ int HttpProxyConnectJob::DoHttpProxyConnect() {
   // Add a HttpProxy connection on top of the tcp socket.
   transport_socket_ = std::make_unique<HttpProxyClientSocket>(
       nested_connect_job_->PassSocket(), GetUserAgent(), params_->endpoint(),
-      ProxyServer(GetProxyServerScheme(), GetDestination()),
+      *common_connect_job_params()->proxy_server,
       http_auth_controller_, common_connect_job_params()->proxy_delegate,
       params_->traffic_annotation());
   nested_connect_job_.reset();

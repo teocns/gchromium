@@ -65,6 +65,24 @@ class NET_EXPORT AuthCredentials {
   const std::u16string& username() const { return username_; }
   const std::u16string& password() const { return password_; }
 
+
+  bool operator==(const AuthCredentials& other) const {
+      return username() == other.username() && password() == other.password();
+  }
+
+  bool operator!=(const AuthCredentials& other) const {
+    return !(*this == other);
+  }
+
+  bool operator<(const AuthCredentials& other) const {
+      if (username() != other.username()) {
+          return username() < other.username();
+      }
+      return password() < other.password();
+  }
+
+
+
  private:
   // The username to provide, possibly empty. This should be ASCII only to
   // minimize compatibility problems, but arbitrary UTF-16 strings are allowed
