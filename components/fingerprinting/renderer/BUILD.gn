@@ -1,0 +1,28 @@
+static_library("renderer") {
+  # Make output library name something else
+  output_name = "components_fingerprint_renderer"
+  sources = [
+    "evasions/hook_execution_context.h",
+    "evasions/hook_execution_context.cc",
+    "evasions/package_execution_context.h",
+    "evasions/package_execution_context.cc",
+    "evasions/hook.cc",
+    "evasions/hook.h",
+    "evasions/hooks/navigator.h",
+    "evasions/hooks/webgl.h",
+    "evasions/hook_factory.cc",
+    "evasions/hook_factory.h",
+    "evasions/pack.cc",
+    "evasions/pack.h",
+    "helper/v8.h",
+    "helper/v8.cc",
+  ]
+
+  visibility = [ "*" ]
+
+  public_deps = [
+    "//base",
+    "//v8",
+  ]
+
+}
