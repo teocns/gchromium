@@ -62,6 +62,12 @@ class NET_EXPORT HttpAuthCache {
       return ++nonce_count_;
     }
 
+
+    // Allow setting the credentails
+    void SetCredentials(const AuthCredentials& credentials) {
+      credentials_ = credentials;
+    }
+
     void UpdateStaleChallenge(const std::string& auth_challenge);
 
     bool IsEqualForTesting(const Entry& other) const;
