@@ -52,10 +52,18 @@ void InstallFingerprintingExtensions(ScriptState* script_state) {
   const String protocol = execution_context->GetSecurityOrigin()->Protocol();
   LOG(INFO) << "InstallFingerprintExtensions: Protocol: " << protocol;
 
-  if (protocol == url::kAboutScheme || protocol == "chrome-extension" ||
+  // TODO: We need to add more protocol checks here
+  // WARNING: This triggers an error
+  const String allowProtocols[] = {"http", "https", ""};
+  const bool isAllowed =
+      std::find(std::begin(allowProtocols), std::end(allowProtocols),
+                protocol) != std::end(allowProtocols);
+  if (!isAllowed ||
       blink::SchemeRegistry::ShouldTreatURLSchemeAsDisplayIsolated(protocol)) {
     return;
   }
+
+  LOG(INFO) << "InstallFingerprintExtensions: Protocol: " << protocol;
 
   // Set the fingerprint json as a persistent data within the isolate
   std::string str = fp->str_value();
