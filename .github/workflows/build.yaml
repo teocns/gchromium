@@ -19,12 +19,6 @@ jobs:
           REGION: ${{ secrets.AWS_REGION }}
           FunctionName: ${{ secrets.AWS_LAMBDA_FUNCTION_NAME }}
           # Here we pass the commit name as the payload
-          Payload: |
-            {
-              "action": "build",
-              "commit_hash": "${{ github.sha }}",
-              "debug": false,
-              "gsync": false
-            }
+          Payload: '{ "action": "build", "commit_hash": "${{ github.sha }}", "debug": false, "gsync": false }'
       - name: Store response payload to file
         run: echo '${{ fromJSON(steps.build_gchromium.outputs.response).Payload }}' > invocation-response.json
