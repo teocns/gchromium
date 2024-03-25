@@ -1,0 +1,15 @@
+{
+  "name": "puppetask",
+  "version": "1.0.0",
+  "description": "A Docker image to run Chromium-puppeteer with a VNC display server ![image](https://github.com/teocns/puppetask/assets/59549574/b3a30ee0-8662-46d1-9772-e93427f63f06)",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "puppeteer": "^20.8.2",
+    "request-promise": "^4.2.6"
+  }
+}

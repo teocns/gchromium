@@ -21,6 +21,7 @@
 #include "content/public/common/content_switches.h"
 #include "headless/public/headless_shell.h"
 #include "headless/public/switches.h"
+#include "ghost/app/ghost_main_delegate.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "chrome/app/chrome_main_mac.h"
@@ -92,7 +93,7 @@ int ChromeMain(int argc, const char** argv) {
 #endif  // !defined(COMPONENT_BUILD) && DCHECK_IS_ON()
 #endif  // BUILDFLAG(IS_WIN)
 
-  ChromeMainDelegate chrome_main_delegate(
+  GhostMainDelegate chrome_main_delegate(
       base::TimeTicks::FromInternalValue(exe_entry_point_ticks));
   content::ContentMainParams params(&chrome_main_delegate);
 
