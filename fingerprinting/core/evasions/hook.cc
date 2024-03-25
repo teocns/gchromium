@@ -11,7 +11,7 @@ namespace fingerprinting::core::evasions {
 
 std::string Hook::get_iife() {
 #ifdef NDEBUG
-  return std::format("(function(){{ {} }})()", get_impl(target));
+  return std::format("(function(){{ {} }})()", get_impl());
 #else
   return std::format("(function(){{ console.info('Running hook {}'); {} }})()", codename(), get_impl());
 #endif
