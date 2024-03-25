@@ -97,13 +97,14 @@ void FingerprintingExtensions::Initialize() {
   DCHECK(IsMainThread());
   DCHECK(platform);
 
-  ExtensionsRegistry::GetInstance().RegisterBlinkExtensionInstallCallback(
-      &InstallFingerprintingExtensions);
-
   // Do not run on snapshot. This can also run at build time lol
   if (platform->IsTakingV8ContextSnapshot()) {
     return;
   }
+
+  ExtensionsRegistry::GetInstance().RegisterBlinkExtensionInstallCallback(
+      &InstallFingerprintingExtensions);
+
 
   mojo::Remote<fingerprinting::mojom::FingerprintManager> fingerprint_manager;
   platform->GetBrowserInterfaceBroker()->GetInterface(
