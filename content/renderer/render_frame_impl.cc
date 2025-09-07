@@ -4439,21 +4439,7 @@ void RenderFrameImpl::DidCreateScriptContext(v8::Local<v8::Context> context,
   }
   
 
-  {
-    mojo::Remote<fingerprinting::mojom::FingerprintManager>
-        fingerprint_manager;
-
-    GetBrowserInterfaceBroker()->GetInterface(
-        fingerprint_manager.BindNewPipeAndPassReceiver());
-
-    bool fingerprinting_enabled = false;
-    std::string fingerprint_evasions;
-    fingerprint_manager->Enabled(&fingerprinting_enabled);
-    if (fingerprinting_enabled) {
-      fingerprint_manager->GetEvasions(fingerprinting::mojom::HookTargetType::PAGE,&fingerprint_evasions);
-      fingerprinting::utility::RunWithUtils(context, fingerprint_evasions);
-    }
-  }
+  // Fingerprinting: JS/V8 injection disabled. Native-only approach.
 
 
 

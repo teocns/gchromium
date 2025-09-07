@@ -1,0 +1,3 @@
+[33m99f047b3fcc36[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdev/fingerprinting-without-jsinject[m[33m)[m Remove all V8/JavaScript integration from fingerprinting system
+[33m24bdb3da97de3[m Remove alias Val -> base::Value
+[33m04e0597ac8072[m Disable UACH globally when fingerprint's device won't support it
