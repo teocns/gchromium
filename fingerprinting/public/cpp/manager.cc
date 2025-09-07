@@ -54,4 +54,28 @@ FingerprintManager* manager(bool try_init) {
   return FingerprintManager::GetInstance(try_init);
 }
 
+absl::optional<std::string> FingerprintManager::GetWebGLUnmaskedVendor() {
+  base::Value* out = nullptr;
+  if (!Loaded()) return absl::nullopt;
+  Fingerprint* fp = fingerprint();
+  if (!fp) return absl::nullopt;
+  if (fp->Find({"webgl", "UNMASKED_VENDOR_WEBGL"}, out) && out && out->is_string())
+    return out->GetString();
+  if (fp->Find({"webgl", "vendor"}, out) && out && out->is_string())
+    return out->GetString();
+  return absl::nullopt;
+}
+
+absl::optional<std::string> FingerprintManager::GetWebGLUnmaskedRenderer() {
+  base::Value* out = nullptr;
+  if (!Loaded()) return absl::nullopt;
+  Fingerprint* fp = fingerprint();
+  if (!fp) return absl::nullopt;
+  if (fp->Find({"webgl", "UNMASKED_RENDERER_WEBGL"}, out) && out && out->is_string())
+    return out->GetString();
+  if (fp->Find({"webgl", "renderer"}, out) && out && out->is_string())
+    return out->GetString();
+  return absl::nullopt;
+}
+
 }  // namespace fingerprinting

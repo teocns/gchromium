@@ -24,6 +24,7 @@
  */
 
 #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h"
+#include "fingerprinting/public/cpp/manager.h"
 
 #include <memory>
 #include <utility>
@@ -3782,6 +3783,13 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
       return ScriptValue::CreateNull(script_state->GetIsolate());
     case WebGLDebugRendererInfo::kUnmaskedRendererWebgl:
       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+        // Fingerprinting: prefer spoofed renderer if provided
+        if (auto* mgr = fingerprinting::manager(); mgr && mgr->Loaded()) {
+          auto spoofed = mgr->GetWebGLUnmaskedRenderer();
+          if (spoofed.has_value()) {
+            return WebGLAny(script_state, String::FromUTF8(spoofed.value().c_str()));
+          }
+        }
         if (IdentifiabilityStudySettings::Get()->ShouldSampleType(
                 blink::IdentifiableSurface::Type::kWebGLParameter)) {
           RecordIdentifiableGLParameterDigest(
@@ -3797,6 +3805,13 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
       return ScriptValue::CreateNull(script_state->GetIsolate());
     case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:
       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+        // Fingerprinting: prefer spoofed vendor if provided
+        if (auto* mgr = fingerprinting::manager(); mgr && mgr->Loaded()) {
+          auto spoofed = mgr->GetWebGLUnmaskedVendor();
+          if (spoofed.has_value()) {
+            return WebGLAny(script_state, String::FromUTF8(spoofed.value().c_str()));
+          }
+        }
         if (IdentifiabilityStudySettings::Get()->ShouldSampleType(
                 blink::IdentifiableSurface::Type::kWebGLParameter)) {
           RecordIdentifiableGLParameterDigest(

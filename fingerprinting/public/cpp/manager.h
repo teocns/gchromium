@@ -35,6 +35,10 @@ class FINGERPRINTING_PUBLIC_EXPORT FingerprintManager
 
   void Enabled(EnabledCallback callback) override;
 
+  // Optional helpers for consumers (e.g., WebGL) to fetch spoofed values.
+  absl::optional<std::string> GetWebGLUnmaskedVendor();
+  absl::optional<std::string> GetWebGLUnmaskedRenderer();
+
  private:
   FingerprintManager();
 
