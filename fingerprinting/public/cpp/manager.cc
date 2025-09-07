@@ -63,6 +63,8 @@ absl::optional<std::string> FingerprintManager::GetWebGLUnmaskedVendor() {
     return out->GetString();
   if (fp->Find({"webgl", "vendor"}, out) && out && out->is_string())
     return out->GetString();
+  if (fp->Find({"gpu", "vendor"}, out) && out && out->is_string())
+    return out->GetString();
   return absl::nullopt;
 }
 
@@ -74,6 +76,8 @@ absl::optional<std::string> FingerprintManager::GetWebGLUnmaskedRenderer() {
   if (fp->Find({"webgl", "UNMASKED_RENDERER_WEBGL"}, out) && out && out->is_string())
     return out->GetString();
   if (fp->Find({"webgl", "renderer"}, out) && out && out->is_string())
+    return out->GetString();
+  if (fp->Find({"gpu", "renderer"}, out) && out && out->is_string())
     return out->GetString();
   return absl::nullopt;
 }
