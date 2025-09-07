@@ -73,7 +73,6 @@
 
 // Custom
 #include "fingerprinting/public/cpp/manager.h"
-#include "fingerprinting/utility/v8.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
 
 namespace blink {
@@ -662,21 +661,6 @@ void WorkerThread::InitializeOnWorkerThread(
     v8::Local<v8::Context> context =
         GlobalScope()->ScriptController()->GetContext();
 
-    {
-      mojo::Remote<fingerprinting::mojom::FingerprintManager>
-          fingerprint_manager;
-
-      GlobalScope()->GetBrowserInterfaceBroker().GetInterface(
-          fingerprint_manager.BindNewPipeAndPassReceiver());
-
-      bool fingerprinting_enabled = false;
-      std::string fingerprint_evasions;
-      fingerprint_manager->Enabled(&fingerprinting_enabled);
-      if (fingerprinting_enabled) {
-        fingerprint_manager->GetEvasions(fingerprinting::mojom::HookTargetType::WORKER,&fingerprint_evasions);
-        fingerprinting::utility::RunWithUtils(context, fingerprint_evasions);
-      }
-    }
 
 
     Platform::Current()->WorkerContextCreated(context);

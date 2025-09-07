@@ -6,11 +6,6 @@ source_set("core") {
     "device_descriptor/fingerprint.h",
     "device_descriptor/fingerprint_impl.h",
     "device_descriptor/fingerprint_impl.cc",
-    "evasions/hook.cc",
-    "evasions/hook.h",
-    "evasions/hooks/webgl.h",
-    "evasions/pack.cc",
-    "evasions/pack.h",
     "manager.h",
     "manager.cc",
   ]
