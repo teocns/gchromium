@@ -1,0 +1,32 @@
+import("//build/config/chrome_build.gni")
+
+shared_library("cpp") {
+  sources = [
+    "mixins/user-agent.h",
+    "mixins/user-agent.mojom.h",
+    "mixins/user-agent.mojom.cc",
+    "export.h",
+    "manager.h",
+    "manager.cc",
+  ]
+
+  visibility = [ "*" ]
+
+  defines = [ "FINGERPRINTING_PUBLIC_IMPL" ]
+
+
+  deps = [
+    "//base",
+    "//fingerprinting/utility:user_agent",
+    "//fingerprinting/core",
+  ]
+
+  public_deps = [
+    "//third_party/abseil-cpp:absl",
+    "//fingerprinting/public/mojom",
+  ]
+}
+
+
+
+

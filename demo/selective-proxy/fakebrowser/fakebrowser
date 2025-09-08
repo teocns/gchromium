@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+const { FakeBrowser } = require("./0x01Browser-pcm/dist/core/FakeBrowser");
+
+const process = require("process");
+// Get WS_URL from env variable
+
+const CHROMIUM_BIN = process.env.CHROMIUM_BIN;
+
+if (!CHROMIUM_BIN) {
+  console.error(
+    "CHROMIUM_BIN not set. It should point to your chromium binary"
+  );
+  process.exit(1);
+}
+
+const randnr = () => Math.floor(Math.random() * 1000000000);
+
+const dd = require("./0x01Browser-pcm/device-hub-demo/mine-chrome.json");
+// Hash directory of the target directory
+
+const opts = async () => {
+  // Connect to existing Chrome instance
+
+  const builder = new FakeBrowser.Builder()
+    .deviceDescriptor(dd)
+    .vanillaLaunchOptions({
+      headless: false,
+      executablePath: CHROMIUM_BIN,
+      ignoreHTTPSErrors: true,
+    })
+    .userDataDir(`/tmp/.chromium.data.${randnr}`);
+
+  browser = await builder.launch();
+
+  // // Run get-cdp-ws bash script to get the websocket url
+  // const { execSync } = require('child_process');
+
+  // const WS_URL = execSync(`./get-cdp-ws`).toString().trim();
+
+  // // Connect to existing Chrome instance
+  // const browser = await puppeteer.connect({
+  //   browserWSEndpoint: WS_URL,
+  //   defaultViewport:null,
+  // });
+
+  const page = await browser.vanillaBrowser.newPage();
+
+  var username_ = "brd-customer-hl_7964838f-zone-test_usa_limited";
+  var password = "1g1owm15ehx5";
+  var hostname = "brd.superproxy.io";
+  var port = 22225;
+  var session_id = (1000000 * Math.random()) | 0;
+  var username = `${username_}--session-${session_id}`;
+
+  const dc_url = `http://${username}:${password}@${hostname}:${port}`;
+  const short_proxy_url = `http://${username}3:${password}@${hostname}:${port}`;
+
+  await page.setRequestInterception(true);
+
+  page.on("request", async (request) => {
+    console.log(request.url());
+
+    // Ensure that the request is a valid http scheme
+    if (!request.url().startsWith("http")) {
+      return request.continue();
+    }
+
+    // If this is a mime type that we don't want to proxy through res
+    const mime = request.resourceType();
+    if (
+      mime === "image" ||
+      mime === "media" ||
+      mime === "font" ||
+      mime === "stylesheet"
+    ) {
+      console.log("Using DC proxy 1");
+      request.continue({
+        headers: { "Stealthium-Proxy": `https=${dc_url};http=${dc_url}` },
+      });
+    } else if (
+      request
+        .url()
+        .search(
+          "\\.(js|png|gif|svg|css|m3u8|webp|ts|jpg|jpeg|mp3|mp4|avi|pb|woff|woff2|bin)\\?"
+        ) > 0 ||
+      request
+        .url()
+        .search(
+          "\\.(js|png|gif|svg|css|m3u8|webp|ts|jpg|jpeg|mp3|mp4|avi|pb|woff|woff2|bin)$"
+        ) > 0
+    ) {
+      console.log("Using DC proxy 2");
+      request.continue({
+        headers: { "Stealthium-Proxy": `https=${dc_url};http=${dc_url}` },
+      });
+    } else {
+      console.log("Using RES proxy");
+      request.continue({
+        headers: {
+          "Stealthium-Proxy": `https=${short_proxy_url};http=${short_proxy_url}`,
+        },
+      });
+    }
+  });
+
+  const urls = ["https://api.ipify.org?format=json", "https://bing.com"];
+
+  const wait = (seconds) =>
+    new Promise((resolve) => setTimeout(() => resolve(true), seconds * 1000));
+
+  for (const url of urls) {
+    console.log(`Navigating to: ${url}`);
+    await page.goto(url);
+    console.log(`Waiting for 3 seconds...`);
+    await wait(3);
+    console.log(`Finished waiting.`);
+  }
+
+  console.log("Finished navigating");
+};
+
+opts().then().catch(console.error);

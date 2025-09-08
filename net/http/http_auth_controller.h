@@ -15,12 +15,14 @@
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
 #include "net/base/network_anonymization_key.h"
+#include "net/base/proxy_server.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_preferences.h"
 #include "net/log/net_log_with_source.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
+#include "net/base/proxy_server.h"
 
 namespace net {
 
@@ -90,13 +92,16 @@ class NET_EXPORT_PRIVATE HttpAuthController
                      const NetworkAnonymizationKey& network_anonymization_key,
                      HttpAuthCache* http_auth_cache,
                      HttpAuthHandlerFactory* http_auth_handler_factory,
-                     HostResolver* host_resolver);
+                     HostResolver* host_resolver,
+                     const absl::optional<ProxyServer>& proxy_server = absl::nullopt
+  );
 
   // Generate an authentication token for |target| if necessary. The return
   // value is a net error code. |OK| will be returned both in the case that
   // a token is correctly generated synchronously, as well as when no tokens
   // were necessary.
-  int MaybeGenerateAuthToken(const HttpRequestInfo* request,
+                             
+int MaybeGenerateAuthToken(const HttpRequestInfo* request,
                              CompletionOnceCallback callback,
                              const NetLogWithSource& net_log);
 
@@ -241,6 +246,9 @@ class NET_EXPORT_PRIVATE HttpAuthController
   const raw_ptr<HostResolver, DanglingUntriaged> host_resolver_;
 
   std::set<HttpAuth::Scheme> disabled_schemes_;
+
+
+  const absl::optional<ProxyServer> proxy_server_;
 
   CompletionOnceCallback callback_;
 

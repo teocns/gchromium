@@ -1,0 +1,6 @@
+
+
+
+dd = device descriptor = fingerprint 
+
+

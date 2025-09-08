@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -eau;
+
+# # Run proxy.py. Install if not present
+# if [[ ! -f .pkginstalled ]] || [[! python3 -m pip list 2>/dev/null | grep -q 'proxy.py']]  || [[ ! -d node_modules ]]; then
+#     npm install
+#     echo "Installing proxy.py"
+#     python3 -m pip install proxy.py
+#     touch .pkginstalled
+# fi
+
+# python3 -m proxy --port 8899 --hostname 127.0.0.1 --basic-auth "user:pass" & proxy_pid=$!
+
+# trap "kill -- -$proxy_pid" EXIT INT TERM; 
+
+source .env
+
+./puppeteer
+

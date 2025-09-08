@@ -1,0 +1,25 @@
+
+transferring large complex objects like JSON between processes via Mojo does incur marshalling costs. Some options to avoid that:
+
+Use Mojo data pipes to efficiently transfer large raw data like the JSON string between processes. The browser service could write the JSON string to a data pipe that the RenderFrameObserver reads from.
+
+Keep the JSON in the browser process, but expose methods via Mojo to allow the RenderFrameObserver to query parts of it. The browser service implements methods like "GetValueForKey" that the RenderFrameObserver can call with keys to selectively fetch parts of the JSON
+
+Use Mojo associated interfaces to associate the browser service with a renderer interface that can directly access the JSON object within the browser process. So the RenderFrameObserver calls methods on what looks like a local interface, but is actually proxied via Mojo to the browser.
+
+So in summary, for large complex objects, transferring the whole object via Mojo is not efficient. Better to transfer selectively or use associated interfaces to avoid marshalling costs. Let me know if you have any other questions!
+
+
+
+
+The issue with that approach is that every RenderFrameObserver will fetch, inidiviually, the persisted object via a mojom call, which implies a serialization / deserializaton process for Frame's launch. That does not align with our objective, which is that of:
+
+- Persist base::Value in the browser process
+- Fetch base::Value once in the Renderer process, onto the main thread
+- RenderFrameObservers, which run in their individual thread, will fetch base::Value object in a cross-thread way, but since they live within the same process as the render main thread, no deserialization is needed. 
+
+Given these considerations, the missing step is that of identifying what renderer component is most suitable to:
+
+a) Interface with the browser process once, at launch, to fetch the base::Value object
+b) Expose the base::value object to RenderFrameObservers: this process should not involve any further serialization overhead
+

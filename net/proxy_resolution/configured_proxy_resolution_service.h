@@ -29,6 +29,7 @@
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/proxy_resolution/proxy_resolver.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "net/http/http_request_headers.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -129,6 +130,17 @@ class NET_EXPORT ConfiguredProxyResolutionService
                    CompletionOnceCallback callback,
                    std::unique_ptr<ProxyResolutionRequest>* request,
                    const NetLogWithSource& net_log) override;
+
+
+int ResolveProxyWithHeaders(
+    const GURL& raw_url,
+    const std::string& method,
+    const NetworkAnonymizationKey& network_anonymization_key,
+	const HttpRequestHeaders& req_headers,
+    ProxyInfo* result,
+    CompletionOnceCallback callback,
+    std::unique_ptr<ProxyResolutionRequest>* out_request,
+    const NetLogWithSource& net_log) override;
 
   // ProxyResolutionService
   bool MarkProxiesAsBadUntil(
@@ -275,6 +287,13 @@ class NET_EXPORT ConfiguredProxyResolutionService
   // Resetting it means that we will have to re-fetch the configuration from
   // the ProxyConfigService later.
   State ResetProxyConfig(bool reset_fetched_config);
+
+
+  void ApplyCustomConfig(
+    const std::string& proxy_config_string,
+    const GURL& url,
+    ProxyInfo* result
+  );
 
   // Retrieves the current proxy configuration from the ProxyConfigService, and
   // starts initializing for it.

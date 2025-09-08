@@ -11,6 +11,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/trace_constants.h"
 #include "net/base/tracing.h"
+#include "net/base/proxy_server.h"
 #include "net/dns/public/host_resolver_results.h"
 #include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_auth_controller.h"

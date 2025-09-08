@@ -16,6 +16,8 @@
 #include "net/log/net_log_with_source.h"
 #include "net/proxy_resolution/proxy_info.h"
 #include "url/gurl.h"
+#include "net/http/http_request_headers.h"
+
 
 namespace net {
 
@@ -54,6 +56,18 @@ class NET_EXPORT ProxyResolutionService {
       CompletionOnceCallback callback,
       std::unique_ptr<ProxyResolutionRequest>* request,
       const NetLogWithSource& net_log) = 0;
+      
+      
+	virtual int ResolveProxyWithHeaders(
+      const GURL& url,
+      const std::string& method,
+      const NetworkAnonymizationKey& network_anonymization_key,
+			const HttpRequestHeaders& req_headers,
+      ProxyInfo* results,
+      CompletionOnceCallback callback,
+      std::unique_ptr<ProxyResolutionRequest>* request,
+      const NetLogWithSource& net_log) = 0;
+
 
   // Called to report that the last proxy connection succeeded.  If |proxy_info|
   // has a non empty proxy_retry_info map, the proxies that have been tried (and

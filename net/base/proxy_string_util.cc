@@ -10,10 +10,13 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "net/base/proxy_server.h"
 #include "net/base/url_util.h"
+#include "net/base/auth.h"
 #include "net/http/http_util.h"
 #include "url/third_party/mozilla/url_parse.h"
+
 
 namespace net {
 
@@ -45,6 +48,7 @@ ProxyServer::Scheme GetSchemeFromPacTypeInternal(base::StringPiece type) {
   return ProxyServer::SCHEME_INVALID;
 }
 
+
 ProxyServer FromSchemeHostAndPort(ProxyServer::Scheme scheme,
                                   base::StringPiece host_and_port) {
   // Trim leading/trailing space.
@@ -67,26 +71,60 @@ ProxyServer FromSchemeHostAndPort(ProxyServer::Scheme scheme,
                       url::Component(0, host_and_port.size()),
                       &username_component, &password_component,
                       &hostname_component, &port_component);
-  if (username_component.is_valid() || password_component.is_valid() ||
-      hostname_component.is_empty()) {
+
+  if (hostname_component.is_empty()){
     return ProxyServer();
   }
+  base::StringPiece hostname;
 
-  base::StringPiece hostname =
-      host_and_port.substr(hostname_component.begin, hostname_component.len);
+  absl::optional<AuthCredentials> auth_credentials;
+
+
+  if (username_component.is_valid() && password_component.is_valid()){
+    // Extract the username and password from the host_and_port string.
+    base::StringPiece username = host_and_port.substr(
+        username_component.begin, username_component.len);
+    base::StringPiece password = host_and_port.substr(
+        password_component.begin, password_component.len);
+
+
+
+				
+		std::u16string username16;
+		std::u16string password16;
+
+    base::UTF8ToUTF16(username.data(), username.size(), &username16);
+    base::UTF8ToUTF16(password.data(), password.size(), &password16);
+
+		// Create auth credentials from the username and password.
+		auth_credentials = AuthCredentials(username16, password16);
+  }
+  
+  
+  hostname = host_and_port.substr(hostname_component.begin, hostname_component.len);
+  
 
   // Reject inputs like "foo:". /url parsing and canonicalization code generally
   // allows it and treats it the same as a URL without a specified port, but
   // Chrome has traditionally disallowed it in proxy specifications.
   if (port_component.is_valid() && port_component.is_empty())
     return ProxyServer();
+
+
   base::StringPiece port =
       port_component.is_nonempty()
           ? host_and_port.substr(port_component.begin, port_component.len)
           : "";
 
+
+  // If has auth credentials, invoke the constructor that takes auth credentials.
+  if (auth_credentials.has_value()) {
+    return ProxyServer::FromSchemeHostAndPort(scheme, hostname, port,auth_credentials.value());
+  }
   return ProxyServer::FromSchemeHostAndPort(scheme, hostname, port);
+
 }
+
 
 std::string ConstructHostPortString(base::StringPiece hostname, uint16_t port) {
   DCHECK(!hostname.empty());

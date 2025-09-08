@@ -287,6 +287,8 @@ if (!is_android && !is_mac) {
           "app/chrome_main.cc",
           "app/chrome_main_delegate.cc",
           "app/chrome_main_delegate.h",
+          "//ghost/app/ghost_main_delegate.cc",
+          "//ghost/app/ghost_main_delegate.h",
         ]
 
         deps += [
@@ -431,6 +433,8 @@ if (is_win) {
       "app/chrome_main.cc",
       "app/chrome_main_delegate.cc",
       "app/chrome_main_delegate.h",
+      "//ghost/app/ghost_main_delegate.cc",
+      "//ghost/app/ghost_main_delegate.h",
     ]
 
     output_name = "chrome"
@@ -1169,6 +1173,8 @@ if (is_win) {
       "app/chrome_main_delegate.h",
       "app/chrome_main_mac.h",
       "app/chrome_main_mac.mm",
+      "//ghost/app/ghost_main_delegate.cc",
+      "//ghost/app/ghost_main_delegate.h",
     ]
 
     deps = [
@@ -1676,6 +1682,8 @@ if (is_android) {
       "app/android/chrome_main_delegate_android.h",
       "app/chrome_main_delegate.cc",
       "app/chrome_main_delegate.h",
+      "//ghost/app/ghost_main_delegate.cc",
+      "//ghost/app/ghost_main_delegate.h",
     ]
 
     libs = [

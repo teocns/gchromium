@@ -54,7 +54,7 @@ namespace blink {
 class WebServiceWorkerContextProxy;
 enum class ProtocolHandlerSecurityLevel;
 struct WebContentSecurityPolicyHeader;
-}
+}  // namespace blink
 
 namespace chrome {
 class WebRtcLoggingAgentImpl;
@@ -75,6 +75,8 @@ class UnverifiedRulesetDealer;
 namespace web_cache {
 class WebCacheImpl;
 }
+
+class GhostContentRendererClient;
 
 class ChromeContentRendererClient
     : public content::ContentRendererClient,
@@ -231,6 +233,8 @@ class ChromeContentRendererClient
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   SpellCheck* GetSpellCheck();
 #endif
+
+  friend class GhostContentRendererClient;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ChromeContentRendererClientTest, NaClRestriction);

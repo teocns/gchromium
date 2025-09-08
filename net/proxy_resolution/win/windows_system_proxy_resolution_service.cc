@@ -94,6 +94,21 @@ int WindowsSystemProxyResolutionService::ResolveProxy(
   return ERR_IO_PENDING;
 }
 
+
+
+int ResolveProxyWithHeaders(
+  const GURL& url,
+  const std::string& method,
+  const NetworkAnonymizationKey& network_anonymization_key,
+  const HttpRequestHeaders& req_headers,
+  ProxyInfo* results,
+  CompletionOnceCallback callback,
+  std::unique_ptr<ProxyResolutionRequest>* request,
+  const NetLogWithSource& net_log){
+  return 0;
+}
+
+
 void WindowsSystemProxyResolutionService::ReportSuccess(
     const ProxyInfo& proxy_info) {
   // TODO(https://crbug.com/1032820): Update proxy retry info with new proxy

@@ -1,0 +1,49 @@
+# Copyright 2021 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/blink/renderer/bindings/bindings.gni")
+import("//third_party/blink/renderer/bindings/scripts/scripts.gni")
+import("//third_party/blink/renderer/build/scripts/scripts.gni")
+import("//third_party/blink/renderer/config.gni")
+import("//third_party/blink/renderer/extensions/extensions.gni")
+
+visibility = [
+  "//third_party/blink/renderer/bindings/extensions/*",
+  "//third_party/blink/renderer/extensions/*",
+]
+
+config("extensions_ghost_implementation") {
+  visibility += [ "//third_party/blink/renderer/bindings/extensions/*" ]
+  defines = [ "IS_BLINK_EXTENSIONS_GHOST_IMPL=1" ]
+}
+
+component("ghost") {
+  output_name = "blink_extensions_ghost"
+
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "//third_party/blink/*" ]
+
+  sources = [
+    "fingerprinting.cc",
+    "fingerprinting.h",
+  ]
+
+  # This sets the default list of configs when the blink_modules_sources target
+  # is defined. The default_compiler_configs comes from BUILDCONFIG.gn and
+  # is the list normally applied to static libraries and source sets.
+  configs += [
+    ":extensions_ghost_implementation",
+    "//third_party/blink/renderer:config",
+    "//third_party/blink/renderer:inside_blink",
+  ]
+
+  deps = [
+    "//fingerprinting",
+    "//components/fingerprinting/renderer",
+    "//third_party/blink/renderer/core",
+    "//third_party/blink/renderer/modules",
+    "//third_party/blink/renderer/platform",
+    "//url",
+  ]
+}

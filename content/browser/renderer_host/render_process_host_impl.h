@@ -129,6 +129,7 @@ namespace viz {
 class GpuClient;
 }  // namespace viz
 
+class GhostContentBrowserClient;
 namespace content {
 class AgentSchedulingGroupHost;
 class BucketContext;
@@ -1351,6 +1352,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // destruction.
   class IOThreadHostImpl;
   friend class IOThreadHostImpl;
+  friend class ::GhostContentBrowserClient;
   absl::optional<base::SequenceBound<IOThreadHostImpl>> io_thread_host_impl_;
 
   // A WeakPtrFactory which is reset every time ResetIPC() or Cleanup() is run.

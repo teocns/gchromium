@@ -1,0 +1,15 @@
+
+ghost_chrome_renderer_sources = [
+  "//ghost/renderer/ghost_content_renderer_client.cc",
+  "//ghost/renderer/ghost_content_renderer_client.h",
+  "//ghost/renderer/ghost_render_thread_observer.cc",
+  "//ghost/renderer/ghost_render_thread_observer.h",
+  "//ghost/renderer/ghost_render_frame_observer.h",
+  "//ghost/renderer/ghost_render_frame_observer.cc",
+]
+
+ghost_chrome_renderer_deps = []
+
+
+# do not add anything else here
+ghost_chrome_renderer_public_deps = []
